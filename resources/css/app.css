@@ -1,0 +1,305 @@
+/* XTRA4U Brand Design System - Tailwind CSS v4 */
+/* This file uses Tailwind CSS v4 syntax - IDE warnings are expected */
+/* stylelint-disable */
+/* css-validate-disable */
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../**/*.blade.php';
+@source '../**/*.js';
+
+@theme {
+    /* XTRA4U Brand Typography */
+    --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+    
+    /* XTRA4U Brand Colors */
+    /* Primary Blue Shades */
+    --color-brand-deep-blue: #0B66B5;
+    --color-brand-bright-blue: #3293D3;
+    --color-brand-mid-blue: #0C73CD;
+    
+    /* Primary Green Shades */
+    --color-brand-xtra-green: #00942C;
+    --color-brand-bright-green: #009633;
+    --color-brand-soft-green: #73B553;
+    
+    /* Neutral Colors */
+    --color-brand-dark-gray: #1F2937;
+    --color-brand-medium-gray: #6B7280;
+    --color-brand-light-gray: #F3F4F6;
+    --color-brand-white: #FFFFFF;
+    
+    /* Status Colors */
+    --color-brand-success: #00942C;
+    --color-brand-warning: #FACC15;
+    --color-brand-error: #DC2626;
+    
+    /* Custom Animations */
+    --animate-fade-in: fadeIn 0.5s ease-in-out;
+    --animate-slide-up: slideUp 0.6s ease-out;
+    --animate-scale-in: scaleIn 0.4s ease-out;
+}
+
+/* Custom Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes scaleIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Custom Utility Classes */
+.animate-fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+.animate-slide-up {
+    animation: slideUp 0.6s ease-out;
+}
+
+.animate-scale-in {
+    animation: scaleIn 0.4s ease-out;
+}
+
+/* XTRA4U Form Components */
+.form-input {
+    @apply border border-gray-300 rounded-lg p-3 w-full transition-colors duration-200;
+}
+
+.form-input:focus {
+    --tw-ring-color: var(--color-brand-deep-blue);
+    @apply ring-2 ring-offset-2 border-transparent;
+}
+
+.form-label {
+    @apply block text-sm font-medium text-gray-700 mb-1;
+}
+
+/* XTRA4U Button Components */
+.btn {
+    @apply inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+/* Primary Button - Brand Green */
+.btn-primary {
+    background-color: var(--color-brand-xtra-green);
+    @apply text-white hover:shadow-md focus:ring-2 px-4 py-2 font-medium;
+}
+
+.btn-primary:hover {
+    background-color: var(--color-brand-bright-green);
+}
+
+.btn-primary:focus {
+    --tw-ring-color: var(--color-brand-deep-blue);
+}
+
+/* Secondary Button */
+.btn-secondary {
+    @apply border border-gray-300 text-gray-700 bg-white hover:bg-gray-100 focus:ring-2 px-4 py-2 font-medium;
+}
+
+.btn-secondary:focus {
+    --tw-ring-color: var(--color-brand-deep-blue);
+}
+
+/* Danger Button */
+.btn-danger {
+    background-color: var(--color-brand-error);
+    @apply text-white hover:bg-red-700 focus:ring-2 px-4 py-2 font-medium;
+}
+
+.btn-danger:focus {
+    --tw-ring-color: var(--color-brand-error);
+}
+
+/* XTRA4U Card Components */
+.card {
+    @apply bg-white rounded-lg shadow-md;
+}
+
+.card-hover {
+    @apply hover:shadow-lg transition-shadow duration-200;
+}
+
+/* Specific card variants */
+.card-product {
+    @apply bg-white shadow-md rounded-lg p-4;
+}
+
+.card-metric {
+    @apply bg-white p-5 rounded-lg shadow-md flex flex-col gap-2;
+}
+
+.card-checkout {
+    @apply max-w-md mx-auto bg-white p-6 rounded-lg shadow-md;
+}
+
+/* Loading Spinner */
+.spinner {
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top: 3px solid #ffffff;
+    width: 20px;
+    height: 20px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Smooth Scrolling */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.scrollbar-hide {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+}
+
+/* Custom Focus Styles */
+.focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2;
+}
+
+/* XTRA4U Status Badges */
+.badge-completed {
+    background-color: var(--color-brand-success);
+    @apply text-white px-3 py-1 rounded-full text-sm font-medium;
+}
+
+.badge-pending {
+    background-color: var(--color-brand-warning);
+    @apply text-white px-3 py-1 rounded-full text-sm font-medium;
+}
+
+.badge-failed {
+    background-color: var(--color-brand-error);
+    @apply text-white px-3 py-1 rounded-full text-sm font-medium;
+}
+
+.badge-processing {
+    background-color: var(--color-brand-deep-blue);
+    @apply text-white px-3 py-1 rounded-full text-sm font-medium;
+}
+
+/* XTRA4U Gradient Text */
+.gradient-text {
+    background: linear-gradient(to right, var(--color-brand-deep-blue), var(--color-brand-xtra-green));
+    @apply bg-clip-text text-transparent;
+}
+
+/* XTRA4U Header Gradient */
+.header-gradient {
+    background: linear-gradient(to right, var(--color-brand-deep-blue), var(--color-brand-xtra-green));
+}
+
+/* XTRA4U Sidebar Styles */
+.sidebar-vendor {
+    background-color: var(--color-brand-deep-blue);
+    @apply text-white;
+}
+
+.sidebar-vendor .sidebar-item {
+    @apply text-white transition-colors duration-200;
+}
+
+.sidebar-vendor .sidebar-item:hover {
+    background-color: var(--color-brand-mid-blue);
+}
+
+.sidebar-vendor .sidebar-item.active {
+    background-color: var(--color-brand-bright-blue);
+}
+
+/* XTRA4U Table Styles */
+.table-xtra {
+    @apply w-full bg-white rounded-lg overflow-hidden shadow-md;
+}
+
+.table-xtra thead {
+    background-color: var(--color-brand-light-gray);
+    @apply text-gray-700 font-semibold;
+}
+
+.table-xtra tbody tr:nth-child(odd) {
+    @apply bg-white;
+}
+
+.table-xtra tbody tr:nth-child(even) {
+    @apply bg-gray-50;
+}
+
+/* Mobile Menu Animation */
+@media (max-width: 768px) {
+    .mobile-menu-enter {
+        transform: translateX(-100%);
+        opacity: 0;
+    }
+    
+    .mobile-menu-enter-active {
+        transform: translateX(0);
+        opacity: 1;
+        transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+    }
+}
+
+/* Responsive utilities */
+@media (max-width: 640px) {
+    .mobile-stack > * + * {
+        margin-top: 1rem;
+    }
+}
+
+/* Print styles */
+@media print {
+    .no-print {
+        display: none !important;
+    }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .btn-primary {
+        @apply bg-blue-700 border-2 border-blue-800;
+    }
+    
+    .card {
+        @apply border-2 border-gray-400;
+    }
+}
