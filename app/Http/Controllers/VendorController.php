@@ -1,0 +1,85 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Vendor;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Auth;
+
+class VendorController extends Controller
+{
+    // Show vendor request form
+    public function showRequestForm()
+    {
+        return view('vendor_request');
+    }
+
+    // Handle vendor request submission
+    public function submitRequest(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:vendors,email',
+            'phone_number' => 'required|string|max:20',
+            'password' => 'required|string|min:6',
+        ]);
+
+        Vendor::create([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'phone_number' => $validated['phone_number'],
+            'password' => Hash::make($validated['password']),
+            'is_approved' => false,
+        ]);
+
+        return redirect()->route('vendor.request.form')->with('success', 'Request submitted! Await admin approval.');
+    }
+
+    // Admin approves vendor
+    public function approve($id)
+    {
+        $vendor = Vendor::findOrFail($id);
+        $vendor->is_approved = true;
+        $vendor->save();
+        return redirect()->back()->with('success', 'Vendor approved.');
+    }
+
+    // Restrict login to approved vendors
+    public function login(Request $request)
+    {
+        $credentials = $request->only('email', 'password');
+        $vendor = Vendor::where('email', $credentials['email'])->first();
+        if ($vendor && $vendor->is_approved && Hash::check($credentials['password'], $vendor->password)) {
+            Auth::login($vendor);
+            return redirect()->route('vendor.dashboard');
+        }
+        return back()->withErrors(['login' => 'Invalid credentials or not approved.']);
+    }
+
+    // Vendor dashboard (only for approved vendors)
+    public function dashboard()
+    {
+        $vendor = Auth::user();
+        if (!$vendor || !$vendor->is_approved) {
+            return redirect()->route('vendor.request.form')->withErrors(['access' => 'Access denied.']);
+        }
+
+        // Sales summary: total sales (sum of amount_paid from orders)
+        $totalSales = $vendor->orders()->sum('amount_paid');
+
+        // Earnings summary: after 1% commission (sum of vendor_earnings from transactions)
+        $totalEarnings = $vendor->orders()->with('transactions')->get()->flatMap->transactions->sum('vendor_earnings');
+
+        // Order list: all orders for this vendor
+        $orders = $vendor->orders()->latest()->get();
+
+        // Product management: all products for this vendor
+        $products = $vendor->products()->get();
+
+        // Unique store link
+        $storeLink = route('vendor.store', ['vendorname' => $vendor->name]);
+
+        return view('vendor_dashboard', compact('vendor', 'totalSales', 'totalEarnings', 'orders', 'products', 'storeLink'));
+    }
+}
