@@ -11,12 +11,17 @@ class CreateTransactionsTable extends Migration
         Schema::create('transactions', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('order_id');
+            $table->unsignedBigInteger('vendor_id');
+            $table->string('recipient_phone');
             $table->decimal('amount', 10, 2);
-            $table->decimal('commission_deducted', 10, 2);
-            $table->decimal('vendor_earnings', 10, 2);
+            $table->decimal('commission_amount', 10, 2);
+            $table->decimal('vendor_earning', 10, 2);
+            $table->string('payment_status')->default('pending');
+            $table->timestamp('timestamp')->useCurrent();
             $table->timestamps();
 
             $table->foreign('order_id')->references('id')->on('orders')->onDelete('cascade');
+            $table->foreign('vendor_id')->references('id')->on('vendors')->onDelete('cascade');
         });
     }
 
