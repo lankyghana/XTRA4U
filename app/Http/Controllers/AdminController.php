@@ -5,11 +5,32 @@ namespace App\Http\Controllers;
 use App\Models\Vendor;
 use App\Models\Order;
 use App\Models\Transaction;
+use App\Models\VendorWithdrawal;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Http\Request;
 
 class AdminController extends Controller
 {
+    public function dashboard()
+    {
+        $activeVendors = Vendor::where('is_approved', true)->count();
+        $pendingVendors = Vendor::where('is_approved', false)->latest()->take(5)->get();
+        $totalRevenue = Transaction::sum('amount');
+        $transactionsToday = Transaction::whereDate('created_at', now()->toDateString())->count();
+        $ordersToday = Order::whereDate('created_at', now()->toDateString())->count();
+
+        $pendingWithdrawals = VendorWithdrawal::where('status', VendorWithdrawal::STATUS_PENDING)->count();
+
+        return view('admin.dashboard', [
+            'activeVendors' => $activeVendors,
+            'pendingVendors' => $pendingVendors,
+            'totalRevenue' => $totalRevenue,
+            'transactionsToday' => $transactionsToday,
+            'ordersToday' => $ordersToday,
+            'pendingWithdrawals' => $pendingWithdrawals,
+        ]);
+    }
+
     // Vendor request approvals
     public function vendorRequests()
     {

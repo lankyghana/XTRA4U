@@ -1,32 +1,43 @@
-@extends('layouts.app')
+@extends('layouts.admin')
+
+@section('title', 'Vendor Requests - XTRA4U Admin')
 
 @section('content')
-<div class="max-w-3xl mx-auto mt-10">
-    <h2 class="text-2xl font-bold mb-6">Pending Vendor Requests</h2>
-    <table class="min-w-full bg-white border">
-        <thead>
-            <tr>
-                <th class="py-2 px-4 border-b">Name</th>
-                <th class="py-2 px-4 border-b">Email</th>
-                <th class="py-2 px-4 border-b">Phone</th>
-                <th class="py-2 px-4 border-b">Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach($pendingVendors as $vendor)
-            <tr>
-                <td class="py-2 px-4 border-b">{{ $vendor->name }}</td>
-                <td class="py-2 px-4 border-b">{{ $vendor->email }}</td>
-                <td class="py-2 px-4 border-b">{{ $vendor->phone_number }}</td>
-                <td class="py-2 px-4 border-b">
-                    <form method="POST" action="{{ route('admin.vendor.approve', $vendor->id) }}">
-                        @csrf
-                        <button type="submit" class="bg-green-500 text-white px-3 py-1 rounded">Approve</button>
-                    </form>
-                </td>
-            </tr>
-            @endforeach
-        </tbody>
-    </table>
-</div>
+<x-admin-layout title="Vendor Requests" subtitle="Review pending vendor applications" active="vendors">
+    <x-card>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    @forelse($pendingVendors as $vendor)
+                        <tr>
+                            <td class="px-6 py-4 text-sm font-medium text-gray-900">{{ $vendor->name }}</td>
+                            <td class="px-6 py-4 text-sm text-gray-500">{{ $vendor->email }}</td>
+                            <td class="px-6 py-4 text-sm text-gray-500">{{ $vendor->phone_number }}</td>
+                            <td class="px-6 py-4 text-sm">
+                                <form method="POST" action="{{ route('admin.vendor.approve', $vendor->id) }}">
+                                    @csrf
+                                    <button type="submit" class="px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-semibold hover:bg-green-700">
+                                        Approve
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">No pending vendor requests.</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </x-card>
+</x-admin-layout>
 @endsection

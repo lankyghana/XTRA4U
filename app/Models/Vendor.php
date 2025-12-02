@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Vendor extends Authenticatable
 {
@@ -20,6 +21,11 @@ class Vendor extends Authenticatable
     public function products()
     {
         return $this->hasMany(Product::class);
+    }
+
+    public function withdrawals(): HasMany
+    {
+        return $this->hasMany(VendorWithdrawal::class);
     }
 
     protected $fillable = [

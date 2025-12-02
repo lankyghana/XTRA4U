@@ -6,7 +6,7 @@
 @section('content')
 <div
     class="min-h-screen bg-gray-50 py-8 lg:py-16"
-    x-data="paymentForm(@json($vendors))"
+    x-data='paymentForm(@json($vendors))'
 >
     <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
         <!-- Header -->
@@ -142,6 +142,15 @@
                         </div>
                     </div>
                     
+                    <!-- Service Selection -->
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-900 mb-4">Service Selection</h3>
+                        <!-- Service selection guidance -->
+                        <div class="text-sm text-gray-500">
+                            <p>Browse the services offered by the vendor you selected above, then tap one of the cards to continue.</p>
+                        </div>
+                    </div>
+
                     <!-- Contact Information -->
                     <div>
                         <h3 class="text-lg font-medium text-gray-900 mb-4">Contact Information</h3>
@@ -165,15 +174,6 @@
                                 :error="$errors->first('mobile_money_number')"
                                 help-text="Your mobile money number for payment"
                             />
-                        </div>
-                    </div>
-                    
-                    <!-- Vendor Selection -->
-                    <div>
-                        <h3 class="text-lg font-medium text-gray-900 mb-4">Vendor Selection</h3>
-                        <!-- Vendor selection moved above -->
-                        <div class="text-sm text-gray-500">
-                            <p>Vendors and their offerings are pulled directly from the marketplace. Please select a vendor above to continue.</p>
                         </div>
                     </div>
                     
@@ -257,74 +257,3 @@
 </div>
 @endsection
 
-@push('scripts')
-<script>
-document.addEventListener('alpine:init', () => {
-    Alpine.data('paymentForm', (vendors = []) => ({
-        vendors,
-        selectedVendorId: '',
-        selectedService: null,
-        processing: false,
-
-        get selectedVendor() {
-            if (!this.selectedVendorId) {
-                return null;
-            }
-            return this.vendors.find(v => Number(v.id) === Number(this.selectedVendorId)) || null;
-        },
-
-        formatCurrency(value) {
-            const amount = Number(value) || 0;
-            return 'GHS ' + amount.toFixed(2);
-        },
-
-        handleVendorChange() {
-            this.selectedService = null;
-        },
-
-        selectService(service) {
-            this.selectedService = service;
-        },
-
-        async submitPayment(event) {
-            if (!this.selectedVendorId) {
-                alert('Please select a vendor to continue.');
-                return;
-            }
-
-            if (!this.selectedService) {
-                alert('Please select one of the vendor\'s services (price) before completing payment.');
-                return;
-            }
-
-            this.processing = true;
-
-            const formData = new FormData(event.target);
-            const data = Object.fromEntries(formData);
-
-            try {
-                const response = await fetch(event.target.action, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                    },
-                    body: JSON.stringify(data)
-                });
-
-                if (response.ok) {
-                    event.target.submit();
-                } else {
-                    const errorData = await response.json();
-                    alert(errorData.message || 'Payment failed. Please try again.');
-                }
-            } catch (error) {
-                alert('Network error. Please check your connection and try again.');
-            } finally {
-                this.processing = false;
-            }
-        }
-    }));
-});
-</script>
-@endpush

@@ -181,6 +181,10 @@ html {
     scroll-behavior: smooth;
 }
 
+[x-cloak] {
+    display: none !important;
+}
+
 /* Hide scrollbar for Chrome, Safari and Opera */
 .scrollbar-hide::-webkit-scrollbar {
     display: none;

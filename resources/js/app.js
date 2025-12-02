@@ -67,41 +67,70 @@ document.addEventListener('alpine:init', () => {
         }
     }));
     
-    // Payment form component
-    Alpine.data('paymentForm', () => ({
+    // Checkout payment form component
+    Alpine.data('paymentForm', (vendors = []) => ({
+        vendors,
+        selectedVendorId: '',
+        selectedService: null,
         processing: false,
-        
-        async submitPayment(formData) {
+
+        get selectedVendor() {
+            if (!this.selectedVendorId) {
+                return null;
+            }
+            return this.vendors.find((vendor) => Number(vendor.id) === Number(this.selectedVendorId)) || null;
+        },
+
+        formatCurrency(value) {
+            const amount = Number(value) || 0;
+            return 'GHS ' + amount.toFixed(2);
+        },
+
+        handleVendorChange() {
+            this.selectedService = null;
+        },
+
+        selectService(service) {
+            this.selectedService = service;
+        },
+
+        async submitPayment(event) {
+            if (!this.selectedVendorId) {
+                alert('Please select a vendor to continue.');
+                return;
+            }
+
+            if (!this.selectedService) {
+                alert("Please select one of the vendor's services (price) before completing payment.");
+                return;
+            }
+
             this.processing = true;
-            
+
+            const formData = new FormData(event.target);
+            const data = Object.fromEntries(formData);
+
             try {
-                const response = await fetch('/purchase', {
+                const response = await fetch(event.target.action, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                     },
-                    body: JSON.stringify(formData)
+                    body: JSON.stringify(data)
                 });
-                
+
                 if (response.ok) {
-                    // Handle success
-                    window.location.href = '/checkout/success';
+                    event.target.submit();
                 } else {
-                    // Handle error
                     const errorData = await response.json();
-                    this.showError(errorData.message || 'Payment failed. Please try again.');
+                    alert(errorData.message || 'Payment failed. Please try again.');
                 }
             } catch (error) {
-                this.showError('Network error. Please check your connection and try again.');
+                alert('Network error. Please check your connection and try again.');
             } finally {
                 this.processing = false;
             }
-        },
-        
-        showError(message) {
-            // You can integrate with your alert component here
-            console.error(message);
         }
     }));
     

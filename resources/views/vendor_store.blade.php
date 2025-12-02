@@ -13,7 +13,7 @@
                 <li class="mb-4 p-4 border rounded">
                     <div class="font-bold">{{ $product->name }}</div>
                     <div>{{ $product->description }}</div>
-                    <div class="text-blue-600 font-bold">${{ $product->price }}</div>
+                    <div class="text-blue-600 font-bold">GHS {{ number_format($product->price, 2) }}</div>
                 </li>
             @empty
                 <li>No products available.</li>

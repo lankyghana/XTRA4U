@@ -14,7 +14,7 @@
     $cellClasses = 'px-6 py-4 text-sm';
 @endphp
 
-<div {{ $attributes->merge(['class' => $responsive ? 'overflow-x-auto shadow rounded-lg' : 'shadow rounded-lg']) }}>
+<div {{ $attributes->merge(['class' => $responsive ? 'overflow-x-auto w-full shadow rounded-lg' : 'shadow rounded-lg w-full']) }}>
     <table class="{{ $tableClasses }}">
         @if(!empty($headers))
             <thead class="{{ $headerClasses }}">

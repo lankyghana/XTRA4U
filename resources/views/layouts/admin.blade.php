@@ -8,8 +8,9 @@
     <title>@yield('title', 'Admin Portal - XTRA4U')</title>
     <meta name="description" content="@yield('description', 'System administration portal for XTRA4U')">
     
-    <!-- Styles -->
+    <!-- Styles & Scripts -->
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
     
     @stack('styles')
 </head>

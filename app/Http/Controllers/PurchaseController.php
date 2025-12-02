@@ -14,19 +14,6 @@ use Illuminate\Validation\ValidationException;
 
 class PurchaseController extends Controller
 {
-    // Show checkout form
-    public function showCheckout()
-    {
-        return view('checkout');
-    }
-
-    // Handle purchase request
-    public function purchase(Request $request)
-    {
-        return $this->store($request);
-    }
-
-    // Store purchase (main method)
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -48,32 +35,32 @@ class PurchaseController extends Controller
             ]);
         }
 
-        $paymentStatus = $paymentSuccess ? 'completed' : 'failed';
+        $paymentSuccess = true; // Replace with actual gateway decision
 
-        $payload = array_merge($validated, [
-            'service_purchased' => $product->name,
-            'amount_paid' => number_format((float) $product->price, 2, '.', ''),
-            'payment_status' => $paymentStatus,
-        ]);
-
-        // Simulate payment processing (placeholder)
-        // $paymentSuccess currently always true; replace with gateway result.
-
-        if ($paymentSuccess) {
-            $token = (string) Str::uuid();
-            session()->put("purchase.tokens.$token", [
-                'payload' => $payload,
-                'expires_at' => Carbon::now()->addMinutes(10),
-            ]);
-
-            // Redirect to callback route with secure token
-            return redirect()->route('purchase.callback', ['token' => $token]);
-        } else {
+        if (! $paymentSuccess) {
             return back()->withErrors(['payment' => 'Payment failed. Please try again.']);
         }
+
+        $payload = [
+            'recipient_phone_number' => $validated['recipient_phone_number'],
+            'mobile_money_number' => $validated['mobile_money_number'],
+            'vendor_id' => $product->vendor_id,
+            'vendor_service_id' => $product->id,
+            'service_purchased' => $product->name,
+            'amount_paid' => (float) $product->price,
+            'payment_status' => 'completed',
+        ];
+
+        $token = (string) Str::uuid();
+
+        session()->put("purchase.tokens.$token", [
+            'payload' => $payload,
+            'expires_at' => Carbon::now()->addMinutes(10),
+        ]);
+
+        return redirect()->route('purchase.callback', ['token' => $token]);
     }
 
-    // Payment callback (simulated)
     public function paymentCallback(Request $request, string $token)
     {
         $stored = session()->pull("purchase.tokens.$token");
@@ -98,37 +85,34 @@ class PurchaseController extends Controller
             'payment_status' => 'required|in:completed,failed',
         ])->validate();
 
-                // Simulate payment processing (placeholder)
-                $paymentSuccess = true; // Replace with actual payment API integration
+        $product = Product::query()
+            ->where('id', $validated['vendor_service_id'])
+            ->where('vendor_id', $validated['vendor_id'])
+            ->where('is_active', true)
+            ->firstOrFail();
 
-                $paymentStatus = $paymentSuccess ? 'completed' : 'failed';
-
-                $payload = array_merge($validated, [
-                    'service_purchased' => $product->name,
-                    'amount_paid' => number_format((float) $product->price, 2, '.', ''),
-                    'payment_status' => $paymentStatus,
-                ]);
-
-        $serviceName = $product->name;
         $amountPaid = (float) $product->price;
 
-        DB::transaction(function () use ($validated, $serviceName, $amountPaid, $product) {
-            // Create order
+        if ((float) $validated['amount_paid'] !== $amountPaid) {
+            abort(422, 'Payment amount mismatch detected.');
+        }
+
+        $status = $validated['payment_status'] === 'completed' ? 'Completed' : 'Failed';
+
+        $order = DB::transaction(function () use ($validated, $product, $amountPaid, $status) {
             $order = Order::create([
                 'recipient_phone_number' => $validated['recipient_phone_number'],
                 'mobile_money_number' => $validated['mobile_money_number'],
-                'service_purchased' => $serviceName,
+                'service_purchased' => $product->name,
                 'amount_paid' => $amountPaid,
                 'vendor_id' => $product->vendor_id,
                 'vendor_service_id' => $product->id,
-                'status' => $validated['payment_status'] === 'completed' ? 'Completed' : 'Failed',
+                'status' => $status,
             ]);
 
-            // Calculate commission and vendor earnings
             $commission = round($amountPaid * 0.01, 2);
             $vendorEarnings = round($amountPaid - $commission, 2);
 
-            // Log transaction
             Transaction::create([
                 'order_id' => $order->id,
                 'vendor_id' => $product->vendor_id,
@@ -136,17 +120,18 @@ class PurchaseController extends Controller
                 'amount' => $amountPaid,
                 'commission_amount' => $commission,
                 'vendor_earning' => $vendorEarnings,
-                'payment_status' => $validated['payment_status'],
+                'payment_status' => strtolower($status),
             ]);
 
-            // Log for audit
             Log::info('Order created and transaction logged', [
                 'order_id' => $order->id,
                 'commission' => $commission,
                 'vendor_earnings' => $vendorEarnings,
             ]);
+
+            return $order;
         });
 
-        return view('checkout_success');
+        return view('checkout_success', compact('order'));
     }
 }

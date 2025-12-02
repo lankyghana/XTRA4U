@@ -2,8 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Vendor;
+use App\Models\VendorWithdrawal;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Foundation\Testing\WithFaker;
 use Tests\TestCase;
 
 class VendorDashboardTest extends TestCase
@@ -15,7 +16,7 @@ class VendorDashboardTest extends TestCase
 
     public function test_vendor_dashboard_loads_for_approved_vendor()
     {
-        $vendor = \App\Models\Vendor::factory()->create([
+        $vendor = Vendor::factory()->create([
             'is_approved' => true,
             'password' => bcrypt('password'),
         ]);
@@ -23,11 +24,34 @@ class VendorDashboardTest extends TestCase
         $this->actingAs($vendor, 'vendor');
         $response = $this->get('/vendor/dashboard');
         $response->assertStatus(200);
-        $response->assertSee($vendor->name);
-        $response->assertSee('Sales Summary');
-        $response->assertSee('Earnings Summary');
-        $response->assertSee('Order List');
-        $response->assertSee('Product Management');
-        $response->assertSee('Your Store Link');
+        $response->assertSeeText('Gross Sales');
+        $response->assertSee('Wallet & Withdrawals', false);
+        $response->assertSeeText('Recent Orders');
+        $response->assertSeeText('Quick Actions');
+    }
+
+    public function test_vendor_withdrawals_page_loads()
+    {
+        $vendor = Vendor::factory()->create([
+            'is_approved' => true,
+            'password' => bcrypt('password'),
+        ]);
+
+        VendorWithdrawal::create([
+            'vendor_id' => $vendor->id,
+            'amount' => 150.00,
+            'status' => VendorWithdrawal::STATUS_PENDING,
+            'reference' => 'WITHDRAW123',
+            'notes' => 'First request',
+        ]);
+
+        $this->actingAs($vendor, 'vendor');
+
+        $response = $this->get('/vendor/withdrawals');
+
+        $response->assertStatus(200);
+        $response->assertSeeText('Withdrawals');
+        $response->assertSeeText('Withdrawal History');
+        $response->assertSeeText('WITHDRAW123');
     }
 }
