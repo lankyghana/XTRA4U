@@ -48,6 +48,16 @@ class VendorDashboardController extends Controller
 		));
 	}
 
+	public function orders()
+	{
+		$vendor = $this->resolveVendor();
+		$orders = Order::where('vendor_id', $vendor->id)
+			->latest()
+			->paginate(15);
+
+		return view('vendor.orders.index', compact('vendor', 'orders'));
+	}
+
 	public function requestWithdrawal(Request $request)
 	{
 		$vendor = $this->resolveVendor();
