@@ -26,7 +26,20 @@ class CheckoutController extends Controller
 					->select(['id', 'vendor_id', 'name', 'description', 'price']);
 			}])
 			->whereHas('products', fn ($query) => $query->where('is_active', true))
-			->get();
+			->get()
+			->map(function (Vendor $vendor) {
+				$vendor->products = $vendor->products->map(function ($product) {
+					$metadata = $this->decodeDescription($product->description);
+					$product->structured_metadata = $metadata;
+					$product->metadata = $metadata;
+					$product->display_description = $metadata['notes']
+						?? $metadata['description']
+						?? $product->description;
+					return $product;
+				});
+
+				return $vendor;
+			});
 
 		return view('checkout', compact('vendors'));
 	}
@@ -45,5 +58,18 @@ class CheckoutController extends Controller
 		event(new OrderCompleted($order));
 		// ...additional logic (redirect, response, etc.)
 		return response()->json(['transaction' => $transaction]);
+	}
+
+	private function decodeDescription(?string $value): array
+	{
+		if (! $value) {
+			return [];
+		}
+
+		$decoded = json_decode($value, true);
+
+		return json_last_error() === JSON_ERROR_NONE && is_array($decoded)
+			? $decoded
+			: [];
 	}
 }
