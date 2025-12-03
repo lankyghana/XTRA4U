@@ -45,7 +45,7 @@
                 
                 <!-- Become Vendor Button -->
                 <a href="{{ route('vendor.request.form') }}" 
-                   class="hidden md:inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-green hover:bg-green-600 transition-all duration-200 shadow-sm">
+                   class="hidden md:inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-xtra-green hover:bg-brand-bright-green transition-all duration-200 shadow-sm">
                     Become Vendor
                 </a>
                 
@@ -95,7 +95,7 @@
                     Vendor Portal
                 </a>
                 <a href="{{ route('vendor.request.form') }}" 
-                   class="block px-3 py-2 text-base font-medium text-white bg-brand-green hover:bg-green-600 rounded-md transition-all duration-200">
+                   class="block px-3 py-2 text-base font-medium text-white bg-brand-xtra-green hover:bg-brand-bright-green rounded-md transition-all duration-200">
                     Become Vendor
                 </a>
             </div>
