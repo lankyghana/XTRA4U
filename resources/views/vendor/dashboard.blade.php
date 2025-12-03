@@ -4,7 +4,7 @@
 @section('description', 'Manage your vendor account and track your performance')
 
 @section('content')
-<x-vendor-layout title="Dashboard" subtitle="Manage your vendor account and track your performance" active="dashboard">
+<x-vendor-layout :vendor="$vendor" title="Dashboard" subtitle="Manage your vendor account and track your performance" active="dashboard">
     <x-slot name="actions">
         <button class="p-2 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-deep-blue" aria-label="Sync data">
             <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
