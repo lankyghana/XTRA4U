@@ -34,6 +34,7 @@ class Vendor extends Authenticatable
         'phone_number',
         'password',
         'is_approved',
+        'vendor_code',
     ];
 
     protected $hidden = [
