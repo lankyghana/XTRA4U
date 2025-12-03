@@ -119,7 +119,13 @@
                                                 <div class="flex items-center justify-between">
                                                     <div>
                                                         <p class="text-base font-semibold text-gray-900" x-text="service.name"></p>
-                                                        <p class="text-sm text-gray-600 mt-1" x-text="service.description"></p>
+                                                        <p class="text-sm text-gray-600 mt-1" x-text="service.display_description || 'Tap to see details'"></p>
+                                                        <div class="flex flex-wrap gap-2 mt-2 text-xs">
+                                                            <span class="px-2 py-0.5 bg-purple-50 text-purple-700 rounded-full" x-show="service.metadata?.network" x-text="service.metadata?.network"></span>
+                                                            <span class="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full" x-show="service.metadata?.size" x-text="service.metadata?.size"></span>
+                                                            <span class="px-2 py-0.5 bg-green-50 text-green-600 rounded-full" x-show="service.metadata?.validity" x-text="service.metadata?.validity"></span>
+                                                            <span class="px-2 py-0.5 bg-amber-50 text-amber-600 rounded-full" x-show="service.metadata?.tag" x-text="service.metadata?.tag"></span>
+                                                        </div>
                                                     </div>
                                                     <div class="text-right">
                                                         <p class="text-lg font-bold text-brand-deep-blue" x-text="formatCurrency(service.price)"></p>
@@ -138,6 +144,8 @@
                             <div x-show="selectedService" x-cloak class="bg-green-50 border border-green-200 rounded-lg p-4">
                                 <p class="text-sm text-green-900"><strong>Selected Service:</strong> <span x-text="selectedService?.name"></span></p>
                                 <p class="text-sm text-green-900"><strong>Price:</strong> <span x-text="formatCurrency(selectedService?.price)"></span></p>
+                                <p class="text-sm text-green-900" x-show="selectedService?.metadata?.size"><strong>Size:</strong> <span x-text="selectedService?.metadata?.size"></span></p>
+                                <p class="text-sm text-green-900" x-show="selectedService?.metadata?.validity"><strong>Validity:</strong> <span x-text="selectedService?.metadata?.validity"></span></p>
                             </div>
                         </div>
                     </div>
