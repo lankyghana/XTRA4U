@@ -41,4 +41,13 @@ class VendorAuthController extends Controller
 
 		return redirect()->intended(route('vendor.dashboard'));
 	}
+
+	public function logout(Request $request)
+	{
+		Auth::guard('vendor')->logout();
+		$request->session()->invalidate();
+		$request->session()->regenerateToken();
+
+		return redirect()->route('vendor.login.form');
+	}
 }
