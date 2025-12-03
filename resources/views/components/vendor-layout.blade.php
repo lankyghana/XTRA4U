@@ -2,6 +2,7 @@
     'title' => 'Vendor Portal',
     'subtitle' => null,
     'active' => null,
+    'vendor' => null,
 ])
 
 @once
@@ -28,6 +29,8 @@
 @endonce
 
 @php
+    $storefrontUrl = $vendor ? route('storefront.vendor', ['vendor' => $vendor]) : null;
+
     $navLinks = [
         [
             'key' => 'dashboard',
@@ -189,11 +192,26 @@
                         @endif
                     </div>
                 </div>
-                @isset($actions)
-                    <div class="flex items-center gap-3">
-                        {{ $actions }}
-                    </div>
-                @endisset
+                <div class="flex items-center gap-3">
+                            @isset($actions)
+                                <div class="flex items-center gap-3">
+                                    {{ $actions }}
+                                </div>
+                            @endisset
+
+                            @if ($storefrontUrl)
+                                <x-button href="{{ $storefrontUrl }}" variant="outline" size="sm" class="whitespace-nowrap">
+                                    View Storefront
+                                </x-button>
+                            @endif
+
+                            <form method="POST" action="{{ route('vendor.logout') }}" class="m-0 inline-flex">
+                                @csrf
+                                <x-button type="submit" variant="secondary" size="sm" class="whitespace-nowrap">
+                                    Log Out
+                                </x-button>
+                            </form>
+                        </div>
             </div>
         </header>
 
