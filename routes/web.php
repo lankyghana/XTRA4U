@@ -16,6 +16,7 @@ use App\Http\Controllers\AdminVendorController;
 use App\Http\Controllers\AdminOrderController;
 use App\Http\Controllers\AdminTransactionController;
 use App\Http\Controllers\AdminWithdrawalController;
+use App\Http\Controllers\AdminNetworkServiceController;
 
 Route::get('/', [StorefrontController::class, 'index'])->name('storefront.index');
 Route::get('/store/{vendor}', [StorefrontController::class, 'showVendorStore'])->name('storefront.vendor');
@@ -25,6 +26,7 @@ Route::post('/vendor/request', [VendorRequestController::class, 'store'])->name(
 Route::post('/vendor/request/submit', [VendorController::class, 'submitRequest'])->name('vendor.request.submit');
 Route::get('/vendor/login', [VendorAuthController::class, 'showLoginForm'])->name('vendor.login.form');
 Route::post('/vendor/login', [VendorAuthController::class, 'login'])->name('vendor.login');
+Route::post('/vendor/logout', [VendorAuthController::class, 'logout'])->name('vendor.logout');
 Route::middleware(['vendor.approved'])
     ->prefix('vendor')
     ->name('vendor.')
@@ -32,7 +34,7 @@ Route::middleware(['vendor.approved'])
         Route::get('dashboard', [VendorDashboardController::class, 'index'])->name('dashboard');
         Route::resource('products', ProductController::class);
 
-        Route::get('orders', fn () => redirect()->route('vendor.dashboard'))
+        Route::get('orders', [VendorDashboardController::class, 'orders'])
             ->name('orders.index');
         Route::get('transactions', fn () => redirect()->route('vendor.dashboard'))
             ->name('transactions.index');
@@ -58,6 +60,9 @@ Route::post('/admin/logout', [AdminAuthController::class, 'logout'])->name('admi
 Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/', [AdminController::class, 'dashboard'])->name('dashboard');
     Route::resource('vendors', AdminVendorController::class)->only(['index', 'update', 'destroy']);
+    Route::resource('network-services', AdminNetworkServiceController::class)
+        ->except(['show'])
+        ->parameters(['network-services' => 'network_service']);
     Route::post('vendors/{vendor}/approve', [AdminVendorController::class, 'approve'])->name('vendors.approve');
     Route::post('vendors/{vendor}/reject', [AdminVendorController::class, 'reject'])->name('vendors.reject');
     Route::resource('orders', AdminOrderController::class);
