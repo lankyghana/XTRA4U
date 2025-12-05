@@ -22,6 +22,7 @@ class VendorFactory extends Factory
             'phone_number' => $this->faker->phoneNumber,
             'password' => bcrypt('password'),
             'is_approved' => true,
+            'vendor_code' => strtoupper($this->faker->unique()->bothify('VND###??')),
         ];
     }
 }
