@@ -2,13 +2,20 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\OrderPlacedMail;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\ResellerProduct;
 use App\Models\Transaction;
+use App\Models\Vendor;
+use App\Models\VendorNotification;
+use App\Models\AdminNotification;
+use App\Services\SmsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -21,18 +28,44 @@ class PurchaseController extends Controller
             'mobile_money_number' => 'required|string',
             'vendor_id' => 'required|exists:vendors,id',
             'vendor_service_id' => 'required|exists:products,id',
+            'is_reseller_product' => 'nullable|boolean',
+            'reseller_product_id' => 'nullable|exists:reseller_products,id',
         ]);
 
-        $product = Product::query()
-            ->where('id', $validated['vendor_service_id'])
-            ->where('vendor_id', $validated['vendor_id'])
-            ->where('is_active', true)
-            ->first();
+        $isResellerOrder = $validated['is_reseller_product'] ?? false;
+        
+        if ($isResellerOrder && isset($validated['reseller_product_id'])) {
+            // Handle reseller product
+            $resellerProduct = ResellerProduct::with(['product', 'ownerVendor', 'resellerVendor'])
+                ->where('id', $validated['reseller_product_id'])
+                ->where('reseller_vendor_id', $validated['vendor_id'])
+                ->where('is_active', true)
+                ->first();
 
-        if (! $product) {
-            throw ValidationException::withMessages([
-                'vendor_service_id' => 'The selected vendor service is unavailable.',
-            ]);
+            if (!$resellerProduct || !$resellerProduct->product || !$resellerProduct->product->is_active) {
+                throw ValidationException::withMessages([
+                    'vendor_service_id' => 'The selected reseller product is unavailable.',
+                ]);
+            }
+
+            $product = $resellerProduct->product;
+            $price = $resellerProduct->selling_price;
+        } else {
+            // Handle regular product
+            $product = Product::query()
+                ->where('id', $validated['vendor_service_id'])
+                ->where('vendor_id', $validated['vendor_id'])
+                ->where('is_active', true)
+                ->first();
+
+            if (! $product) {
+                throw ValidationException::withMessages([
+                    'vendor_service_id' => 'The selected vendor service is unavailable.',
+                ]);
+            }
+
+            $price = $product->price;
+            $resellerProduct = null;
         }
 
         $paymentSuccess = true; // Replace with actual gateway decision
@@ -44,11 +77,13 @@ class PurchaseController extends Controller
         $payload = [
             'recipient_phone_number' => $validated['recipient_phone_number'],
             'mobile_money_number' => $validated['mobile_money_number'],
-            'vendor_id' => $product->vendor_id,
+            'vendor_id' => $validated['vendor_id'],
             'vendor_service_id' => $product->id,
             'service_purchased' => $product->name,
-            'amount_paid' => (float) $product->price,
+            'amount_paid' => (float) $price,
             'payment_status' => 'completed',
+            'is_reseller_product' => $isResellerOrder,
+            'reseller_product_id' => $resellerProduct?->id,
         ];
 
         $token = (string) Str::uuid();
@@ -83,54 +118,230 @@ class PurchaseController extends Controller
             'service_purchased' => 'required|string',
             'amount_paid' => 'required|numeric',
             'payment_status' => 'required|in:completed,failed',
+            'is_reseller_product' => 'nullable|boolean',
+            'reseller_product_id' => 'nullable|exists:reseller_products,id',
         ])->validate();
 
-        $product = Product::query()
-            ->where('id', $validated['vendor_service_id'])
-            ->where('vendor_id', $validated['vendor_id'])
-            ->where('is_active', true)
-            ->firstOrFail();
-
-        $amountPaid = (float) $product->price;
+        $isResellerOrder = $validated['is_reseller_product'] ?? false;
+        
+        if ($isResellerOrder && isset($validated['reseller_product_id'])) {
+            $resellerProduct = ResellerProduct::with(['product', 'ownerVendor', 'resellerVendor'])
+                ->where('id', $validated['reseller_product_id'])
+                ->where('is_active', true)
+                ->firstOrFail();
+            
+            $product = $resellerProduct->product;
+            $amountPaid = (float) $resellerProduct->selling_price;
+        } else {
+            $product = Product::query()
+                ->where('id', $validated['vendor_service_id'])
+                ->where('vendor_id', $validated['vendor_id'])
+                ->where('is_active', true)
+                ->firstOrFail();
+            
+            $amountPaid = (float) $product->price;
+            $resellerProduct = null;
+        }
 
         if ((float) $validated['amount_paid'] !== $amountPaid) {
             abort(422, 'Payment amount mismatch detected.');
         }
 
-        $status = $validated['payment_status'] === 'completed' ? 'Completed' : 'Failed';
+        // Regular orders complete immediately, reseller orders start as Pending for owner to fulfill
+        $isReseller = $isResellerOrder && $resellerProduct;
+        if ($validated['payment_status'] === 'completed') {
+            $status = $isReseller ? 'Pending' : 'Completed';
+        } else {
+            $status = 'Failed';
+        }
 
-        $order = DB::transaction(function () use ($validated, $product, $amountPaid, $status) {
-            $order = Order::create([
-                'recipient_phone_number' => $validated['recipient_phone_number'],
-                'mobile_money_number' => $validated['mobile_money_number'],
-                'service_purchased' => $product->name,
-                'amount_paid' => $amountPaid,
-                'vendor_id' => $product->vendor_id,
-                'vendor_service_id' => $product->id,
-                'status' => $status,
-            ]);
+        $order = DB::transaction(function () use ($validated, $product, $amountPaid, $status, $isResellerOrder, $resellerProduct) {
+            if ($isResellerOrder && $resellerProduct) {
+                // **RESELLER ORDER - Split Payment**
+                $basePrice = $resellerProduct->base_price;
+                $markupPrice = $resellerProduct->markup_price;
+                
+                // Calculate commissions (1% each)
+                $ownerCommission = round($basePrice * 0.01, 2);
+                $resellerCommission = round($markupPrice * 0.01, 2);
+                $totalPlatformCommission = $ownerCommission + $resellerCommission;
+                
+                // Calculate earnings (after commission)
+                $ownerEarning = round($basePrice - $ownerCommission, 2);
+                $resellerEarning = round($markupPrice - $resellerCommission, 2);
+                
+                // Create order with reseller info
+                $order = Order::create([
+                    'recipient_phone_number' => $validated['recipient_phone_number'],
+                    'mobile_money_number' => $validated['mobile_money_number'],
+                    'service_purchased' => $product->name,
+                    'amount_paid' => $amountPaid,
+                    'vendor_id' => $resellerProduct->reseller_vendor_id, // The reseller is the primary vendor
+                    'vendor_service_id' => $product->id,
+                    'status' => $status,
+                    'reseller_product_id' => $resellerProduct->id,
+                    'owner_vendor_id' => $resellerProduct->owner_vendor_id,
+                    'reseller_vendor_id' => $resellerProduct->reseller_vendor_id,
+                    'base_price' => $basePrice,
+                    'markup_price' => $markupPrice,
+                    'owner_earning' => $ownerEarning,
+                    'reseller_earning' => $resellerEarning,
+                    'platform_commission' => $totalPlatformCommission,
+                    'is_reseller_order' => true,
+                ]);
 
-            $commission = round($amountPaid * 0.01, 2);
-            $vendorEarnings = round($amountPaid - $commission, 2);
+                // Create transaction for OWNER VENDOR (base price earnings)
+                Transaction::create([
+                    'order_id' => $order->id,
+                    'vendor_id' => $resellerProduct->owner_vendor_id,
+                    'recipient_phone' => $validated['recipient_phone_number'],
+                    'amount' => $basePrice,
+                    'commission_amount' => $ownerCommission,
+                    'vendor_earning' => $ownerEarning,
+                    'payment_status' => strtolower($status),
+                ]);
 
-            Transaction::create([
-                'order_id' => $order->id,
-                'vendor_id' => $product->vendor_id,
-                'recipient_phone' => $validated['recipient_phone_number'],
-                'amount' => $amountPaid,
-                'commission_amount' => $commission,
-                'vendor_earning' => $vendorEarnings,
-                'payment_status' => strtolower($status),
-            ]);
+                // Create transaction for RESELLER VENDOR (markup earnings)
+                Transaction::create([
+                    'order_id' => $order->id,
+                    'vendor_id' => $resellerProduct->reseller_vendor_id,
+                    'recipient_phone' => $validated['recipient_phone_number'],
+                    'amount' => $markupPrice,
+                    'commission_amount' => $resellerCommission,
+                    'vendor_earning' => $resellerEarning,
+                    'payment_status' => strtolower($status),
+                ]);
 
-            Log::info('Order created and transaction logged', [
-                'order_id' => $order->id,
-                'commission' => $commission,
-                'vendor_earnings' => $vendorEarnings,
-            ]);
+                Log::info('Reseller order created with split payment', [
+                    'order_id' => $order->id,
+                    'owner_vendor_id' => $resellerProduct->owner_vendor_id,
+                    'reseller_vendor_id' => $resellerProduct->reseller_vendor_id,
+                    'base_price' => $basePrice,
+                    'markup_price' => $markupPrice,
+                    'owner_earning' => $ownerEarning,
+                    'reseller_earning' => $resellerEarning,
+                    'platform_commission' => $totalPlatformCommission,
+                ]);
+
+                // Send notification to OWNER vendor (affiliate order)
+                VendorNotification::create([
+                    'vendor_id' => $resellerProduct->owner_vendor_id,
+                    'type' => VendorNotification::TYPE_AFFILIATE_ORDER,
+                    'title' => 'New Affiliate Order',
+                    'message' => "A reseller has made a sale of your product '{$product->name}'. Your earning: GHS " . number_format($ownerEarning, 2),
+                    'order_id' => $order->id,
+                    'data' => [
+                        'product_name' => $product->name,
+                        'base_price' => $basePrice,
+                        'earning' => $ownerEarning,
+                        'reseller_vendor_id' => $resellerProduct->reseller_vendor_id,
+                    ],
+                ]);
+
+                // Send notification to RESELLER vendor
+                VendorNotification::create([
+                    'vendor_id' => $resellerProduct->reseller_vendor_id,
+                    'type' => VendorNotification::TYPE_NEW_ORDER,
+                    'title' => 'New Order Received',
+                    'message' => "You have a new order for '{$product->name}'. Your markup earning: GHS " . number_format($resellerEarning, 2),
+                    'order_id' => $order->id,
+                    'data' => [
+                        'product_name' => $product->name,
+                        'markup_price' => $markupPrice,
+                        'earning' => $resellerEarning,
+                    ],
+                ]);
+
+                // Send notification to ADMIN
+                AdminNotification::notifyNewOrder($order);
+
+                // Send EMAIL to OWNER vendor (product owner)
+                $ownerVendor = Vendor::find($resellerProduct->owner_vendor_id);
+                if ($ownerVendor && $ownerVendor->email) {
+                    Mail::to($ownerVendor->email)->send(new OrderPlacedMail($order, $ownerVendor, 'owner', $ownerEarning));
+                }
+
+                // Send EMAIL to RESELLER vendor
+                $resellerVendor = Vendor::find($resellerProduct->reseller_vendor_id);
+                if ($resellerVendor && $resellerVendor->email) {
+                    Mail::to($resellerVendor->email)->send(new OrderPlacedMail($order, $resellerVendor, 'reseller', $resellerEarning));
+                }
+            } else {
+                // **REGULAR ORDER - Standard 1% commission**
+                $commission = round($amountPaid * 0.01, 2);
+                $vendorEarnings = round($amountPaid - $commission, 2);
+
+                $order = Order::create([
+                    'recipient_phone_number' => $validated['recipient_phone_number'],
+                    'mobile_money_number' => $validated['mobile_money_number'],
+                    'service_purchased' => $product->name,
+                    'amount_paid' => $amountPaid,
+                    'vendor_id' => $product->vendor_id,
+                    'vendor_service_id' => $product->id,
+                    'status' => $status,
+                    'is_reseller_order' => false,
+                ]);
+
+                Transaction::create([
+                    'order_id' => $order->id,
+                    'vendor_id' => $product->vendor_id,
+                    'recipient_phone' => $validated['recipient_phone_number'],
+                    'amount' => $amountPaid,
+                    'commission_amount' => $commission,
+                    'vendor_earning' => $vendorEarnings,
+                    'payment_status' => strtolower($status),
+                ]);
+
+                Log::info('Regular order created', [
+                    'order_id' => $order->id,
+                    'commission' => $commission,
+                    'vendor_earnings' => $vendorEarnings,
+                ]);
+
+                // Send notification to vendor
+                VendorNotification::create([
+                    'vendor_id' => $product->vendor_id,
+                    'type' => VendorNotification::TYPE_NEW_ORDER,
+                    'title' => 'New Order Received',
+                    'message' => "You have a new order for '{$product->name}'. Earning: GHS " . number_format($vendorEarnings, 2),
+                    'order_id' => $order->id,
+                    'data' => [
+                        'product_name' => $product->name,
+                        'amount' => $amountPaid,
+                        'earning' => $vendorEarnings,
+                    ],
+                ]);
+
+                // Send notification to ADMIN
+                AdminNotification::notifyNewOrder($order);
+
+                // Send EMAIL to vendor
+                $vendor = Vendor::find($product->vendor_id);
+                if ($vendor && $vendor->email) {
+                    Mail::to($vendor->email)->send(new OrderPlacedMail($order, $vendor, 'direct', $vendorEarnings));
+                }
+            }
 
             return $order;
         });
+
+        // Send SMS to mobile money number after successful order
+        if ($order && $order->status !== 'Failed') {
+            try {
+                $smsService = app(SmsService::class);
+                $smsService->sendOrderPlacedSms(
+                    $order->mobile_money_number,
+                    $order->id,
+                    $order->recipient_phone_number,
+                    $order->service_purchased
+                );
+            } catch (\Exception $e) {
+                Log::error('Failed to send order placement SMS', [
+                    'order_id' => $order->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
 
         return view('checkout_success', compact('order'));
     }
