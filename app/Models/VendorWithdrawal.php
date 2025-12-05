@@ -15,16 +15,26 @@ class VendorWithdrawal extends Model
     public const STATUS_APPROVED = 'approved';
     public const STATUS_REJECTED = 'rejected';
 
+    public const NETWORK_MTN = 'MTN';
+    public const NETWORK_TELECEL = 'TELECEL';
+    public const NETWORK_AIRTELTIGO = 'AirtelTigo';
+
     protected $fillable = [
         'vendor_id',
         'amount',
+        'momo_number',
+        'momo_network',
         'status',
         'reference',
+        'payout_reference',
+        'payout_status',
+        'paid_at',
         'notes',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
+        'paid_at' => 'datetime',
     ];
 
     public static function statuses(): array
@@ -34,6 +44,15 @@ class VendorWithdrawal extends Model
             self::STATUS_PROCESSING,
             self::STATUS_APPROVED,
             self::STATUS_REJECTED,
+        ];
+    }
+
+    public static function networks(): array
+    {
+        return [
+            self::NETWORK_MTN,
+            self::NETWORK_TELECEL,
+            self::NETWORK_AIRTELTIGO,
         ];
     }
 
