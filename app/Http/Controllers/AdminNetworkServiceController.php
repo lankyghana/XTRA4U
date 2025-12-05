@@ -2,12 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Traits\SecureFileUpload;
 use App\Models\NetworkService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class AdminNetworkServiceController extends Controller
 {
+    use SecureFileUpload;
+
     public function index()
     {
         $services = NetworkService::orderBy('category')->orderBy('name')->get();
@@ -22,12 +26,16 @@ class AdminNetworkServiceController extends Controller
             'name' => ['required', 'string', 'max:100'],
             'category' => ['required', 'string', Rule::in($this->categoryOptions())],
             'is_active' => ['sometimes', 'boolean'],
-            'image' => ['nullable', 'image', 'mimes:jpeg,jpg,png,gif,webp', 'max:2048'],
+            'image' => $this->imageValidationRules(false),
         ]);
 
         $imagePath = null;
         if ($request->hasFile('image')) {
-            $imagePath = $request->file('image')->store('network-services', 'public');
+            $imagePath = $this->secureImageUpload(
+                $request->file('image'),
+                'network-services',
+                'public'
+            );
         }
 
         NetworkService::create([
@@ -56,7 +64,7 @@ class AdminNetworkServiceController extends Controller
             'name' => ['required', 'string', 'max:100'],
             'category' => ['required', 'string', Rule::in($this->categoryOptions())],
             'is_active' => ['sometimes', 'boolean'],
-            'image' => ['nullable', 'image', 'mimes:jpeg,jpg,png,gif,webp', 'max:2048'],
+            'image' => $this->imageValidationRules(false),
         ]);
 
         $data = [
@@ -68,9 +76,13 @@ class AdminNetworkServiceController extends Controller
         if ($request->hasFile('image')) {
             // Delete old image if exists
             if ($network_service->image_path) {
-                \Storage::disk('public')->delete($network_service->image_path);
+                Storage::disk('public')->delete($network_service->image_path);
             }
-            $data['image_path'] = $request->file('image')->store('network-services', 'public');
+            $data['image_path'] = $this->secureImageUpload(
+                $request->file('image'),
+                'network-services',
+                'public'
+            );
         }
 
         $network_service->update($data);
@@ -82,7 +94,7 @@ class AdminNetworkServiceController extends Controller
     {
         // Delete image if exists
         if ($network_service->image_path) {
-            \Storage::disk('public')->delete($network_service->image_path);
+            Storage::disk('public')->delete($network_service->image_path);
         }
         
         $network_service->delete();
