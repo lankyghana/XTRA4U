@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\NetworkService;
 use App\Models\Product;
+use App\Models\ResellerProduct;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -86,12 +87,27 @@ class ProductController extends Controller
             'is_active' => 'nullable|boolean',
         ]);
 
+        $oldPrice = $product->price;
+        $newPrice = $validated['price'];
+
         $product->update([
             'name' => $validated['name'],
-            'price' => $validated['price'],
+            'price' => $newPrice,
             'description' => $this->buildStructuredDescription($request, $validated['description'] ?? null),
             'is_active' => $request->boolean('is_active', $product->is_active),
         ]);
+
+        // Sync base_price for all resellers when owner changes price
+        if ($oldPrice != $newPrice) {
+            ResellerProduct::where('product_id', $product->id)
+                ->get()
+                ->each(function ($resellerProduct) use ($newPrice) {
+                    $resellerProduct->update([
+                        'base_price' => $newPrice,
+                        // selling_price auto-calculated in model boot()
+                    ]);
+                });
+        }
 
         return redirect()->route('vendor.products.index')->with('success', 'Product updated successfully.');
     }
