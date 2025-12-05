@@ -15,81 +15,93 @@
     </x-slot>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <x-card variant="metric" padding="md">
-            <div class="flex items-center">
-                <div class="shrink-0">
-                    <div class="w-12 h-12 bg-brand-green rounded-lg flex items-center justify-center">
-                        <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
-                        </svg>
+        <!-- Total Revenue Card -->
+        <div class="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
+            <div class="px-6 py-5">
+                <div class="flex items-center">
+                    <div class="shrink-0">
+                        <div class="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                            <svg class="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-green-100 truncate">Total Revenue</dt>
+                            <dd class="text-2xl font-bold text-white">GHS {{ number_format($totalRevenue, 2) }}</dd>
+                            <dd class="text-sm text-green-100 mt-1">All-time processed</dd>
+                        </dl>
                     </div>
                 </div>
-                <div class="ml-5 w-0 flex-1">
-                    <dl>
-                        <dt class="text-sm font-medium text-gray-500 truncate">Total Revenue</dt>
-                        <dd class="text-xl font-semibold text-gray-900">GHS {{ number_format($totalRevenue, 2) }}</dd>
-                        <dd class="text-sm text-green-600">All-time processed</dd>
-                    </dl>
-                </div>
             </div>
-        </x-card>
+        </div>
 
-        <x-card variant="metric" padding="md">
-            <div class="flex items-center">
-                <div class="shrink-0">
-                    <div class="w-12 h-12 bg-brand-deep-blue rounded-lg flex items-center justify-center">
-                        <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z" />
-                        </svg>
+        <!-- Active Vendors Card -->
+        <div class="bg-gradient-to-br from-brand-deep-blue to-brand-bright-blue rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
+            <div class="px-6 py-5">
+                <div class="flex items-center">
+                    <div class="shrink-0">
+                        <div class="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                            <svg class="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z" />
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-blue-100 truncate">Active Vendors</dt>
+                            <dd class="text-2xl font-bold text-white">{{ $activeVendors }}</dd>
+                            <dd class="text-sm text-blue-100 mt-1">Approved vendors</dd>
+                        </dl>
                     </div>
                 </div>
-                <div class="ml-5 w-0 flex-1">
-                    <dl>
-                        <dt class="text-sm font-medium text-gray-500 truncate">Active Vendors</dt>
-                        <dd class="text-xl font-semibold text-gray-900">{{ $activeVendors }}</dd>
-                        <dd class="text-sm text-green-600">Approved vendors</dd>
-                    </dl>
-                </div>
             </div>
-        </x-card>
+        </div>
 
-        <x-card variant="metric" padding="md">
-            <div class="flex items-center">
-                <div class="shrink-0">
-                    <div class="w-12 h-12 bg-brand-bright-blue rounded-lg flex items-center justify-center">
-                        <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                        </svg>
+        <!-- Transactions Today Card -->
+        <div class="bg-gradient-to-br from-brand-bright-blue to-blue-500 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
+            <div class="px-6 py-5">
+                <div class="flex items-center">
+                    <div class="shrink-0">
+                        <div class="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                            <svg class="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-blue-100 truncate">Transactions Today</dt>
+                            <dd class="text-2xl font-bold text-white">{{ $transactionsToday }}</dd>
+                            <dd class="text-sm text-blue-100 mt-1">Processed today</dd>
+                        </dl>
                     </div>
                 </div>
-                <div class="ml-5 w-0 flex-1">
-                    <dl>
-                        <dt class="text-sm font-medium text-gray-500 truncate">Transactions Today</dt>
-                        <dd class="text-xl font-semibold text-gray-900">{{ $transactionsToday }}</dd>
-                        <dd class="text-sm text-green-600">Processed today</dd>
-                    </dl>
-                </div>
             </div>
-        </x-card>
+        </div>
 
-        <x-card variant="metric" padding="md">
-            <div class="flex items-center">
-                <div class="shrink-0">
-                    <div class="w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center">
-                        <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-                        </svg>
+        <!-- Orders Today Card -->
+        <div class="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
+            <div class="px-6 py-5">
+                <div class="flex items-center">
+                    <div class="shrink-0">
+                        <div class="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                            <svg class="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-purple-100 truncate">Orders Today</dt>
+                            <dd class="text-2xl font-bold text-white">{{ $ordersToday }}</dd>
+                            <dd class="text-sm text-purple-100 mt-1">Submitted today</dd>
+                        </dl>
                     </div>
                 </div>
-                <div class="ml-5 w-0 flex-1">
-                    <dl>
-                        <dt class="text-sm font-medium text-gray-500 truncate">Orders Today</dt>
-                        <dd class="text-xl font-semibold text-gray-900">{{ $ordersToday }}</dd>
-                        <dd class="text-sm text-green-600">Submitted today</dd>
-                    </dl>
-                </div>
             </div>
-        </x-card>
+        </div>
     </div>
 
     @if ($pendingWithdrawals > 0)
