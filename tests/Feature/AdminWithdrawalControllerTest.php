@@ -5,8 +5,10 @@ namespace Tests\Feature;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Models\VendorWithdrawal;
+use App\Services\MomoPayoutService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Mockery;
 use Tests\TestCase;
 
 class AdminWithdrawalControllerTest extends TestCase
@@ -33,6 +35,8 @@ class AdminWithdrawalControllerTest extends TestCase
             'amount' => 120.50,
             'status' => VendorWithdrawal::STATUS_PENDING,
             'reference' => Str::upper(Str::random(10)),
+            'momo_number' => '0244123456',
+            'momo_network' => VendorWithdrawal::NETWORK_MTN,
         ]);
 
         $response = $this->get(route('admin.withdrawals.index'));
@@ -44,6 +48,18 @@ class AdminWithdrawalControllerTest extends TestCase
 
     public function test_admin_can_mark_withdrawal_processing_and_approve(): void
     {
+        // Mock the payout service to simulate a successful payout
+        $mockPayoutService = Mockery::mock(MomoPayoutService::class);
+        $mockPayoutService->shouldReceive('processPayout')
+            ->once()
+            ->andReturn([
+                'success' => true,
+                'message' => 'Payout initiated successfully',
+                'reference' => 'PAYOUT_TEST_123',
+                'status' => 'pending',
+            ]);
+        $this->app->instance(MomoPayoutService::class, $mockPayoutService);
+
         $this->actingAdmin();
         $vendor = Vendor::factory()->create();
         $withdrawal = VendorWithdrawal::create([
@@ -51,6 +67,8 @@ class AdminWithdrawalControllerTest extends TestCase
             'amount' => 75,
             'status' => VendorWithdrawal::STATUS_PENDING,
             'reference' => Str::upper(Str::random(10)),
+            'momo_number' => '0244123456',
+            'momo_network' => VendorWithdrawal::NETWORK_MTN,
         ]);
 
         $this->from(route('admin.withdrawals.index'))
@@ -75,6 +93,8 @@ class AdminWithdrawalControllerTest extends TestCase
             'amount' => 45,
             'status' => VendorWithdrawal::STATUS_PENDING,
             'reference' => Str::upper(Str::random(10)),
+            'momo_number' => '0244123456',
+            'momo_network' => VendorWithdrawal::NETWORK_MTN,
         ]);
 
         $response = $this->from(route('admin.withdrawals.index'))
@@ -97,6 +117,8 @@ class AdminWithdrawalControllerTest extends TestCase
             'amount' => 30,
             'status' => VendorWithdrawal::STATUS_PENDING,
             'reference' => Str::upper(Str::random(10)),
+            'momo_number' => '0244123456',
+            'momo_network' => VendorWithdrawal::NETWORK_MTN,
         ]);
 
         $response = $this->from(route('admin.withdrawals.index'))
