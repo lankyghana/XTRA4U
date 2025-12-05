@@ -1,4 +1,8 @@
 import './bootstrap';
+import Alpine from 'alpinejs';
+
+// Make Alpine available globally
+window.Alpine = Alpine;
 
 // Alpine.js global store for app state
 document.addEventListener('alpine:init', () => {
@@ -107,30 +111,8 @@ document.addEventListener('alpine:init', () => {
 
             this.processing = true;
 
-            const formData = new FormData(event.target);
-            const data = Object.fromEntries(formData);
-
-            try {
-                const response = await fetch(event.target.action, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                    },
-                    body: JSON.stringify(data)
-                });
-
-                if (response.ok) {
-                    event.target.submit();
-                } else {
-                    const errorData = await response.json();
-                    alert(errorData.message || 'Payment failed. Please try again.');
-                }
-            } catch (error) {
-                alert('Network error. Please check your connection and try again.');
-            } finally {
-                this.processing = false;
-            }
+            // Simply submit the form - no need for fetch + submit
+            event.target.submit();
         }
     }));
     
@@ -297,3 +279,6 @@ if ('serviceWorker' in navigator) {
             });
     });
 }
+
+// Start Alpine.js
+Alpine.start();
