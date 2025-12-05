@@ -7,17 +7,17 @@
     <div class="space-y-6">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full lg:w-auto">
-                <div class="bg-white border border-gray-200 rounded-xl px-4 py-3 text-center">
-                    <p class="text-xs uppercase text-gray-500">Total</p>
-                    <p class="text-lg font-semibold text-gray-900">{{ $stats['total'] }}</p>
+                <div class="bg-gradient-to-br from-gray-500 to-gray-600 rounded-xl px-5 py-4 text-center shadow-lg transform hover:scale-105 transition-transform duration-200">
+                    <p class="text-xs uppercase text-gray-100 font-medium">Total</p>
+                    <p class="text-2xl font-bold text-white mt-1">{{ $stats['total'] }}</p>
                 </div>
-                <div class="bg-white border border-green-200 rounded-xl px-4 py-3 text-center">
-                    <p class="text-xs uppercase text-green-600">Approved</p>
-                    <p class="text-lg font-semibold text-gray-900">{{ $stats['approved'] }}</p>
+                <div class="bg-gradient-to-br from-green-500 to-green-600 rounded-xl px-5 py-4 text-center shadow-lg transform hover:scale-105 transition-transform duration-200">
+                    <p class="text-xs uppercase text-green-100 font-medium">Approved</p>
+                    <p class="text-2xl font-bold text-white mt-1">{{ $stats['approved'] }}</p>
                 </div>
-                <div class="bg-white border border-yellow-200 rounded-xl px-4 py-3 text-center">
-                    <p class="text-xs uppercase text-yellow-600">Pending</p>
-                    <p class="text-lg font-semibold text-gray-900">{{ $stats['pending'] }}</p>
+                <div class="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl px-5 py-4 text-center shadow-lg transform hover:scale-105 transition-transform duration-200">
+                    <p class="text-xs uppercase text-yellow-100 font-medium">Pending</p>
+                    <p class="text-2xl font-bold text-white mt-1">{{ $stats['pending'] }}</p>
                 </div>
             </div>
             <div class="text-sm text-gray-500 lg:text-right">
