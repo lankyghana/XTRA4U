@@ -14,18 +14,22 @@ class TransactionService
     }
 
     /**
-     * Get total commissions for a vendor.
+     * Get total commissions for a vendor (only completed transactions).
      */
     public function getVendorCommissions($vendorId)
     {
-        return Transaction::where('vendor_id', $vendorId)->sum('commission_amount');
+        return Transaction::where('vendor_id', $vendorId)
+            ->where('payment_status', 'completed')
+            ->sum('commission_amount');
     }
 
     /**
-     * Get total earnings for a vendor.
+     * Get total earnings for a vendor (only completed transactions).
      */
     public function getVendorEarnings($vendorId)
     {
-        return Transaction::where('vendor_id', $vendorId)->sum('vendor_earning');
+        return Transaction::where('vendor_id', $vendorId)
+            ->where('payment_status', 'completed')
+            ->sum('vendor_earning');
     }
 }
