@@ -12,10 +12,25 @@ class Product extends Model
         'description',
         'price',
         'is_active',
+        'is_resellable',
+        'min_base_price',
+    ];
+
+    protected $casts = [
+        'is_active' => 'boolean',
+        'is_resellable' => 'boolean',
+        'price' => 'decimal:2',
+        'min_base_price' => 'decimal:2',
     ];
 
     public function vendor()
     {
         return $this->belongsTo(Vendor::class);
+    }
+
+    // Reseller products (vendors reselling this product)
+    public function resellerProducts()
+    {
+        return $this->hasMany(ResellerProduct::class);
     }
 }
