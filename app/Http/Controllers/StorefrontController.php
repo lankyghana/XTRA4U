@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Vendor;
 use App\Models\NetworkService;
+use App\Models\ResellerProduct;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Collection;
@@ -17,22 +18,62 @@ class StorefrontController extends Controller
 
 	public function showVendorStore(Vendor $vendor)
 	{
+		// Load owned products
 		$vendor->load(['products' => function ($query) {
 			$query->where('is_active', true);
 		}]);
+
+		// Load reseller products with relationships
+		$resellerProducts = ResellerProduct::where('reseller_vendor_id', $vendor->id)
+			->where('is_active', true)
+			->with(['product' => function ($query) {
+				$query->where('is_active', true)->where('is_resellable', true);
+			}, 'ownerVendor'])
+			->get();
 
 		$categoryConfig = config('storefront.categories', []);
 		$defaultCategory = config('storefront.default_category')
 			?? (array_key_first($categoryConfig) ?? 'data');
 
-		$products = $vendor->products->map(function ($product) use ($defaultCategory) {
+		// Process owned products
+		$ownedProducts = $vendor->products->map(function ($product) use ($defaultCategory) {
 			$metadata = $this->decodeDescription($product->description);
 			$product->structured_metadata = $metadata;
 			$product->display_metadata = $metadata;
 			$product->display_category = $metadata['category'] ?? $defaultCategory;
 			$product->display_service = $metadata['service'] ?? $metadata['network'] ?? $product->name;
+			$product->is_reseller_product = false;
+			$product->display_price = $product->price;
 			return $product;
 		});
+
+		// Process reseller products
+		$resellerProductsProcessed = $resellerProducts->filter(function ($rp) {
+			return $rp->product !== null; // Only include if parent product exists and is active
+		})->map(function ($resellerProduct) use ($defaultCategory) {
+			$product = $resellerProduct->product;
+			$metadata = $this->decodeDescription($product->description);
+			
+			// Clone the product and modify it
+			$displayProduct = clone $product;
+			$displayProduct->id = 'reseller_' . $resellerProduct->id; // Unique ID for reseller product
+			$displayProduct->reseller_product_id = $resellerProduct->id;
+			$displayProduct->original_product_id = $product->id;
+			$displayProduct->structured_metadata = $metadata;
+			$displayProduct->display_metadata = $metadata;
+			$displayProduct->display_category = $metadata['category'] ?? $defaultCategory;
+			$displayProduct->display_service = $metadata['service'] ?? $metadata['network'] ?? $product->name;
+			$displayProduct->is_reseller_product = true;
+			$displayProduct->display_price = $resellerProduct->selling_price; // Show markup price
+			$displayProduct->base_price = $resellerProduct->base_price;
+			$displayProduct->markup_price = $resellerProduct->markup_price;
+			$displayProduct->owner_vendor_name = $resellerProduct->ownerVendor->business_name;
+			
+			return $displayProduct;
+		});
+
+		// Combine both product types
+		$products = $ownedProducts->concat($resellerProductsProcessed);
 
 		$services = $this->buildServicePayload($products, $defaultCategory);
 		$categories = $this->buildGlobalCategoryList($services, $categoryConfig, $defaultCategory);
@@ -78,11 +119,14 @@ class StorefrontController extends Controller
 			$package = [
 				'id' => $product->id,
 				'name' => $product->name,
-				'price' => (float) $product->price,
+				'price' => (float) ($product->display_price ?? $product->price),
 				'size' => $meta['size'] ?? null,
 				'validity' => $meta['validity'] ?? null,
 				'tag' => $meta['tag'] ?? $meta['promo'] ?? null,
 				'notes' => $meta['notes'] ?? $product->description,
+				'is_reseller_product' => $product->is_reseller_product ?? false,
+				'reseller_product_id' => $product->reseller_product_id ?? null,
+				'original_product_id' => $product->original_product_id ?? $product->id,
 			];
 
 			if (! isset($grouped[$serviceKey])) {
