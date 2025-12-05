@@ -30,7 +30,7 @@
                 
                 <!-- CTA Buttons -->
                 <div class="mt-10 flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-                    <x-button href="{{ route('checkout.show') }}" 
+                    <x-button href="{{ route('vendor.request.form') }}" 
                               variant="primary" 
                               size="lg"
                               class="w-full sm:w-auto">
@@ -40,7 +40,7 @@
                         </svg>
                     </x-button>
                     
-                    <x-button href="#services" 
+                    <x-button href="{{ route('checkout.show') }}" 
                               variant="outline" 
                               size="lg"
                               class="w-full sm:w-auto">
