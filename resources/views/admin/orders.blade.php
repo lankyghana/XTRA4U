@@ -16,9 +16,17 @@
                     <td class="px-6 py-4 text-sm text-gray-700">{{ $order->service_purchased }}</td>
                     <td class="px-6 py-4 text-sm font-semibold text-gray-900">₵{{ number_format($order->amount_paid, 2) }}</td>
                     <td class="px-6 py-4 text-sm text-gray-900">
-                        <x-badge :variant="$order->status === 'completed' ? 'completed' : 'pending'">
-                            {{ ucfirst($order->status) }}
-                        </x-badge>
+                        @if($order->status === 'Completed')
+                            <x-badge variant="completed">Completed</x-badge>
+                        @elseif($order->status === 'Processing')
+                            <x-badge variant="processing">Processing</x-badge>
+                        @elseif($order->status === 'Failed')
+                            <x-badge variant="failed">Failed</x-badge>
+                        @elseif($order->status === 'Cancelled')
+                            <x-badge variant="warning">Cancelled</x-badge>
+                        @else
+                            <x-badge variant="pending">Pending</x-badge>
+                        @endif
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-500">{{ $order->created_at?->format('Y-m-d') }}</td>
                 </tr>
