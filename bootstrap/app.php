@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AdminOnly;
+use App\Http\Middleware\ContentSecurityPolicy;
 use App\Http\Middleware\EnsureVendorApproved;
 use App\Http\Middleware\PrunePurchaseTokens;
 use Illuminate\Foundation\Application;
@@ -14,6 +15,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Global middleware for all web requests
+        $middleware->web(append: [
+            ContentSecurityPolicy::class,
+        ]);
+        
         $middleware->alias([
             'vendor.approved' => EnsureVendorApproved::class,
             'admin.only' => AdminOnly::class,
