@@ -19,7 +19,7 @@ use App\Http\Controllers\AdminWithdrawalController;
 use App\Http\Controllers\AdminNetworkServiceController;
 
 Route::get('/', [StorefrontController::class, 'index'])->name('storefront.index');
-Route::get('/store/{vendor}', [StorefrontController::class, 'showVendorStore'])->name('storefront.vendor');
+Route::get('/store/{vendor:vendor_code}', [StorefrontController::class, 'showVendorStore'])->name('storefront.vendor');
 Route::get('/vendor/request', [VendorController::class, 'showRequestForm'])->name('vendor.request.form');
 Route::get('/vendor/request/create', [VendorRequestController::class, 'create'])->name('vendor.request.create');
 Route::post('/vendor/request', [VendorRequestController::class, 'store'])->name('vendor.request.store');
@@ -36,6 +36,32 @@ Route::middleware(['vendor.approved'])
 
         Route::get('orders', [VendorDashboardController::class, 'orders'])
             ->name('orders.index');
+        Route::get('orders/affiliate', [VendorDashboardController::class, 'affiliateOrders'])
+            ->name('orders.affiliate');
+        Route::patch('orders/{order}/status', [VendorDashboardController::class, 'updateOrderStatus'])
+            ->name('orders.update-status');
+        
+        Route::get('analytics', [VendorDashboardController::class, 'analytics'])
+            ->name('analytics.index');
+
+        Route::get('affiliates', [VendorDashboardController::class, 'affiliates'])
+            ->name('affiliates.index');
+        Route::post('affiliates/join', [VendorDashboardController::class, 'joinAffiliate'])
+            ->name('affiliates.join');
+        
+        // Reseller/Marketplace Routes
+        Route::get('marketplace', [VendorDashboardController::class, 'marketplace'])
+            ->name('marketplace.index');
+        Route::post('marketplace/add', [VendorDashboardController::class, 'addResellerProduct'])
+            ->name('marketplace.add');
+        
+        Route::get('reseller-products', [VendorDashboardController::class, 'myResellerProducts'])
+            ->name('reseller.index');
+        Route::patch('reseller-products/{id}', [VendorDashboardController::class, 'updateResellerProduct'])
+            ->name('reseller.update');
+        Route::delete('reseller-products/{id}', [VendorDashboardController::class, 'removeResellerProduct'])
+            ->name('reseller.destroy');
+        
         Route::get('transactions', fn () => redirect()->route('vendor.dashboard'))
             ->name('transactions.index');
 
@@ -43,6 +69,18 @@ Route::middleware(['vendor.approved'])
             ->name('withdrawals.index');
         Route::post('withdrawals', [VendorDashboardController::class, 'requestWithdrawal'])
             ->name('withdrawals.store');
+        Route::post('withdrawals/lookup-account', [VendorDashboardController::class, 'lookupMomoAccount'])
+            ->name('withdrawals.lookup');
+
+        // Notification Routes
+        Route::get('notifications', [VendorDashboardController::class, 'notifications'])
+            ->name('notifications.index');
+        Route::post('notifications/{notification}/read', [VendorDashboardController::class, 'markNotificationRead'])
+            ->name('notifications.read');
+        Route::post('notifications/read-all', [VendorDashboardController::class, 'markAllNotificationsRead'])
+            ->name('notifications.read-all');
+        Route::get('notifications/unread-count', [VendorDashboardController::class, 'unreadNotificationsCount'])
+            ->name('notifications.unread-count');
     });
 Route::get('/checkout', [CheckoutController::class, 'show'])->name('checkout.show');
 Route::post('/checkout', [CheckoutController::class, 'process'])->name('checkout.process');
@@ -71,6 +109,11 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
     Route::post('withdrawals/{withdrawal}/processing', [AdminWithdrawalController::class, 'markProcessing'])->name('withdrawals.processing');
     Route::post('withdrawals/{withdrawal}/approve', [AdminWithdrawalController::class, 'approve'])->name('withdrawals.approve');
     Route::post('withdrawals/{withdrawal}/reject', [AdminWithdrawalController::class, 'reject'])->name('withdrawals.reject');
+    
+    // Admin Notifications
+    Route::get('notifications', [AdminController::class, 'notifications'])->name('notifications.index');
+    Route::post('notifications/{notification}/read', [AdminController::class, 'markNotificationRead'])->name('notifications.read');
+    Route::post('notifications/read-all', [AdminController::class, 'markAllNotificationsRead'])->name('notifications.read-all');
 });
 Route::get('/vendor/product/create', [ProductController::class, 'create'])->name('product.create');
 Route::post('/vendor/product', [ProductController::class, 'store'])->name('product.store');
