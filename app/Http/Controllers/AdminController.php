@@ -6,6 +6,7 @@ use App\Models\Vendor;
 use App\Models\Order;
 use App\Models\Transaction;
 use App\Models\VendorWithdrawal;
+use App\Models\AdminNotification;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Http\Request;
 
@@ -15,7 +16,8 @@ class AdminController extends Controller
     {
         $activeVendors = Vendor::where('is_approved', true)->count();
         $pendingVendors = Vendor::where('is_approved', false)->latest()->take(5)->get();
-        $totalRevenue = Transaction::sum('amount');
+        // Platform revenue = total commissions from completed transactions
+        $totalRevenue = Transaction::where('payment_status', 'completed')->sum('commission_amount');
         $transactionsToday = Transaction::whereDate('created_at', now()->toDateString())->count();
         $ordersToday = Order::whereDate('created_at', now()->toDateString())->count();
 
@@ -77,7 +79,7 @@ class AdminController extends Controller
     // View commissions
     public function commissions()
     {
-        $commissions = Transaction::sum('commission_deducted');
+        $commissions = Transaction::where('payment_status', 'completed')->sum('commission_amount');
         return view('admin.commissions', compact('commissions'));
     }
 
@@ -86,5 +88,30 @@ class AdminController extends Controller
     {
         $orders = Order::with('vendor')->get();
         return view('admin.orders', compact('orders'));
+    }
+
+    // ==================== NOTIFICATIONS ====================
+
+    public function notifications()
+    {
+        $notifications = AdminNotification::latest()->take(30)->get();
+        $unreadCount = AdminNotification::unread()->count();
+
+        return response()->json([
+            'notifications' => $notifications,
+            'unreadCount' => $unreadCount
+        ]);
+    }
+
+    public function markNotificationRead(AdminNotification $notification)
+    {
+        $notification->markAsRead();
+        return response()->json(['success' => true]);
+    }
+
+    public function markAllNotificationsRead()
+    {
+        AdminNotification::whereNull('read_at')->update(['read_at' => now()]);
+        return response()->json(['success' => true]);
     }
 }
