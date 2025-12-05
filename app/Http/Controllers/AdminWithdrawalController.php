@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\VendorWithdrawal;
+use App\Services\MomoPayoutService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -47,15 +48,34 @@ class AdminWithdrawalController extends Controller
         );
     }
 
-    public function approve(Request $request, VendorWithdrawal $withdrawal): RedirectResponse
+    public function approve(Request $request, VendorWithdrawal $withdrawal, MomoPayoutService $payoutService): RedirectResponse
     {
-        return $this->updateStatus(
-            $request,
-            $withdrawal,
-            VendorWithdrawal::STATUS_APPROVED,
-            [VendorWithdrawal::STATUS_PENDING, VendorWithdrawal::STATUS_PROCESSING],
-            'Withdrawal approved and queued for payout.'
-        );
+        $withdrawal->refresh();
+
+        if (! in_array($withdrawal->status, [VendorWithdrawal::STATUS_PENDING, VendorWithdrawal::STATUS_PROCESSING], true)) {
+            return back()->withErrors([
+                'withdrawal' => 'This withdrawal can no longer be updated. Please refresh the page.',
+            ]);
+        }
+
+        // Process the mobile money payout
+        $result = $payoutService->processPayout($withdrawal);
+
+        if (!$result['success']) {
+            return back()->withErrors([
+                'withdrawal' => $result['message'],
+            ]);
+        }
+
+        // Update withdrawal with payout details
+        $withdrawal->update([
+            'status' => VendorWithdrawal::STATUS_APPROVED,
+            'payout_reference' => $result['reference'],
+            'payout_status' => $result['status'] ?? 'pending',
+            'paid_at' => now(),
+        ]);
+
+        return back()->with('status', 'Withdrawal approved! Payout of GHS ' . number_format($withdrawal->amount, 2) . ' sent to ' . $withdrawal->momo_number . '.');
     }
 
     public function reject(Request $request, VendorWithdrawal $withdrawal): RedirectResponse
