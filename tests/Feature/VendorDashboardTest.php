@@ -43,6 +43,8 @@ class VendorDashboardTest extends TestCase
             'status' => VendorWithdrawal::STATUS_PENDING,
             'reference' => 'WITHDRAW123',
             'notes' => 'First request',
+            'momo_number' => '0244123456',
+            'momo_network' => VendorWithdrawal::NETWORK_MTN,
         ]);
 
         $this->actingAs($vendor, 'vendor');
