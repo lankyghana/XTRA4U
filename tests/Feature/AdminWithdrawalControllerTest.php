@@ -5,7 +5,7 @@ namespace Tests\Feature;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Models\VendorWithdrawal;
-use App\Services\MomoPayoutService;
+use App\Services\MoolrePayoutService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Mockery;
@@ -48,17 +48,18 @@ class AdminWithdrawalControllerTest extends TestCase
 
     public function test_admin_can_mark_withdrawal_processing_and_approve(): void
     {
-        // Mock the payout service to simulate a successful payout
-        $mockPayoutService = Mockery::mock(MomoPayoutService::class);
+        // Mock the Moolre payout service to simulate a successful payout
+        $mockPayoutService = Mockery::mock(MoolrePayoutService::class);
         $mockPayoutService->shouldReceive('processPayout')
             ->once()
             ->andReturn([
                 'success' => true,
                 'message' => 'Payout initiated successfully',
-                'reference' => 'PAYOUT_TEST_123',
+                'reference' => 'XTRA4U-PAYOUT-TEST123',
+                'transaction_id' => 'TXN_123456',
                 'status' => 'pending',
             ]);
-        $this->app->instance(MomoPayoutService::class, $mockPayoutService);
+        $this->app->instance(MoolrePayoutService::class, $mockPayoutService);
 
         $this->actingAdmin();
         $vendor = Vendor::factory()->create();

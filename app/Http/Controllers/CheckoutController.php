@@ -3,19 +3,21 @@ namespace App\Http\Controllers;
 
 use App\Events\OrderCompleted;
 use App\Models\Order;
+use App\Models\Product;
 use App\Models\Vendor;
 use App\Models\ResellerProduct;
 use App\Models\NetworkService;
 use App\Services\PaymentService;
+use App\Services\PaystackPaymentService;
 use Illuminate\Http\Request;
 
 class CheckoutController extends Controller
 {
 	protected $paymentService;
 
-	public function __construct(PaymentService $paymentService)
+	public function __construct()
 	{
-		$this->paymentService = $paymentService;
+		$this->paymentService = new PaymentService(new PaystackPaymentService());
 	}
 
 	public function show()
@@ -26,86 +28,100 @@ class CheckoutController extends Controller
 			->get()
 			->keyBy(fn ($service) => strtolower($service->name));
 
-		// Get IDs of vendors that have reseller products
-		$vendorsWithResellerProducts = ResellerProduct::where('is_active', true)
-			->whereHas('product', fn ($q) => $q->where('is_active', true)->where('is_resellable', true))
-			->pluck('reseller_vendor_id')
-			->unique();
+		// Collect all products from all vendors (both owned and reseller)
+		$allProducts = collect();
 
-		$vendors = Vendor::query()
-			->select(['id', 'name', 'email', 'phone_number'])
-			->where('is_approved', true)
-			->with(['products' => function ($query) {
-				$query->where('is_active', true)
-					->select(['id', 'vendor_id', 'name', 'description', 'price']);
-			}])
-			->where(function ($query) use ($vendorsWithResellerProducts) {
-				// Include vendors with owned products OR reseller products
-				$query->whereHas('products', fn ($q) => $q->where('is_active', true))
-					->orWhereIn('id', $vendorsWithResellerProducts);
-			})
+		// Get all owned products from approved vendors
+		$ownedProducts = Product::where('is_active', true)
+			->whereHas('vendor', fn($q) => $q->where('is_approved', true))
+			->with('vendor:id,name,email,phone_number')
 			->get()
-			->map(function (Vendor $vendor) use ($networkServices) {
-				// Process owned products
-				$ownedProducts = $vendor->products->map(function ($product) use ($networkServices) {
-					$metadata = $this->decodeDescription($product->description);
-					$product->structured_metadata = $metadata;
-					$product->metadata = $metadata;
-					$product->display_description = $metadata['notes']
-						?? $metadata['description']
-						?? $product->description;
-					$product->is_reseller_product = false;
-					
-					// Add network image URL
-					$networkName = $metadata['network'] ?? null;
-					$networkService = $networkName ? $networkServices->get(strtolower($networkName)) : null;
-					$product->network_image_url = $networkService ? $networkService->image_url : null;
-					
-					return $product;
-				});
+			->map(function ($product) use ($networkServices) {
+				$metadata = $this->decodeDescription($product->description);
+				
+				return (object) [
+					'id' => $product->id,
+					'product_id' => $product->id,
+					'name' => $product->name,
+					'price' => $product->price,
+					'vendor_id' => $product->vendor_id,
+					'vendor_name' => $product->vendor->name,
+					'vendor_email' => $product->vendor->email,
+					'vendor_phone' => $product->vendor->phone_number,
+					'is_reseller_product' => false,
+					'reseller_product_id' => null,
+					'original_product_id' => $product->id,
+					'metadata' => $metadata,
+					'display_description' => $metadata['notes'] ?? $metadata['description'] ?? $product->description,
+					'network' => $metadata['network'] ?? null,
+					'size' => $metadata['size'] ?? null,
+					'validity' => $metadata['validity'] ?? null,
+					'tag' => $metadata['tag'] ?? null,
+					'network_image_url' => isset($metadata['network']) 
+						? ($networkServices->get(strtolower($metadata['network']))?->image_url) 
+						: null,
+				];
+			});
 
-				// Get reseller products for this vendor
-				$resellerProducts = ResellerProduct::where('reseller_vendor_id', $vendor->id)
-					->where('is_active', true)
-					->with(['product' => function ($query) {
-						$query->where('is_active', true)->where('is_resellable', true);
-					}])
-					->get()
-					->filter(fn($rp) => $rp->product !== null)
-					->map(function ($resellerProduct) use ($networkServices) {
-						$product = $resellerProduct->product;
-						$metadata = $this->decodeDescription($product->description);
-						
-						$displayProduct = clone $product;
-						$displayProduct->id = $resellerProduct->id; // Use reseller product ID
-						$displayProduct->reseller_product_id = $resellerProduct->id;
-						$displayProduct->original_product_id = $product->id;
-						$displayProduct->name = $product->name;
-						$displayProduct->price = $resellerProduct->selling_price;
-						$displayProduct->is_reseller_product = true;
-						$displayProduct->structured_metadata = $metadata;
-						$displayProduct->metadata = $metadata;
-						$displayProduct->display_description = $metadata['notes']
-							?? $metadata['description']
-							?? $product->description;
-						
-						// Add network image URL
-						$networkName = $metadata['network'] ?? null;
-						$networkService = $networkName ? $networkServices->get(strtolower($networkName)) : null;
-						$displayProduct->network_image_url = $networkService ? $networkService->image_url : null;
-						
-						return $displayProduct;
-					});
+		$allProducts = $allProducts->concat($ownedProducts);
 
-				// Combine both product types and set the relation properly for JSON serialization
-				$vendor->setRelation('products', $ownedProducts->concat($resellerProducts));
+		// Get all reseller products
+		$resellerProducts = ResellerProduct::where('is_active', true)
+			->whereHas('product', fn($q) => $q->where('is_active', true)->where('is_resellable', true))
+			->whereHas('resellerVendor', fn($q) => $q->where('is_approved', true))
+			->with(['product', 'resellerVendor:id,name,email,phone_number'])
+			->get()
+			->map(function ($resellerProduct) use ($networkServices) {
+				$product = $resellerProduct->product;
+				$metadata = $this->decodeDescription($product->description);
+				
+				return (object) [
+					'id' => 'reseller_' . $resellerProduct->id,
+					'product_id' => $product->id,
+					'name' => $product->name,
+					'price' => $resellerProduct->selling_price,
+					'vendor_id' => $resellerProduct->reseller_vendor_id,
+					'vendor_name' => $resellerProduct->resellerVendor->name,
+					'vendor_email' => $resellerProduct->resellerVendor->email,
+					'vendor_phone' => $resellerProduct->resellerVendor->phone_number,
+					'is_reseller_product' => true,
+					'reseller_product_id' => $resellerProduct->id,
+					'original_product_id' => $product->id,
+					'metadata' => $metadata,
+					'display_description' => $metadata['notes'] ?? $metadata['description'] ?? $product->description,
+					'network' => $metadata['network'] ?? null,
+					'size' => $metadata['size'] ?? null,
+					'validity' => $metadata['validity'] ?? null,
+					'tag' => $metadata['tag'] ?? null,
+					'network_image_url' => isset($metadata['network']) 
+						? ($networkServices->get(strtolower($metadata['network']))?->image_url) 
+						: null,
+				];
+			});
 
-				return $vendor;
-			})
-			// Filter out vendors with no products at all
-			->filter(fn ($vendor) => $vendor->products->isNotEmpty());
+		$allProducts = $allProducts->concat($resellerProducts);
 
-		return view('checkout', compact('vendors'));
+		// Shuffle to randomize and reduce monopoly
+		$allProducts = $allProducts->shuffle();
+
+		// Convert to simple arrays for JSON serialization
+		$products = $allProducts->map(fn($p) => [
+			'id' => $p->id,
+			'product_id' => $p->product_id ?? $p->id,
+			'name' => $p->name,
+			'price' => $p->price,
+			'vendor_id' => $p->vendor_id,
+			'vendor_name' => $p->vendor_name,
+			'is_reseller_product' => $p->is_reseller_product ?? false,
+			'reseller_product_id' => $p->reseller_product_id ?? null,
+			'original_product_id' => $p->original_product_id ?? $p->id,
+			'description' => $p->display_description ?? '',
+			'network' => $p->network ?? null,
+			'size' => $p->size ?? null,
+			'validity' => $p->validity ?? null,
+		])->values();
+
+		return view('checkout', compact('products'));
 	}
 
     public function success($orderId)
@@ -114,14 +130,32 @@ class CheckoutController extends Controller
         return view('checkout.success', compact('order'));
     }	public function process(Request $request)
 	{
-		$order = Order::findOrFail($request->order_id);
+		// If order_id is provided, find the order; otherwise, create a new order
+		if ($request->filled('order_id')) {
+			$order = Order::findOrFail($request->order_id);
+		} else {
+			$order = Order::create([
+				'recipient_phone_number' => $request->recipient_phone,
+				'mobile_money_number' => $request->payer_phone,
+				'service_purchased' => $request->service_id ?? $request->service_purchased,
+				'amount_paid' => $request->amount,
+				'vendor_id' => $request->vendor_id,
+				'vendor_service_id' => $request->original_product_id ?? $request->vendor_service_id,
+				'reseller_product_id' => $request->reseller_product_id ?? null,
+				'owner_vendor_id' => $request->owner_vendor_id ?? null,
+				'reseller_vendor_id' => $request->reseller_vendor_id ?? null,
+				'is_reseller_order' => $request->is_reseller_product ?? false,
+				'status' => 'pending',
+				'payment_status' => 'pending',
+			]);
+		}
 		$recipientPhone = $request->recipient_phone;
 		$amount = $request->amount;
 		$transaction = $this->paymentService->processPayment($order, $recipientPhone, $amount);
 		// Dispatch event for order completion
 		event(new OrderCompleted($order));
 		// ...additional logic (redirect, response, etc.)
-		return response()->json(['transaction' => $transaction]);
+		return response()->json(['transaction' => $transaction, 'order_id' => $order->id]);
 	}
 
 	private function decodeDescription(?string $value): array

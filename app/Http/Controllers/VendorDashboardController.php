@@ -382,23 +382,7 @@ class VendorDashboardController extends Controller
 		return back()->with('status', 'Withdrawal request submitted. Our team will review it shortly.');
 	}
 
-	/**
-	 * Lookup mobile money account name
-	 */
-	public function lookupMomoAccount(Request $request, MomoPayoutService $payoutService)
-	{
-		$request->validate([
-			'momo_number' => ['required', 'string', 'regex:/^0[235][0-9]{8}$/'],
-			'momo_network' => ['required', 'string', 'in:MTN,TELECEL,AirtelTigo'],
-		]);
 
-		$result = $payoutService->lookupAccountName(
-			$request->momo_number,
-			$request->momo_network
-		);
-
-		return response()->json($result);
-	}
 
 	public function withdrawals()
 	{

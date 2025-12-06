@@ -27,6 +27,7 @@ class VendorWithdrawal extends Model
         'status',
         'reference',
         'payout_reference',
+        'payout_transaction_id',
         'payout_status',
         'paid_at',
         'notes',

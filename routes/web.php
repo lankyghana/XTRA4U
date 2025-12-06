@@ -17,6 +17,7 @@ use App\Http\Controllers\AdminOrderController;
 use App\Http\Controllers\AdminTransactionController;
 use App\Http\Controllers\AdminWithdrawalController;
 use App\Http\Controllers\AdminNetworkServiceController;
+use App\Http\Controllers\MoolreWebhookController;
 
 Route::get('/', [StorefrontController::class, 'index'])->name('storefront.index');
 Route::get('/store/{vendor:vendor_code}', [StorefrontController::class, 'showVendorStore'])->name('storefront.vendor');
@@ -69,8 +70,7 @@ Route::middleware(['vendor.approved'])
             ->name('withdrawals.index');
         Route::post('withdrawals', [VendorDashboardController::class, 'requestWithdrawal'])
             ->name('withdrawals.store');
-        Route::post('withdrawals/lookup-account', [VendorDashboardController::class, 'lookupMomoAccount'])
-            ->name('withdrawals.lookup');
+
 
         // Notification Routes
         Route::get('notifications', [VendorDashboardController::class, 'notifications'])
@@ -91,6 +91,8 @@ Route::middleware('prune.purchase.tokens')->group(function () {
 });
 Route::post('/payment/callback', [PaymentCallbackController::class, 'handle'])->name('payment.callback');
 
+// Moolre Payment Gateway Webhooks (exempt from CSRF)
+
 Route::get('/admin/login', [AdminAuthController::class, 'showLoginForm'])->name('admin.login');
 Route::post('/admin/login', [AdminAuthController::class, 'login'])->name('admin.login.submit');
 Route::post('/admin/logout', [AdminAuthController::class, 'logout'])->name('admin.logout');
@@ -109,6 +111,9 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
     Route::post('withdrawals/{withdrawal}/processing', [AdminWithdrawalController::class, 'markProcessing'])->name('withdrawals.processing');
     Route::post('withdrawals/{withdrawal}/approve', [AdminWithdrawalController::class, 'approve'])->name('withdrawals.approve');
     Route::post('withdrawals/{withdrawal}/reject', [AdminWithdrawalController::class, 'reject'])->name('withdrawals.reject');
+    // Paystack API config page
+    Route::get('paystack-config', [\App\Http\Controllers\Admin\PaystackConfigController::class, 'showForm'])->name('paystack-config.form');
+    Route::post('paystack-config', [\App\Http\Controllers\Admin\PaystackConfigController::class, 'update'])->name('paystack-config.update');
     
     // Admin Notifications
     Route::get('notifications', [AdminController::class, 'notifications'])->name('notifications.index');

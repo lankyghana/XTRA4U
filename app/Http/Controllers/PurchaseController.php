@@ -10,6 +10,8 @@ use App\Models\Transaction;
 use App\Models\Vendor;
 use App\Models\VendorNotification;
 use App\Models\AdminNotification;
+use App\Services\PaymentService;
+use App\Services\PaystackPaymentService;
 use App\Services\SmsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -21,11 +23,19 @@ use Illuminate\Validation\ValidationException;
 
 class PurchaseController extends Controller
 {
+    protected PaymentService $paymentService;
+
+    public function __construct()
+    {
+        $this->paymentService = new PaymentService(new PaystackPaymentService());
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([
             'recipient_phone_number' => 'required|string',
             'mobile_money_number' => 'required|string',
+            'customer_email' => 'required|email',
             'vendor_id' => 'required|exists:vendors,id',
             'vendor_service_id' => 'required|exists:products,id',
             'is_reseller_product' => 'nullable|boolean',
@@ -68,34 +78,66 @@ class PurchaseController extends Controller
             $resellerProduct = null;
         }
 
-        $paymentSuccess = true; // Replace with actual gateway decision
-
-        if (! $paymentSuccess) {
-            return back()->withErrors(['payment' => 'Payment failed. Please try again.']);
-        }
-
-        $payload = [
+        // Create order with pending status first
+        $order = Order::create([
             'recipient_phone_number' => $validated['recipient_phone_number'],
             'mobile_money_number' => $validated['mobile_money_number'],
-            'vendor_id' => $validated['vendor_id'],
-            'vendor_service_id' => $product->id,
             'service_purchased' => $product->name,
             'amount_paid' => (float) $price,
-            'payment_status' => 'completed',
-            'is_reseller_product' => $isResellerOrder,
-            'reseller_product_id' => $resellerProduct?->id,
-        ];
-
-        $token = (string) Str::uuid();
-
-        session()->put("purchase.tokens.$token", [
-            'payload' => $payload,
-            'expires_at' => Carbon::now()->addMinutes(10),
+            'vendor_id' => $validated['vendor_id'],
+            'vendor_service_id' => $product->id,
+            'status' => 'Pending',
+            'payment_status' => 'pending',
+            'reseller_product_id' => $resellerProduct?->id ?? null,
+            'owner_vendor_id' => $resellerProduct?->owner_vendor_id ?? null,
+            'reseller_vendor_id' => $isResellerOrder ? $validated['vendor_id'] : null,
+            'is_reseller_order' => $isResellerOrder,
         ]);
 
-        return redirect()->route('purchase.callback', ['token' => $token]);
+        // Initiate Moolre payment
+        $paymentResult = $this->paymentService->initiatePayment(
+            $order,
+            $validated['customer_email'],
+            (float) $price
+        );
+
+        if ($paymentResult['success']) {
+            // Return JSON response for AJAX or redirect for form submit
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => $paymentResult['message'],
+                    'reference' => $paymentResult['reference'],
+                    'order_id' => $order->id,
+                    'redirect' => route('checkout.show') . '?payment_pending=1&reference=' . $paymentResult['reference'],
+                ]);
+            }
+
+            return redirect()->route('checkout.show')
+                ->with('payment_pending', true)
+                ->with('payment_reference', $paymentResult['reference'])
+                ->with('payment_message', $paymentResult['message']);
+        }
+
+        // Payment initiation failed - mark order as failed
+        $order->update([
+            'status' => 'Failed',
+            'payment_status' => 'failed',
+        ]);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => false,
+                'message' => $paymentResult['message'] ?? 'Payment failed. Please try again.',
+            ], 400);
+        }
+
+        return back()->withErrors(['payment' => $paymentResult['message'] ?? 'Payment failed. Please try again.']);
     }
 
+    /**
+     * Legacy callback for session-based flow (kept for backwards compatibility)
+     */
     public function paymentCallback(Request $request, string $token)
     {
         $stored = session()->pull("purchase.tokens.$token");

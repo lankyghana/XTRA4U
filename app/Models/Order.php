@@ -16,6 +16,10 @@ class Order extends Model
         'vendor_id',
         'vendor_service_id',
         'status',
+        'payment_status',
+        'payment_reference',
+        'payment_gateway',
+        'payment_completed_at',
         'reseller_product_id',
         'owner_vendor_id',
         'reseller_vendor_id',
@@ -35,6 +39,7 @@ class Order extends Model
         'owner_earning' => 'decimal:2',
         'reseller_earning' => 'decimal:2',
         'platform_commission' => 'decimal:2',
+        'payment_completed_at' => 'datetime',
     ];
 
     public function vendor(): BelongsTo

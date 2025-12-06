@@ -135,6 +135,61 @@
                     </div>
 
                     <div>
+                        <label for="momo_number" class="block text-sm font-medium text-gray-700 mb-2">Mobile Money Number <span class="text-red-500">*</span></label>
+                        <input
+                            type="tel"
+                            name="momo_number"
+                            id="momo_number"
+                            value="{{ old('momo_number') }}"
+                            class="mt-1 block w-full rounded-lg border border-gray-300 shadow-sm focus:border-brand-bright-blue focus:ring-brand-bright-blue px-4 py-3"
+                            placeholder="0241234567"
+                            pattern="0[235][0-9]{8}"
+                            maxlength="10"
+                            required
+                            {{ $withdrawableBalance <= 0 ? 'disabled' : '' }}
+                        >
+                        @error('momo_number')
+                            <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Network <span class="text-red-500">*</span></label>
+                        <div class="grid grid-cols-3 gap-2">
+                            <label class="relative cursor-pointer">
+                                <input type="radio" name="momo_network" value="MTN" class="peer sr-only" {{ old('momo_network') === 'MTN' ? 'checked' : '' }} {{ $withdrawableBalance <= 0 ? 'disabled' : '' }} required>
+                                <div class="flex flex-col items-center justify-center p-3 rounded-lg border-2 border-gray-200 bg-white peer-checked:border-yellow-500 peer-checked:bg-yellow-50 hover:bg-gray-50 transition-all">
+                                    <div class="w-8 h-8 rounded-full bg-yellow-400 flex items-center justify-center mb-1">
+                                        <span class="text-xs font-bold text-yellow-900">MTN</span>
+                                    </div>
+                                    <span class="text-xs font-medium text-gray-700">MTN</span>
+                                </div>
+                            </label>
+                            <label class="relative cursor-pointer">
+                                <input type="radio" name="momo_network" value="TELECEL" class="peer sr-only" {{ old('momo_network') === 'TELECEL' ? 'checked' : '' }} {{ $withdrawableBalance <= 0 ? 'disabled' : '' }}>
+                                <div class="flex flex-col items-center justify-center p-3 rounded-lg border-2 border-gray-200 bg-white peer-checked:border-red-500 peer-checked:bg-red-50 hover:bg-gray-50 transition-all">
+                                    <div class="w-8 h-8 rounded-full bg-red-500 flex items-center justify-center mb-1">
+                                        <span class="text-xs font-bold text-white">TE</span>
+                                    </div>
+                                    <span class="text-xs font-medium text-gray-700">Telecel</span>
+                                </div>
+                            </label>
+                            <label class="relative cursor-pointer">
+                                <input type="radio" name="momo_network" value="AirtelTigo" class="peer sr-only" {{ old('momo_network') === 'AirtelTigo' ? 'checked' : '' }} {{ $withdrawableBalance <= 0 ? 'disabled' : '' }}>
+                                <div class="flex flex-col items-center justify-center p-3 rounded-lg border-2 border-gray-200 bg-white peer-checked:border-blue-500 peer-checked:bg-blue-50 hover:bg-gray-50 transition-all">
+                                    <div class="w-8 h-8 rounded-full bg-gradient-to-r from-red-500 to-blue-500 flex items-center justify-center mb-1">
+                                        <span class="text-xs font-bold text-white">AT</span>
+                                    </div>
+                                    <span class="text-xs font-medium text-gray-700">AirtelTigo</span>
+                                </div>
+                            </label>
+                        </div>
+                        @error('momo_network')
+                            <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div>
                         <label for="notes" class="block text-sm font-medium text-gray-700 mb-2">Notes (optional)</label>
                         <textarea
                             id="notes"

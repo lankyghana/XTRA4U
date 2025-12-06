@@ -81,8 +81,8 @@
         [
             'key' => 'settings',
             'label' => 'Settings',
-            'href' => '#',
-            'matches' => [],
+              'href' => route('admin.paystack-config.form'),
+              'matches' => ['admin.paystack-config.form', 'admin.paystack-config.update'],
         ],
     ];
 

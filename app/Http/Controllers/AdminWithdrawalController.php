@@ -3,9 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\VendorWithdrawal;
-use App\Services\MomoPayoutService;
+use App\Models\VendorNotification;
+use App\Services\MoolrePayoutService;
+use App\Services\SmsService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 
 class AdminWithdrawalController extends Controller
@@ -48,7 +51,7 @@ class AdminWithdrawalController extends Controller
         );
     }
 
-    public function approve(Request $request, VendorWithdrawal $withdrawal, MomoPayoutService $payoutService): RedirectResponse
+    public function approve(Request $request, VendorWithdrawal $withdrawal, MoolrePayoutService $payoutService): RedirectResponse
     {
         $withdrawal->refresh();
 
@@ -58,7 +61,7 @@ class AdminWithdrawalController extends Controller
             ]);
         }
 
-        // Process the mobile money payout
+        // Process the mobile money payout via Moolre
         $result = $payoutService->processPayout($withdrawal);
 
         if (!$result['success']) {
@@ -71,11 +74,55 @@ class AdminWithdrawalController extends Controller
         $withdrawal->update([
             'status' => VendorWithdrawal::STATUS_APPROVED,
             'payout_reference' => $result['reference'],
+            'payout_transaction_id' => $result['transaction_id'] ?? null,
             'payout_status' => $result['status'] ?? 'pending',
             'paid_at' => now(),
         ]);
 
+        // Notify vendor about successful payout
+        $this->notifyVendorPayoutApproved($withdrawal);
+
+        Log::info('Withdrawal approved via Moolre', [
+            'withdrawal_id' => $withdrawal->id,
+            'vendor_id' => $withdrawal->vendor_id,
+            'amount' => $withdrawal->amount,
+            'reference' => $result['reference'],
+        ]);
+
         return back()->with('status', 'Withdrawal approved! Payout of GHS ' . number_format($withdrawal->amount, 2) . ' sent to ' . $withdrawal->momo_number . '.');
+    }
+
+    /**
+     * Notify vendor about approved payout
+     */
+    protected function notifyVendorPayoutApproved(VendorWithdrawal $withdrawal): void
+    {
+        // In-app notification
+        VendorNotification::create([
+            'vendor_id' => $withdrawal->vendor_id,
+            'type' => VendorNotification::TYPE_WITHDRAWAL_APPROVED ?? 'withdrawal_approved',
+            'title' => 'Withdrawal Approved',
+            'message' => 'Your withdrawal of GHS ' . number_format($withdrawal->amount, 2) . ' has been approved and sent to ' . $withdrawal->momo_number . '.',
+            'data' => [
+                'withdrawal_id' => $withdrawal->id,
+                'amount' => $withdrawal->amount,
+                'momo_number' => $withdrawal->momo_number,
+                'reference' => $withdrawal->payout_reference,
+            ],
+        ]);
+
+        // SMS notification
+        try {
+            $smsService = app(SmsService::class);
+            $vendor = $withdrawal->vendor;
+            
+            if ($vendor && $vendor->phone_number) {
+                $message = "XTRA4U: Your withdrawal of GHS " . number_format($withdrawal->amount, 2) . " has been approved and sent to {$withdrawal->momo_number}. Ref: {$withdrawal->reference}";
+                $smsService->send($vendor->phone_number, $message);
+            }
+        } catch (\Exception $e) {
+            Log::warning('Failed to send payout SMS notification', ['error' => $e->getMessage()]);
+        }
     }
 
     public function reject(Request $request, VendorWithdrawal $withdrawal): RedirectResponse

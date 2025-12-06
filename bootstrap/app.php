@@ -20,6 +20,12 @@ return Application::configure(basePath: dirname(__DIR__))
             ContentSecurityPolicy::class,
         ]);
         
+        // Exclude webhook routes from CSRF verification
+        $middleware->validateCsrfTokens(except: [
+            'webhooks/*',
+            'payment/callback',
+        ]);
+        
         $middleware->alias([
             'vendor.approved' => EnsureVendorApproved::class,
             'admin.only' => AdminOnly::class,
