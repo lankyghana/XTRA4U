@@ -12,7 +12,24 @@
         vendorId: {{ $vendor->id ?? 'null' }},
         categories: @json($categories ?? []),
         services: @json($services ?? []),
-        orderRoute: "{{ route('checkout.process') }}"
+        orderRoute: "{{ route('checkout.process') }}",
+        customerEmail: '',
+        recipientPhone: '',
+        payerPhone: '',
+        submitting: false,
+        orderMessage: '',
+        selectedCategory: null,
+        selectedService: null,
+        selectedPackage: null,
+        step: 1,
+        loadingServices: false,
+        filteredServices: [],
+        loadingPackages: false,
+        availablePackages: [],
+        formatCurrency: value => {
+            if (typeof value !== 'number') return '';
+            return '₵' + value.toFixed(2);
+        }
     })'
 >
 
@@ -165,6 +182,11 @@
                 <input type="hidden" name="original_product_id" :value="selectedPackage?.original_product_id">
 
                 {{-- minimal checkout fields (recipient phone & payer mobile money) --}}
+                    <div class="mb-3">
+                        <label class="block text-sm text-gray-600 mb-1">Customer Email <span class="text-red-500">*</span></label>
+                        <input type="email" name="customer_email" x-model="customerEmail" required
+                            class="w-full border border-gray-200 rounded-lg p-3 focus:ring-2 focus:ring-purple-300">
+                    </div>
                 <div class="mb-3">
                     <label class="block text-sm text-gray-600 mb-1">Recipient phone</label>
                     <input type="tel" name="recipient_phone" x-model="recipientPhone" required
@@ -205,6 +227,7 @@ function vendorStore(opts = {}) {
         orderMessage: '',
         recipientPhone: '',
         payerPhone: '',
+        customerEmail: opts.customerEmail || '',
         loadingServices: false,
         loadingPackages: false,
         orderRoute: opts.orderRoute || '',
@@ -279,6 +302,7 @@ function vendorStore(opts = {}) {
                 amount: this.selectedPackage?.price,
                 recipient_phone: this.recipientPhone,
                 payer_phone: this.payerPhone,
+                customer_email: this.customerEmail,
                 is_reseller_product: this.selectedPackage?.is_reseller_product ? 1 : 0,
                 reseller_product_id: this.selectedPackage?.reseller_product_id || null,
                 original_product_id: this.selectedPackage?.original_product_id || this.selectedPackage?.id,
