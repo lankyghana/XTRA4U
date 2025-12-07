@@ -28,13 +28,21 @@ class PaystackPaymentService
             'email' => $email,
             'amount' => intval($amount * 100), // Paystack expects amount in kobo/pesewas
             'reference' => $reference,
-            'callback_url' => route('admin.paystack-config.form'), // Change to your payment callback route
+            'callback_url' => route('payment.callback'),
         ];
         try {
             $response = Http::withToken($this->secretKey)
                 ->post($this->paymentUrl . '/transaction/initialize', $payload);
             $data = $response->json();
+
             if ($response->successful() && ($data['status'] ?? false)) {
+                // Persist reference for later verification
+                $order->update([
+                    'payment_reference' => $reference,
+                    'payment_status' => 'pending',
+                    'payment_gateway' => 'paystack',
+                ]);
+
                 return [
                     'success' => true,
                     'message' => $data['message'] ?? 'Payment initialized.',
@@ -42,13 +50,28 @@ class PaystackPaymentService
                     'authorization_url' => $data['data']['authorization_url'] ?? null,
                 ];
             }
+
+            Log::warning('Paystack init failed', [
+                'order_id' => $order->id,
+                'payload' => $payload,
+                'body' => $response->body(),
+                'json' => $data,
+                'http_status' => $response->status(),
+            ]);
+
             return [
                 'success' => false,
                 'message' => $data['message'] ?? 'Failed to initialize payment.',
                 'reference' => $reference,
+                'http_status' => $response->status(),
+                'errors' => $data['data'] ?? null,
             ];
         } catch (\Exception $e) {
-            Log::error('Paystack Payment Exception', ['error' => $e->getMessage()]);
+            Log::error('Paystack Payment Exception', [
+                'order_id' => $order->id,
+                'payload' => $payload,
+                'error' => $e->getMessage(),
+            ]);
             return [
                 'success' => false,
                 'message' => 'Error initializing payment.',
