@@ -1,7 +1,6 @@
 <?php
 namespace App\Http\Controllers;
 
-use App\Events\OrderCompleted;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Vendor;
@@ -130,32 +129,56 @@ class CheckoutController extends Controller
         return view('checkout.success', compact('order'));
     }	public function process(Request $request)
 	{
-		// If order_id is provided, find the order; otherwise, create a new order
-		if ($request->filled('order_id')) {
-			$order = Order::findOrFail($request->order_id);
-		} else {
-			$order = Order::create([
-				'recipient_phone_number' => $request->recipient_phone,
-				'mobile_money_number' => $request->payer_phone,
-				'service_purchased' => $request->service_id ?? $request->service_purchased,
-				'amount_paid' => $request->amount,
-				'vendor_id' => $request->vendor_id,
-				'vendor_service_id' => $request->original_product_id ?? $request->vendor_service_id,
-				'reseller_product_id' => $request->reseller_product_id ?? null,
-				'owner_vendor_id' => $request->owner_vendor_id ?? null,
-				'reseller_vendor_id' => $request->reseller_vendor_id ?? null,
-				'is_reseller_order' => $request->is_reseller_product ?? false,
-				'status' => 'pending',
-				'payment_status' => 'pending',
-			]);
+		$validated = $request->validate([
+			'vendor_id' => 'required|exists:vendors,id',
+			'category_id' => 'nullable|string',
+			'service_id' => 'required|string',
+			'package_id' => 'required',
+			'amount' => 'required|numeric|min:0.1',
+			'customer_email' => 'required|email',
+			'recipient_phone' => 'required|string',
+			'payer_phone' => 'required|string',
+			'is_reseller_product' => 'sometimes|boolean',
+			'reseller_product_id' => 'nullable',
+			'original_product_id' => 'nullable',
+		]);
+
+		$order = Order::create([
+			'recipient_phone_number' => $validated['recipient_phone'],
+			'mobile_money_number' => $validated['payer_phone'],
+			'service_purchased' => $validated['service_id'],
+			'amount_paid' => $validated['amount'],
+			'vendor_id' => $validated['vendor_id'],
+			'vendor_service_id' => $validated['original_product_id'] ?? $validated['package_id'],
+			'reseller_product_id' => $validated['reseller_product_id'] ?? null,
+			'owner_vendor_id' => $request->owner_vendor_id ?? null,
+			'reseller_vendor_id' => $request->reseller_vendor_id ?? null,
+			'is_reseller_order' => $request->boolean('is_reseller_product', false),
+			'status' => 'pending',
+			'payment_status' => 'pending',
+			'payment_gateway' => 'paystack',
+		]);
+
+		$init = $this->paymentService->initiatePayment($order, $validated['customer_email'], (float) $validated['amount']);
+
+		if (! ($init['success'] ?? false)) {
+			return response()->json([
+				'success' => false,
+				'message' => $init['message'] ?? 'Failed to start payment.',
+				'order_id' => $order->id,
+				'reference' => $init['reference'] ?? null,
+				'errors' => $init['errors'] ?? null,
+			], 422);
 		}
-		$recipientPhone = $request->recipient_phone;
-		$amount = $request->amount;
-		$transaction = $this->paymentService->processPayment($order, $recipientPhone, $amount);
-		// Dispatch event for order completion
-		event(new OrderCompleted($order));
-		// ...additional logic (redirect, response, etc.)
-		return response()->json(['transaction' => $transaction, 'order_id' => $order->id]);
+
+		return response()->json([
+			'success' => true,
+			'message' => $init['message'] ?? 'Redirecting to payment.',
+			'order_id' => $order->id,
+			'reference' => $init['reference'] ?? null,
+			'redirect' => $init['authorization_url'] ?? null,
+			'callback_url' => route('payment.callback'),
+		]);
 	}
 
 	private function decodeDescription(?string $value): array
