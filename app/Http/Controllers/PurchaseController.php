@@ -25,9 +25,11 @@ class PurchaseController extends Controller
 {
     protected PaymentService $paymentService;
 
-    public function __construct()
+    public function __construct(?PaymentService $paymentService = null)
     {
-        $this->paymentService = new PaymentService(new PaystackPaymentService());
+        // Allow PaymentService to be injected (helpful for tests). If not provided,
+        // fall back to the default Paystack-backed implementation.
+        $this->paymentService = $paymentService ?? new PaymentService(new PaystackPaymentService());
     }
 
     public function store(Request $request)
