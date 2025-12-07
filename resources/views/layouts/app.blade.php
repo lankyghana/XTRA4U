@@ -15,6 +15,163 @@
     <!-- Vite Assets -->
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     
+    {{-- Global Alpine.js component definitions --}}
+    <script>
+        function vendorStore(opts = {}) {
+            return {
+                // State properties
+                vendorId: opts.vendorId || null,
+                categories: opts.categories || [],
+                services: opts.services || [],
+                selectedCategory: null,
+                selectedService: null,
+                selectedPackage: null,
+                step: 1,
+                submitting: false,
+                orderMessage: '',
+                recipientPhone: '',
+                payerPhone: '',
+                customerEmail: '',
+                loadingServices: false,
+                loadingPackages: false,
+                orderRoute: opts.orderRoute || '',
+
+                // Getters
+                get filteredServices() {
+                    if (!this.selectedCategory) return [];
+                    try {
+                        const cat = String(this.selectedCategory.value || '').toLowerCase().trim();
+                        return (this.services || []).filter((s) => {
+                            const sc = String(s.category || '').toLowerCase().trim();
+                            if (!sc && !cat) return true;
+                            if (sc === cat) return true;
+                            if (sc.includes(cat) || cat.includes(sc)) return true;
+                            return false;
+                        });
+                    } catch (e) {
+                        return [];
+                    }
+                },
+
+                get availablePackages() {
+                    return this.selectedService?.packages || [];
+                },
+
+                // Initialization
+                init() {
+                    this.selectedCategory = null;
+                    // Auto-select first available category after Alpine binds
+                    this.$nextTick(() => {
+                        const firstAvailable = this.categories.find((cat) => {
+                            const key = String(cat.value || '').toLowerCase().trim();
+                            return (this.services || []).some((service) => {
+                                const sc = String(service.category || '').toLowerCase().trim();
+                                return sc === key || sc.includes(key) || key.includes(sc);
+                            });
+                        });
+                        if (firstAvailable) {
+                            this.selectCategory(firstAvailable);
+                            // Optionally pre-select the first service under that category
+                            const matches = this.filteredServices;
+                            if (matches && matches.length) {
+                                this.selectedService = matches[0];
+                            }
+                        }
+                    });
+                },
+
+                // Methods
+                selectCategory(cat) {
+                    if (!cat) return;
+                    this.selectedCategory = cat;
+                    this.selectedService = null;
+                    this.selectedPackage = null;
+                    this.step = 2;
+                },
+
+                selectService(svc) {
+                    if (!svc) return;
+                    this.selectedService = svc;
+                    this.selectedPackage = null;
+                    this.step = 3;
+                },
+
+                selectPackage(pkg) {
+                    if (!pkg) return;
+                    this.selectedPackage = pkg;
+                    this.step = 4;
+                },
+
+                formatCurrency(v) {
+                    if (v === null || typeof v === 'undefined') return '';
+                    try {
+                        return new Intl.NumberFormat('en-GH', { style: 'currency', currency: 'GHS' }).format(v);
+                    } catch (error) {
+                        return 'GHS ' + Number(v).toFixed(2);
+                    }
+                },
+
+                async submitOrder() {
+                    if (!this.selectedPackage) {
+                        this.orderMessage = 'Please select a package first.';
+                        return;
+                    }
+
+                    this.submitting = true;
+                    this.orderMessage = '';
+
+                    const payload = {
+                        vendor_id: this.vendorId,
+                        category_id: this.selectedCategory?.value,
+                        service_id: this.selectedService?.key,
+                        package_id: this.selectedPackage?.id,
+                        amount: this.selectedPackage?.price,
+                        recipient_phone: this.recipientPhone,
+                        payer_phone: this.payerPhone,
+                        customer_email: this.customerEmail,
+                        is_reseller_product: this.selectedPackage?.is_reseller_product ? 1 : 0,
+                        reseller_product_id: this.selectedPackage?.reseller_product_id || null,
+                        original_product_id: this.selectedPackage?.original_product_id || this.selectedPackage?.id,
+                    };
+
+                    try {
+                        const res = await fetch(this.orderRoute, {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (!res.ok) {
+                            const text = await res.text();
+                            throw new Error(text || 'Order submission failed');
+                        }
+
+                        const resp = await res.json();
+                        if (resp.success) {
+                            if (resp.redirect) {
+                                window.location.href = resp.redirect;
+                                return;
+                            }
+                            this.orderMessage = resp.message || 'Order submitted successfully';
+                        } else {
+                            this.orderMessage = resp.message || 'Order failed';
+                        }
+                    } catch (err) {
+                        console.error(err);
+                        this.orderMessage = err.message || 'An error occurred while submitting the order';
+                    } finally {
+                        this.submitting = false;
+                    }
+                }
+            };
+        }
+    </script>
+    
     @stack('head-scripts')
     
     @stack('styles')
