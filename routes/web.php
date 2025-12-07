@@ -89,7 +89,7 @@ Route::middleware('prune.purchase.tokens')->group(function () {
     Route::post('/purchase', [\App\Http\Controllers\PurchaseController::class, 'store'])->name('purchase');
     Route::get('/purchase/callback/{token}', [\App\Http\Controllers\PurchaseController::class, 'paymentCallback'])->name('purchase.callback');
 });
-Route::post('/payment/callback', [PaymentCallbackController::class, 'handle'])->name('payment.callback');
+Route::match(['GET', 'POST'], '/payment/callback', [PaymentCallbackController::class, 'handle'])->name('payment.callback');
 
 // Moolre Payment Gateway Webhooks (exempt from CSRF)
 
