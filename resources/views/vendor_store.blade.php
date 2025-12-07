@@ -8,30 +8,17 @@
 @extends('layouts.app') {{-- adjust to your layout --}}
 
 @section('content')
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8" x-data='vendorStore({
+<script>
+    window.vendorStoreData = {
         vendorId: {{ $vendor->id ?? 'null' }},
-        categories: @json($categories ?? []),
-        services: @json($services ?? []),
-        orderRoute: "{{ route('checkout.process') }}",
-        customerEmail: '',
-        recipientPhone: '',
-        payerPhone: '',
-        submitting: false,
-        orderMessage: '',
-        selectedCategory: null,
-        selectedService: null,
-        selectedPackage: null,
-        step: 1,
-        loadingServices: false,
-        filteredServices: [],
-        loadingPackages: false,
-        availablePackages: [],
-        formatCurrency: value => {
-            if (typeof value !== 'number') return '';
-            return '₵' + value.toFixed(2);
-        }
-    })'
->
+        categories: {!! json_encode($categories ?? []) !!},
+        services: {!! json_encode($services ?? []) !!},
+        orderRoute: '{{ route('checkout.process') }}'
+    };
+</script>
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
+     x-data="typeof vendorStore === 'function' ? vendorStore(window.vendorStoreData) : {}"
+     x-init="typeof init === 'function' && init()">
 
     {{-- Vendor Storefront Header --}}
     <div class="text-center my-8">
@@ -213,138 +200,6 @@
     </div>
 </div>
 
-<script>
-function vendorStore(opts = {}) {
-    return {
-        vendorId: opts.vendorId || null,
-        categories: opts.categories || [],
-        services: opts.services || [],
-        selectedCategory: null,
-        selectedService: null,
-        selectedPackage: null,
-        step: 1, // 1 = category only; 2 = service; 3 = package; 4 = checkout
-        submitting: false,
-        orderMessage: '',
-        recipientPhone: '',
-        payerPhone: '',
-        customerEmail: opts.customerEmail || '',
-        loadingServices: false,
-        loadingPackages: false,
-        orderRoute: opts.orderRoute || '',
-
-        init() {
-            this.selectedCategory = null;
-            const firstAvailable = this.categories.find((cat) =>
-                this.services.some((service) => service.category === cat.value)
-            );
-
-            if (firstAvailable) {
-                this.selectCategory(firstAvailable);
-            }
-        },
-
-        get filteredServices() {
-            if (!this.selectedCategory) {
-                return [];
-            }
-
-            return this.services.filter((service) => service.category === this.selectedCategory.value);
-        },
-
-        get availablePackages() {
-            return this.selectedService?.packages || [];
-        },
-
-        selectCategory(cat) {
-            if (!cat) return;
-            this.selectedCategory = cat;
-            this.selectedService = null;
-            this.selectedPackage = null;
-            this.step = 2;
-        },
-
-        selectService(svc) {
-            if (!svc) return;
-            this.selectedService = svc;
-            this.selectedPackage = null;
-            this.step = 3;
-        },
-
-        selectPackage(pkg) {
-            if (!pkg) return;
-            this.selectedPackage = pkg;
-            this.step = 4;
-        },
-
-        formatCurrency(v) {
-            if (v === null || typeof v === 'undefined') return '';
-            try {
-                return new Intl.NumberFormat('en-GH', { style: 'currency', currency: 'GHS' }).format(v);
-            } catch (error) {
-                return 'GHS' + Number(v).toFixed(2);
-            }
-        },
-
-        async submitOrder() {
-            if (!this.selectedPackage) {
-                this.orderMessage = 'Please select a package first.';
-                return;
-            }
-
-            this.submitting = true;
-            this.orderMessage = '';
-
-            const payload = {
-                vendor_id: this.vendorId,
-                category_id: this.selectedCategory?.value,
-                service_id: this.selectedService?.key,
-                package_id: this.selectedPackage?.id,
-                amount: this.selectedPackage?.price,
-                recipient_phone: this.recipientPhone,
-                payer_phone: this.payerPhone,
-                customer_email: this.customerEmail,
-                is_reseller_product: this.selectedPackage?.is_reseller_product ? 1 : 0,
-                reseller_product_id: this.selectedPackage?.reseller_product_id || null,
-                original_product_id: this.selectedPackage?.original_product_id || this.selectedPackage?.id,
-            };
-
-            try {
-                const res = await fetch(this.orderRoute, {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-                        'Accept': 'application/json'
-                    },
-                    body: JSON.stringify(payload)
-                });
-
-                if (!res.ok) {
-                    const text = await res.text();
-                    throw new Error(text || 'Order submission failed');
-                }
-
-                const resp = await res.json();
-                if (resp.success) {
-                    if (resp.redirect) {
-                        window.location.href = resp.redirect;
-                        return;
-                    }
-                    this.orderMessage = resp.message || 'Order submitted successfully';
-                } else {
-                    this.orderMessage = resp.message || 'Order failed';
-                }
-            } catch (err) {
-                console.error(err);
-                this.orderMessage = err.message || 'An error occurred while submitting the order';
-            } finally {
-                this.submitting = false;
-            }
-        }
-    };
-}
-</script>
 
 {{-- WhatsApp Contact Section --}}
 @if($vendor->phone_number)
