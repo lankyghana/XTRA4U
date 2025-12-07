@@ -1,203 +1,90 @@
 # XTRA4U
 
-A Laravel-based multi-vendor marketplace and transaction platform used by vendors, resellers, and administrators. This repository contains the application code, migrations, factories, services (payment providers, SMS, payouts), and tests.
+Laravel-based multi-vendor marketplace for digital services (data bundles, vouchers, utilities) with vendor/reseller flows, Paystack payments, SMS, and queued notifications.
 
-**Quick overview:**
-- **Framework:** Laravel `^12.0` (see `composer.json`)
-- **PHP:** `^8.2`
-- **Environment:** Uses Vite for frontend assets and standard Laravel services (queues, mail, cache).
+## Stack
+- Laravel ^12, PHP ^8.2
+- Vite (frontend assets)
+- Database queues by default (configurable)
 
-**Notable folders:**
-- `app/` : Application code (Controllers, Models, Services, Events, Listeners, Mail)
-- `database/` : Migrations, factories, and seeders
-- `routes/` : `web.php` and `console.php`
-# XTRA4U
+## Features
+- Vendor storefront with category → service → package → checkout
+- Payments via Paystack (redirect flow)
+- SMS via BulkClix (optional)
+- Reseller products and affiliate-style earnings
+- Events/listeners for order notifications and wallet updates
 
-XTRA4U is a Laravel-based multi-vendor marketplace and transaction platform used by vendors, resellers, and administrators. The app supports payments (Paystack), mobile money payouts (MOMO), SMS notifications, and a simple storefront for digital goods (data bundles, vouchers, utility payments).
-
-**Quick facts**
-- **Laravel:** ^12.0
-- **PHP:** ^8.2
-- **Frontend:** Vite (JS/CSS assets)
-- **Queue:** database (default) — the app uses queued jobs for notifications and background processing
-
-**Key components**
-- `app/Models` — Eloquent models including `User`, `Vendor`, `Order`, `Product`, `Transaction`, notifications
-- `app/Services` — business integrations and helpers: `PaystackPaymentService`, `MomoPayoutService`, `SmsService`, `TransactionService`, `PaymentService`
-- `app/Events` & `app/Listeners` — domain events and listeners for notifications (e.g., `OrderCompleted` -> `SendOrderCompletionNotification`)
-- `database/migrations` & `database/factories` — schema and test data factories
-
-## Table of Contents
-
-- Project overview
-- Requirements
-- Local setup (Windows / PowerShell)
-- Environment variables (detailed)
-- Development workflow
-- Testing
-- Logging & troubleshooting
-- Deployment notes
-- Contributing & code style
-
-## Requirements
-
-- PHP 8.2+
-- Composer
-- Node.js 18+ and npm
-- A database supported by Laravel: MySQL, PostgreSQL, or SQLite for local testing
-
-## Local Setup (Windows / PowerShell)
-
-1. Clone the repository and install dependencies:
-
+## Quick start (Windows / PowerShell)
 ```powershell
-git clone <repo-url> xtrau
-cd xtrau
+git clone https://github.com/lankyghana/XTRA4U.git
+cd XTRA4U
 composer install --no-interaction --prefer-dist
-```
-
-2. Create the environment file and edit settings:
-
-```powershell
 copy .env.example .env
-```
+php artisan key:generate
 
-Open `.env` and set at minimum `APP_URL`, `DB_*`, and mail/third-party service credentials. For quick local setup, use SQLite:
-
-```powershell
+# DB: use sqlite for fast local setup
 mkdir database
 ni database\database.sqlite -ItemType File
-```
-Then set `DB_CONNECTION=sqlite` in `.env`.
+# then set DB_CONNECTION=sqlite in .env
 
-3. Application key, migrations and seeders:
-
-```powershell
-php artisan key:generate
-php artisan migrate --seed
-```
-
-4. Frontend (Vite) dev server and assets:
-
-```powershell
 npm install
-npm run dev
-```
-
-5. Start the app (dev):
-
-```powershell
+php artisan migrate --seed
+npm run dev   # Vite dev server
 php artisan serve
 ```
 
-Or run the provided dev script (runs server, queue listener, pail logs, and Vite concurrently):
+## Environment
+Set these in `.env`:
+- Core: `APP_NAME`, `APP_ENV`, `APP_URL`, `APP_KEY`, `APP_DEBUG`
+- DB: `DB_CONNECTION`, `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD`
+- Mail: `MAIL_MAILER`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS`
+- Queue: `QUEUE_CONNECTION` (e.g., `database`, `redis`)
+- Payments: `PAYSTACK_PUBLIC_KEY`, `PAYSTACK_SECRET_KEY`, `PAYSTACK_PAYMENT_URL`
+- SMS: `BULKCLIX_API_KEY`, `BULKCLIX_SENDER_ID`, `BULKCLIX_BASE_URL`
 
-```powershell
-composer run dev
-```
+### Paystack callback
+Set `APP_URL` to the public URL Paystack can reach. For local dev, use an HTTPS tunnel (ngrok) and keep `payment.callback` exposed. If you hit cURL error 60 on Windows, point PHP to a CA bundle (set `curl.cainfo` and `openssl.cafile` in `php.ini`).
 
-## Environment variables (recommended)
-
-The project ships with a `.env.example`. Below are commonly required variables and a short description. Add or update keys per your provider details.
-
-- `APP_NAME`, `APP_ENV`, `APP_URL`, `APP_KEY`, `APP_DEBUG`
-- `DB_CONNECTION`, `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` — database configuration
-- `MAIL_MAILER`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS` — mail delivery
-- `QUEUE_CONNECTION` — e.g., `database`, `redis`
-
-XTRA4U custom keys (examples; check `app/Services` for any additional provider requirements):
-- `BULKCLIX_API_KEY`, `BULKCLIX_SENDER_ID`, `BULKCLIX_BASE_URL` — SMS service
-- `PAYSTACK_PUBLIC_KEY`, `PAYSTACK_SECRET_KEY` — Paystack payment provider
-- `MOMO_*` — mobile money / payout provider keys (if configured)
-
-Important: never commit `.env` or secrets to version control.
-
-## Development workflow & tools
-
-- `composer setup` — convenience script to install composer/npm dependencies, create `.env`, generate app key, run migrations and build assets (may run migrations in your environment — use with caution).
-- `composer run dev` — runs a development orchestrator (concurrently runs `php artisan serve`, queue listener, pail logs, vite dev server)
-- `npm run dev` — starts Vite dev server
-- `php artisan queue:work` or `php artisan queue:listen` — process queued jobs
-- `php artisan pail` — a logging helper included in dev dependencies
-- `vendor/bin/pint` (or `composer pint`) — code style/linting (Laravel Pint)
-
-Follow this typical flow for a feature:
-1. Create a feature branch from `main`.
-2. Implement models/controllers/services and add/change migrations if needed.
-3. Add tests (in `tests/Feature` or `tests/Unit`).
-4. Run `php artisan test` locally and ensure green.
-5. Open a PR with a clear description and tests attached.
+## Development workflow
+- `npm run dev` — Vite dev server
+- `php artisan serve` — app server
+- `php artisan queue:work` — process jobs
+- `composer run dev` — runs server, queue worker, pail logs, and Vite together
+- `composer pint` — code style (Laravel Pint)
 
 ## Testing
-
-- Run the full test suite:
-
 ```powershell
 php artisan test
-```
-
-- Run only feature tests:
-
-```powershell
+# or
 php artisan test --testsuite=Feature
 ```
+Use sqlite for tests (`DB_CONNECTION=sqlite`) or a dedicated test DB. Factories live in `database/factories`.
 
-- PHPUnit is available via `vendor/bin/phpunit` but `php artisan test` is preferred because it prepares the environment.
-
-Notes:
-- Use `DB_CONNECTION=sqlite` in testing, or configure a dedicated test database.
-- Factories are available in `database/factories` for creating model instances in tests.
-
-## Logging & troubleshooting
-
-- Application logs: `storage/logs/laravel.log`
-- If queues are failing: run `php artisan queue:work --tries=3` and inspect logs for exceptions
-- Clear caches when config changes: `php artisan config:clear`, `php artisan cache:clear`, `php artisan route:clear`, `php artisan view:clear`
-
-If you see permission errors on Windows check that the `storage/` and `bootstrap/cache` directories are writable by your user.
+## Troubleshooting
+- Logs: `storage/logs/laravel.log`
+- Clear caches after env/config changes:
+	```powershell
+	php artisan config:clear
+	php artisan cache:clear
+	php artisan route:clear
+	php artisan view:clear
+	```
+- Windows perms: ensure `storage/` and `bootstrap/cache` are writable.
 
 ## Deployment notes
-
-- This repository is deployable to typical PHP hosts supporting Composer and PHP 8.2. Common approaches:
-	- Use a CI pipeline to run `composer install --no-dev --optimize-autoloader`, `npm ci && npm run build`, `php artisan migrate --force`, and restart workers.
-	- Use Laravel Forge / Envoy / GitHub Actions for automated deployments.
-
-- Ensure production `.env` has `APP_ENV=production` and `APP_DEBUG=false`.
-- Use a robust queue backend (Redis or database) and a process manager (Supervisor, systemd) to keep `php artisan queue:work` running.
-
-## Code style & static analysis
-
-- Use Laravel Pint for code style: `composer pint` or `vendor/bin/pint`.
-- Optionally run static analysis tools such as PHPStan or Psalm if added to the project.
+- Set `APP_ENV=production`, `APP_DEBUG=false`
+- Build assets: `npm ci && npm run build`
+- Optimize: `composer install --no-dev --optimize-autoloader`
+- Run migrations: `php artisan migrate --force`
+- Keep a queue worker alive (Supervisor/systemd)
 
 ## Contributing
+1) Branch from `main`
+2) Add tests for changes
+3) Keep PRs small and documented
 
-1. Fork the repo and create a branch named `feature/your-description`.
-2. Write tests for new behavior and make sure existing tests pass.
-3. Keep PRs small and focused; document any schema changes.
-
-## Useful commands (quick reference)
-
-- Install deps: `composer install`
-- Generate key: `php artisan key:generate`
-- Migrate & seed: `php artisan migrate --seed`
-- Serve: `php artisan serve`
-- Run tests: `php artisan test`
-- Queue worker: `php artisan queue:work`
-- Clear config cache: `php artisan config:clear`
-
-## Where to look in the codebase
-
-- `app/Services` — payment, payout, SMS, and transaction services
-- `app/Listeners` & `app/Events` — business event handling
-- `database/migrations` — DB schema
-- `database/factories` — test data factories
-
----
-
-If you'd like, I can now:
-
-- commit this README update to the current branch, or
-- run `php artisan test` and share the results.
-
-Tell me which you'd prefer next.
+## Code map
+- `app/Services` — Paystack, payouts, SMS, transactions
+- `app/Events` / `app/Listeners` — order and notification flows
+- `database/migrations` — schema
+- `tests/Feature` / `tests/Unit` — automated tests
