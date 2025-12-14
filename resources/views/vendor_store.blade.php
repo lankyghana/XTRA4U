@@ -29,6 +29,104 @@
         </div>
     </div>
 
+    {{-- Order Status Tracker - Collapsible --}}
+    <div x-data="orderTracker()" class="mb-6">
+        {{-- Toggle Button --}}
+        <button 
+            @click="isOpen = !isOpen" 
+            class="w-full flex items-center justify-between px-4 py-3 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-100 rounded-xl hover:from-purple-100 hover:to-blue-100 transition-all duration-200"
+        >
+            <div class="flex items-center">
+                <div class="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center mr-3">
+                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+                    </svg>
+                </div>
+                <span class="font-medium text-gray-700">Track Your Order</span>
+            </div>
+            <svg class="w-5 h-5 text-gray-500 transition-transform duration-200" :class="isOpen ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+        </button>
+
+        {{-- Expandable Content --}}
+        <div 
+            x-show="isOpen" 
+            x-collapse
+            x-cloak
+            class="mt-2 bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden"
+        >
+            <div class="p-4">
+                {{-- Search Form --}}
+                <form @submit.prevent="checkStatus" class="flex gap-2">
+                    <div class="flex-1 relative">
+                        <input 
+                            type="tel" 
+                            x-model="phone"
+                            placeholder="Enter recipient phone number"
+                            class="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
+                        >
+                        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+                        </svg>
+                    </div>
+                    <button 
+                        type="submit" 
+                        :disabled="loading"
+                        class="px-4 py-2.5 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
+                    >
+                        <template x-if="loading">
+                            <svg class="animate-spin w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </template>
+                        <span x-text="loading ? 'Checking...' : 'Check'"></span>
+                    </button>
+                </form>
+
+                {{-- Results --}}
+                <div class="mt-3" x-show="searched" x-cloak>
+                    {{-- Error/No results --}}
+                    <template x-if="error || (orders.length === 0 && searched)">
+                        <div class="text-sm text-gray-500 text-center py-3">
+                            <span x-text="error || 'No orders found for this number.'"></span>
+                        </div>
+                    </template>
+
+                    {{-- Orders List --}}
+                    <template x-if="orders.length > 0">
+                        <div class="space-y-2 max-h-64 overflow-y-auto">
+                            <template x-for="order in orders" :key="order.id">
+                                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                    <div class="flex-1 min-w-0">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-sm font-medium text-gray-900 truncate" x-text="order.service"></span>
+                                            <span class="text-xs text-gray-500">•</span>
+                                            <span class="text-xs text-gray-500" x-text="'GH₵' + order.amount"></span>
+                                        </div>
+                                        <div class="text-xs text-gray-500 mt-0.5">
+                                            <span x-text="order.date"></span> • <span x-text="order.time"></span>
+                                        </div>
+                                    </div>
+                                    <div class="flex-shrink-0 ml-3">
+                                        <span 
+                                            class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
+                                            :class="order.status_color.bg + ' ' + order.status_color.text"
+                                        >
+                                            <span class="w-1.5 h-1.5 rounded-full mr-1.5" :class="order.status_color.dot"></span>
+                                            <span x-text="order.status_label"></span>
+                                        </span>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+
     {{-- Header text --}}
     <div class="text-center my-8 text-gray-600">
         <p>Explore network bundles, electricity tokens, online vouchers, and more.</p>
@@ -36,20 +134,20 @@
 
     {{-- CATEGORY SELECTOR: full width card (visible immediately) --}}
     <div class="bg-white rounded-xl shadow-md p-6 mb-6">
-        <h3 class="text-xs tracking-wider text-gray-400">CATEGORY SELECTOR</h3>
+        <h3 class="text-xs tracking-wider text-gray-400 uppercase">CATEGORY SELECTOR</h3>
         <h2 class="text-2xl font-semibold mt-2">Choose a category</h2>
 
         <div class="mt-4">
-            <div class="flex flex-wrap gap-3 mt-3">
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mt-3">
                 @forelse($categories as $category)
                     <button type="button"
-                        class="px-4 py-2 rounded-full border text-sm shadow-sm transition"
-                        :class="selectedCategory && selectedCategory.value === '{{ $category['value'] }}' ? 'bg-purple-100 border-purple-400 text-purple-700 font-medium' : 'bg-white border-gray-200 text-gray-700 hover:bg-purple-50'"
+                        class="flex flex-col items-center justify-center p-5 rounded-xl border text-base shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 min-h-[80px]"
+                        :class="selectedCategory && selectedCategory.value === '{{ $category['value'] }}' ? 'bg-purple-100 border-purple-400 text-purple-700 font-semibold ring-2 ring-purple-300' : 'bg-white border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-200'"
                         @click='selectCategory(@json($category))'>
-                        {{ $category['label'] }}
+                        <span class="text-center font-medium">{{ $category['label'] }}</span>
                     </button>
                 @empty
-                    <div class="text-sm text-gray-500">No categories available. Please contact the vendor.</div>
+                    <div class="col-span-full text-sm text-gray-500">No categories available. Please contact the vendor.</div>
                 @endforelse
             </div>
         </div>
@@ -169,11 +267,6 @@
                 <input type="hidden" name="original_product_id" :value="selectedPackage?.original_product_id">
 
                 {{-- minimal checkout fields (recipient phone & payer mobile money) --}}
-                    <div class="mb-3">
-                        <label class="block text-sm text-gray-600 mb-1">Customer Email <span class="text-red-500">*</span></label>
-                        <input type="email" name="customer_email" x-model="customerEmail" required
-                            class="w-full border border-gray-200 rounded-lg p-3 focus:ring-2 focus:ring-purple-300">
-                    </div>
                 <div class="mb-3">
                     <label class="block text-sm text-gray-600 mb-1">Recipient phone</label>
                     <input type="tel" name="recipient_phone" x-model="recipientPhone" required
@@ -220,3 +313,94 @@
 @endif
 
 @endsection
+
+@push('scripts')
+<script>
+function orderTracker() {
+    return {
+        isOpen: false,
+        phone: '',
+        orders: [],
+        loading: false,
+        error: null,
+        searched: false,
+        pollingInterval: null,
+
+        async checkStatus() {
+            if (!this.phone || this.phone.length < 10) {
+                this.error = 'Please enter a valid phone number';
+                return;
+            }
+
+            this.loading = true;
+            this.error = null;
+            this.orders = [];
+
+            try {
+                const response = await fetch('{{ route("order.status.check") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ phone: this.phone, limit: 3 })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    this.orders = data.orders;
+                    this.startPolling();
+                } else {
+                    this.error = data.message || 'No orders found.';
+                }
+            } catch (err) {
+                console.error(err);
+                this.error = 'An error occurred. Please try again.';
+            } finally {
+                this.loading = false;
+                this.searched = true;
+            }
+        },
+
+        startPolling() {
+            if (this.pollingInterval) clearInterval(this.pollingInterval);
+            
+            this.pollingInterval = setInterval(async () => {
+                if (this.orders.length === 0) {
+                    clearInterval(this.pollingInterval);
+                    return;
+                }
+
+                try {
+                    const orderIds = this.orders.map(o => o.id);
+                    const response = await fetch('{{ route("order.status.poll") }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({ order_ids: orderIds })
+                    });
+
+                    const data = await response.json();
+                    data.orders.forEach(updated => {
+                        const order = this.orders.find(o => o.id === updated.id);
+                        if (order && order.status !== updated.status) {
+                            order.status = updated.status;
+                            order.status_label = updated.status_label;
+                            order.status_color = updated.status_color;
+                            order.updated_at = updated.updated_at;
+                        }
+                    });
+                } catch (err) {
+                    console.log('Polling error:', err);
+                }
+            }, 30000);
+        }
+    };
+}
+</script>
+@endpush
