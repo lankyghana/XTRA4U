@@ -1,5 +1,9 @@
 import './bootstrap';
 import Alpine from 'alpinejs';
+import collapse from '@alpinejs/collapse';
+
+// Register Alpine plugins
+Alpine.plugin(collapse);
 
 // Make Alpine available globally
 window.Alpine = Alpine;
@@ -198,8 +202,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // Handle anchor links
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
         anchor.addEventListener('click', function (e) {
+            const href = this.getAttribute('href');
+            // Skip if href is just "#" or empty
+            if (!href || href === '#' || href.length <= 1) {
+                return;
+            }
             e.preventDefault();
-            const target = document.querySelector(this.getAttribute('href'));
+            const target = document.querySelector(href);
             if (target) {
                 target.scrollIntoView({
                     behavior: 'smooth',
