@@ -48,8 +48,8 @@ class ContentSecurityPolicy
                 // Base URI: only self
                 "base-uri 'self'",
                 
-                // Form actions: only self
-                "form-action 'self'",
+                // Form actions: allow self and payment providers
+                "form-action 'self' https://paystack.com https://*.paystack.co https://checkout.paystack.com",
                 
                 // Frame ancestors: none (prevent clickjacking)
                 "frame-ancestors 'none'",
