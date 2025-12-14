@@ -33,11 +33,16 @@ class VendorDashboardController extends Controller
 		$vendorId = $vendor->id;
 		$transactions = $this->transactionService->getVendorTransactions($vendorId);
 		
-		// Only count completed transactions for sales/earnings
+		// Only count completed transactions for sales/earnings (all time for withdrawable balance)
 		$completedTransactions = $transactions->where('payment_status', 'completed');
-		$totalSales = $completedTransactions->sum('amount');
-		$totalEarnings = $completedTransactions->sum('vendor_earning');
-		$commissions = $completedTransactions->sum('commission_amount');
+		$allTimeEarnings = $completedTransactions->sum('vendor_earning');
+		
+		// Default to "today" filter for display
+		$filter = request('filter', 'today');
+		$filteredStats = $this->getFilteredStats($completedTransactions, $filter);
+		$totalSales = $filteredStats['sales'];
+		$totalEarnings = $filteredStats['earnings'];
+		$commissions = $filteredStats['commissions'];
 		
 		// Get orders (both direct and as owner of affiliate orders)
 		$orders = Order::where('vendor_id', $vendorId)
@@ -47,7 +52,7 @@ class VendorDashboardController extends Controller
 		$products = Product::where('vendor_id', $vendorId)->orderBy('name')->get();
 		$storeLink = route('storefront.vendor', ['vendor' => $vendor]);
 		$recentWithdrawals = VendorWithdrawal::where('vendor_id', $vendorId)->latest()->take(5)->get();
-		$withdrawableBalance = $this->calculateWithdrawableBalance($vendorId, $totalEarnings);
+		$withdrawableBalance = $this->calculateWithdrawableBalance($vendorId, $allTimeEarnings);
 
 		return view('vendor.dashboard', compact(
 			'vendor',
@@ -59,8 +64,52 @@ class VendorDashboardController extends Controller
 			'transactions',
 			'commissions',
 			'recentWithdrawals',
-			'withdrawableBalance'
+			'withdrawableBalance',
+			'filter'
 		));
+	}
+
+	/**
+	 * Get filtered sales stats via AJAX
+	 */
+	public function getFilteredSalesStats()
+	{
+		$vendor = $this->resolveVendor();
+		$vendorId = $vendor->id;
+		$transactions = $this->transactionService->getVendorTransactions($vendorId);
+		$completedTransactions = $transactions->where('payment_status', 'completed');
+		
+		$filter = request('filter', 'today');
+		$stats = $this->getFilteredStats($completedTransactions, $filter);
+		
+		return response()->json([
+			'sales' => number_format($stats['sales'], 2),
+			'earnings' => number_format($stats['earnings'], 2),
+			'filter' => $filter,
+		]);
+	}
+
+	/**
+	 * Get stats filtered by date range
+	 */
+	private function getFilteredStats($transactions, string $filter): array
+	{
+		$now = now();
+		
+		$filtered = match($filter) {
+			'today' => $transactions->filter(fn($t) => $t->created_at->isToday()),
+			'yesterday' => $transactions->filter(fn($t) => $t->created_at->isYesterday()),
+			'this_week' => $transactions->filter(fn($t) => $t->created_at->greaterThanOrEqualTo($now->copy()->startOfWeek())),
+			'this_month' => $transactions->filter(fn($t) => $t->created_at->greaterThanOrEqualTo($now->copy()->startOfMonth())),
+			'all_time' => $transactions,
+			default => $transactions->filter(fn($t) => $t->created_at->isToday()),
+		};
+		
+		return [
+			'sales' => $filtered->sum('amount'),
+			'earnings' => $filtered->sum('vendor_earning'),
+			'commissions' => $filtered->sum('commission_amount'),
+		];
 	}
 
 	public function orders()
@@ -554,7 +603,9 @@ class VendorDashboardController extends Controller
 	private function calculateWithdrawableBalance(int $vendorId, ?float $totalEarnings = null): float
 	{
 		$totalEarnings ??= $this->transactionService->getVendorEarnings($vendorId);
-		$lockedAmount = VendorWithdrawal::where('vendor_id', $vendorId)
+		
+		// Subtract all withdrawals that are not rejected (pending, processing, or approved/paid)
+		$withdrawnAmount = VendorWithdrawal::where('vendor_id', $vendorId)
 			->whereIn('status', [
 				VendorWithdrawal::STATUS_PENDING,
 				VendorWithdrawal::STATUS_APPROVED,
@@ -562,7 +613,7 @@ class VendorDashboardController extends Controller
 			])
 			->sum('amount');
 
-		return max($totalEarnings - $lockedAmount, 0);
+		return max($totalEarnings - $withdrawnAmount, 0);
 	}
 
 	// ==================== NOTIFICATIONS ====================
@@ -617,5 +668,59 @@ class VendorDashboardController extends Controller
 			->count();
 
 		return response()->json(['count' => $count]);
+	}
+
+	/**
+	 * Show vendor settings page
+	 */
+	public function settings()
+	{
+		$vendor = $this->resolveVendor();
+
+		return view('vendor.settings.index', [
+			'vendor' => $vendor,
+		]);
+	}
+
+	/**
+	 * Update vendor settings
+	 */
+	public function updateSettings(Request $request)
+	{
+		$vendor = $this->resolveVendor();
+
+		$validated = $request->validate([
+			'name' => ['required', 'string', 'max:255'],
+			'phone_number' => ['required', 'string', 'max:20'],
+			'momo_number' => ['nullable', 'string', 'max:20'],
+			'momo_provider' => ['nullable', 'string', 'in:mtn,vodafone,airteltigo'],
+		]);
+
+		$vendor->update($validated);
+
+		return back()->with('success', 'Settings updated successfully.');
+	}
+
+	/**
+	 * Update vendor password
+	 */
+	public function updatePassword(Request $request)
+	{
+		$vendor = $this->resolveVendor();
+
+		$validated = $request->validate([
+			'current_password' => ['required', 'string'],
+			'password' => ['required', 'string', 'min:8', 'confirmed'],
+		]);
+
+		if (!password_verify($validated['current_password'], $vendor->password)) {
+			return back()->withErrors(['current_password' => 'Current password is incorrect.']);
+		}
+
+		$vendor->update([
+			'password' => bcrypt($validated['password']),
+		]);
+
+		return back()->with('success', 'Password updated successfully.');
 	}
 }
