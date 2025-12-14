@@ -42,10 +42,10 @@
                 <h3 class="text-sm font-semibold text-gray-400 tracking-wider uppercase mb-4">Quick Links</h3>
                 <ul class="space-y-3">
                     <li><a href="{{ route('storefront.index') }}" class="text-gray-300 hover:text-white transition-colors">Home</a></li>
-                    <li><a href="#services" class="text-gray-300 hover:text-white transition-colors">Services</a></li>
-                    <li><a href="#vendors" class="text-gray-300 hover:text-white transition-colors">Find Vendors</a></li>
-                    <li><a href="#about" class="text-gray-300 hover:text-white transition-colors">About Us</a></li>
-                    <li><a href="#contact" class="text-gray-300 hover:text-white transition-colors">Contact</a></li>
+                    <li><a href="{{ route('storefront.index') }}#services" class="text-gray-300 hover:text-white transition-colors">Services</a></li>
+                    <li><a href="{{ route('storefront.index') }}#vendors" class="text-gray-300 hover:text-white transition-colors">Find Vendors</a></li>
+                    <li><a href="{{ route('about') }}" class="text-gray-300 hover:text-white transition-colors">About Us</a></li>
+                    <li><a href="{{ route('storefront.index') }}#contact" class="text-gray-300 hover:text-white transition-colors">Contact</a></li>
                 </ul>
             </div>
             
@@ -67,9 +67,8 @@
                 &copy; {{ date('Y') }} XTRA4U. All rights reserved.
             </p>
             <div class="mt-4 md:mt-0 flex space-x-6">
-                <a href="#privacy" class="text-gray-400 hover:text-white text-sm transition-colors">Privacy Policy</a>
-                <a href="#terms" class="text-gray-400 hover:text-white text-sm transition-colors">Terms of Service</a>
-                <a href="#cookies" class="text-gray-400 hover:text-white text-sm transition-colors">Cookie Policy</a>
+                <a href="{{ route('privacy') }}" class="text-gray-400 hover:text-white text-sm transition-colors">Privacy Policy</a>
+                <a href="{{ route('terms') }}" class="text-gray-400 hover:text-white text-sm transition-colors">Terms of Service</a>
             </div>
         </div>
     </div>
