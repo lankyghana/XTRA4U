@@ -52,6 +52,26 @@
     }
 }
 
+@keyframes float {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+.animate-float {
+    animation: float 3s ease-in-out infinite;
+}
+
+@media (hover: hover) {
+    .animate-float:hover {
+        animation-play-state: paused;
+        transform: scale(1.05);
+    }
+}
+
 @keyframes slideUp {
     from {
         opacity: 0;
