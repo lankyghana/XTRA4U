@@ -76,6 +76,51 @@ class StorefrontController extends Controller
 		$products = $ownedProducts->concat($resellerProductsProcessed);
 
 		$services = $this->buildServicePayload($products, $defaultCategory);
+		
+		// Add AFA Registration as a service if vendor has it enabled (direct or reseller)
+		$afaPrice = null;
+		$afaUrl = null;
+		$isResellerAfa = false;
+		$afaSourceVendorId = null;
+		
+		if ($vendor->afa_enabled && $vendor->afa_price > 0) {
+			// Direct AFA service
+			$afaPrice = (float) $vendor->afa_price;
+			$afaUrl = route('afa.register', $vendor->vendor_code);
+		} elseif ($vendor->afa_reseller_enabled && $vendor->afa_selling_price > 0 && $vendor->afa_source_vendor_id) {
+			// Reseller AFA service
+			$afaPrice = (float) $vendor->afa_selling_price;
+			$afaUrl = route('afa.register', $vendor->vendor_code);
+			$isResellerAfa = true;
+			$afaSourceVendorId = $vendor->afa_source_vendor_id;
+		}
+		
+		if ($afaPrice && $afaUrl) {
+			$afaService = [
+				'key' => 'afa_registration_service',
+				'name' => 'AFA Registration',
+				'category' => 'afa',
+				'logo' => '/images/afa-logo.png',
+				'is_afa' => true,
+				'afa_url' => $afaUrl,
+				'packages' => [
+					[
+						'id' => 'afa_package',
+						'name' => 'AFA Registration',
+						'price' => $afaPrice,
+						'size' => null,
+						'validity' => null,
+						'tag' => $isResellerAfa ? 'Reseller' : 'Official',
+						'notes' => 'Complete AFA Registration with ID verification',
+						'is_reseller_product' => $isResellerAfa,
+						'is_afa' => true,
+						'afa_url' => $afaUrl,
+					]
+				],
+			];
+			$services->push($afaService);
+		}
+		
 		$categories = $this->buildGlobalCategoryList($services, $categoryConfig, $defaultCategory);
 
 		return view('vendor_store', [
