@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\PaymentGatewayConfig;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -10,12 +11,43 @@ class SmsService
     protected ?string $apiKey;
     protected string $senderId;
     protected string $baseUrl;
+    protected ?PaymentGatewayConfig $config;
 
-    public function __construct()
+    public function __construct(?PaymentGatewayConfig $config = null)
     {
-        $this->apiKey = config('services.bulkclix.api_key');
-        $this->senderId = config('services.bulkclix.sender_id') ?? 'XTRA4U';
-        $this->baseUrl = config('services.bulkclix.base_url') ?? 'https://bulkclix.com/api/v1';
+        $this->config = $config ?? PaymentGatewayConfig::getDefault(PaymentGatewayConfig::TYPE_SMS);
+        
+        if ($this->config && $this->config->gateway_name === PaymentGatewayConfig::GATEWAY_BULKCLIX) {
+            $this->apiKey = $this->config->getConfig('api_key');
+            $this->senderId = $this->config->getConfig('sender_id', 'XTRA4U');
+            $this->baseUrl = $this->config->getConfig('base_url', 'https://bulkclix.com/api/v1');
+        } else {
+            // Fallback to .env if no database config
+            $this->apiKey = config('services.bulkclix.api_key');
+            $this->senderId = config('services.bulkclix.sender_id', 'XTRA4U');
+            $this->baseUrl = config('services.bulkclix.base_url', 'https://bulkclix.com/api/v1');
+        }
+    }
+
+    /**
+     * Get HTTP client with proper SSL configuration
+     * - Production: Full SSL verification enabled
+     * - Local/Development: SSL verification disabled (Windows CA cert issues)
+     */
+    protected function getHttpClient()
+    {
+        $client = Http::withHeaders([
+            'Authorization' => 'Bearer ' . $this->apiKey,
+            'Content-Type' => 'application/json',
+            'Accept' => 'application/json',
+        ])->timeout(30)->retry(2, 100);
+
+        // Only disable SSL verification in local development
+        if (app()->environment('local', 'development', 'testing')) {
+            $client = $client->withOptions(['verify' => false]);
+        }
+
+        return $client;
     }
 
     /**
@@ -32,15 +64,12 @@ class SmsService
             // Format phone number (remove leading 0, add country code if needed)
             $formattedPhone = $this->formatPhoneNumber($to);
 
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $this->apiKey,
-                'Content-Type' => 'application/json',
-                'Accept' => 'application/json',
-            ])->post($this->baseUrl . '/sms/send', [
-                'sender_id' => $this->senderId,
-                'recipient' => $formattedPhone,
-                'message' => $message,
-            ]);
+            $response = $this->getHttpClient()
+                ->post($this->baseUrl . '/sms/send', [
+                    'sender_id' => $this->senderId,
+                    'recipient' => $formattedPhone,
+                    'message' => $message,
+                ]);
 
             if ($response->successful()) {
                 Log::info('BulkClix SMS sent successfully', [
@@ -114,5 +143,21 @@ class SmsService
             . "Thank you for using XTRA4U!";
 
         return $this->send($recipientPhone, $message);
+    }
+
+    /**
+     * Check if SMS service is properly configured
+     */
+    public function isConfigured(): bool
+    {
+        return !empty($this->apiKey) && !empty($this->baseUrl);
+    }
+
+    /**
+     * Get the current environment (sandbox/live)
+     */
+    public function getEnvironment(): string
+    {
+        return $this->config?->environment ?? 'sandbox';
     }
 }
