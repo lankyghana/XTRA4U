@@ -35,13 +35,44 @@ class Vendor extends Authenticatable
         'password',
         'is_approved',
         'vendor_code',
-    ];
-
-    protected $hidden = [
-        'password',
+        'balance',
+        'afa_price',
+        'afa_enabled',
+        'afa_reseller_enabled',
+        'afa_source_vendor_id',
+        'afa_base_price',
+        'afa_markup',
+        'afa_selling_price',
     ];
 
     protected $casts = [
         'is_approved' => 'boolean',
+        'afa_enabled' => 'boolean',
+        'afa_reseller_enabled' => 'boolean',
+        'balance' => 'decimal:2',
+        'afa_price' => 'decimal:2',
+        'afa_base_price' => 'decimal:2',
+        'afa_markup' => 'decimal:2',
+        'afa_selling_price' => 'decimal:2',
+    ];
+
+    /**
+     * Get the source vendor for AFA reselling
+     */
+    public function afaSourceVendor()
+    {
+        return $this->belongsTo(Vendor::class, 'afa_source_vendor_id');
+    }
+
+    /**
+     * Get AFA registrations for this vendor
+     */
+    public function afaRegistrations(): HasMany
+    {
+        return $this->hasMany(AfaRegistration::class);
+    }
+
+    protected $hidden = [
+        'password',
     ];
 }
