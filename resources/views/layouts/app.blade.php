@@ -31,7 +31,6 @@
                 orderMessage: '',
                 recipientPhone: '',
                 payerPhone: '',
-                customerEmail: '',
                 loadingServices: false,
                 loadingPackages: false,
                 orderRoute: opts.orderRoute || '',
@@ -91,6 +90,13 @@
 
                 selectService(svc) {
                     if (!svc) return;
+                    
+                    // If this is an AFA service, redirect to AFA registration page
+                    if (svc.is_afa && svc.afa_url) {
+                        window.location.href = svc.afa_url;
+                        return;
+                    }
+                    
                     this.selectedService = svc;
                     this.selectedPackage = null;
                     this.step = 3;
@@ -98,6 +104,13 @@
 
                 selectPackage(pkg) {
                     if (!pkg) return;
+                    
+                    // If this is an AFA package, redirect to AFA registration page
+                    if (pkg.is_afa && pkg.afa_url) {
+                        window.location.href = pkg.afa_url;
+                        return;
+                    }
+                    
                     this.selectedPackage = pkg;
                     this.step = 4;
                 },
@@ -128,7 +141,6 @@
                         amount: this.selectedPackage?.price,
                         recipient_phone: this.recipientPhone,
                         payer_phone: this.payerPhone,
-                        customer_email: this.customerEmail,
                         is_reseller_product: this.selectedPackage?.is_reseller_product ? 1 : 0,
                         reseller_product_id: this.selectedPackage?.reseller_product_id || null,
                         original_product_id: this.selectedPackage?.original_product_id || this.selectedPackage?.id,
@@ -177,17 +189,6 @@
     @stack('styles')
 </head>
 <body class="h-full bg-gray-50 antialiased" x-data="{ mobileMenuOpen: false }">
-    <!-- Mobile Menu Overlay -->
-    <div x-show="mobileMenuOpen" 
-         x-transition:enter="transition-opacity ease-linear duration-300"
-         x-transition:enter-start="opacity-0"
-         x-transition:enter-end="opacity-100"
-         x-transition:leave="transition-opacity ease-linear duration-300"
-         x-transition:leave-start="opacity-100"
-         x-transition:leave-end="opacity-0"
-         class="fixed inset-0 z-50 bg-gray-900/80 lg:hidden"
-         @click="mobileMenuOpen = false"></div>
-
     <!-- Header/Navigation -->
     @include('components.navigation')
     
@@ -211,6 +212,51 @@
     
     <!-- Footer -->
     @include('components.footer')
+    
+    <!-- WhatsApp Channel Widget -->
+    @include('components.whatsapp-widget')
+    
+    <!-- CSRF Token Auto-Refresh Script -->
+    <script>
+        (function() {
+            // Refresh CSRF token when page becomes visible (after tab switch or wake from sleep)
+            document.addEventListener('visibilitychange', function() {
+                if (document.visibilityState === 'visible') {
+                    refreshCsrfToken();
+                }
+            });
+
+            // Also refresh when window regains focus
+            window.addEventListener('focus', function() {
+                refreshCsrfToken();
+            });
+
+            // Refresh token every 30 minutes to prevent expiration
+            setInterval(refreshCsrfToken, 30 * 60 * 1000);
+
+            function refreshCsrfToken() {
+                fetch('/csrf-token', {
+                    method: 'GET',
+                    credentials: 'same-origin',
+                    headers: { 'Accept': 'application/json' }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.token) {
+                        // Update meta tag
+                        const meta = document.querySelector('meta[name="csrf-token"]');
+                        if (meta) meta.setAttribute('content', data.token);
+                        
+                        // Update all hidden CSRF inputs in forms
+                        document.querySelectorAll('input[name="_token"]').forEach(input => {
+                            input.value = data.token;
+                        });
+                    }
+                })
+                .catch(err => console.log('CSRF refresh skipped'));
+            }
+        })();
+    </script>
     
     @stack('scripts')
 </body>
