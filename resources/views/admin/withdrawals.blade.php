@@ -2,6 +2,10 @@
 
 @section('title', 'Vendor Withdrawals - Admin Portal')
 
+@php
+    $payoutGateway = \App\Models\PaymentGatewayConfig::getDefault(\App\Models\PaymentGatewayConfig::TYPE_PAYOUT);
+@endphp
+
 @section('content')
 <x-admin-layout title="Vendor Withdrawals" subtitle="Review and action payout requests submitted by approved vendors" active="withdrawals">
     <div class="space-y-6">
@@ -38,13 +42,15 @@
         @enderror
 
         <div class="flex flex-wrap gap-2">
-            @php($filters = [
-                '' => 'All',
-                \App\Models\VendorWithdrawal::STATUS_PENDING => 'Pending',
-                \App\Models\VendorWithdrawal::STATUS_PROCESSING => 'Processing',
-                \App\Models\VendorWithdrawal::STATUS_APPROVED => 'Approved',
-                \App\Models\VendorWithdrawal::STATUS_REJECTED => 'Rejected',
-            ])
+            @php
+                $filters = [
+                    '' => 'All',
+                    \App\Models\VendorWithdrawal::STATUS_PENDING => 'Pending',
+                    \App\Models\VendorWithdrawal::STATUS_PROCESSING => 'Processing',
+                    \App\Models\VendorWithdrawal::STATUS_APPROVED => 'Approved',
+                    \App\Models\VendorWithdrawal::STATUS_REJECTED => 'Rejected',
+                ];
+            @endphp
             @foreach ($filters as $value => $label)
                 <a href="{{ route('admin.withdrawals.index', array_filter(['status' => $value])) }}"
                    class="px-3 py-2 rounded-lg text-sm font-medium {{ ($statusFilter ?? '') === $value ? 'bg-brand-deep-blue text-white' : 'text-gray-600 border border-gray-200' }}">
@@ -116,7 +122,7 @@
                     </td>
                     <td class="px-6 py-4 text-right">
                         @if (in_array($withdrawal->status, [\App\Models\VendorWithdrawal::STATUS_PENDING, \App\Models\VendorWithdrawal::STATUS_PROCESSING]))
-                            <div class="flex flex-col space-y-2">
+                            <div x-data="{ showApproveModal: false }" class="flex flex-col space-y-2">
                                 @if ($withdrawal->status === \App\Models\VendorWithdrawal::STATUS_PENDING)
                                     <form method="POST" action="{{ route('admin.withdrawals.processing', $withdrawal) }}">
                                         @csrf
@@ -125,13 +131,80 @@
                                         </button>
                                     </form>
                                 @endif
-                                <form method="POST" action="{{ route('admin.withdrawals.approve', $withdrawal) }}">
-                                    @csrf
-                                    <input type="hidden" name="notes" value="{{ $withdrawal->notes }}">
-                                    <button type="submit" class="w-full px-3 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700 text-xs font-semibold">
-                                        Approve
-                                    </button>
-                                </form>
+                                
+                                <!-- Approve Button (opens modal) -->
+                                <button @click="showApproveModal = true" type="button" class="w-full px-3 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700 text-xs font-semibold">
+                                    Approve
+                                </button>
+                                
+                                <!-- Approve Modal -->
+                                <div x-show="showApproveModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+                                    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                                        <div x-show="showApproveModal" @click="showApproveModal = false" class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+                                        <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+                                        <div x-show="showApproveModal" 
+                                             x-transition:enter="ease-out duration-300"
+                                             x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                                             x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                                             class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+                                            <div>
+                                                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
+                                                    <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                                    </svg>
+                                                </div>
+                                                <div class="mt-3 text-center sm:mt-5">
+                                                    <h3 class="text-lg leading-6 font-medium text-gray-900">Approve Withdrawal</h3>
+                                                    <div class="mt-2">
+                                                        <p class="text-sm text-gray-500">
+                                                            <strong>{{ $withdrawal->vendor->name }}</strong><br>
+                                                            Amount: <strong>GHS {{ number_format($withdrawal->amount, 2) }}</strong><br>
+                                                            MoMo: <strong>{{ $withdrawal->momo_number }}</strong> ({{ $withdrawal->momo_network }})
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="mt-5 sm:mt-6 space-y-3">
+                                                <!-- Manual Approval -->
+                                                <form method="POST" action="{{ route('admin.withdrawals.approve', $withdrawal) }}">
+                                                    @csrf
+                                                    <input type="hidden" name="automatic_payout" value="0">
+                                                    <input type="text" name="manual_reference" placeholder="Transaction Reference (optional)" 
+                                                           class="w-full mb-2 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500">
+                                                    <button type="submit" class="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                        </svg>
+                                                        Manual Approve (Send money yourself)
+                                                    </button>
+                                                </form>
+                                                
+                                                @if($payoutGateway && $payoutGateway->isConfigured())
+                                                    <!-- Automatic Payout -->
+                                                    <form method="POST" action="{{ route('admin.withdrawals.approve', $withdrawal) }}">
+                                                        @csrf
+                                                        <input type="hidden" name="automatic_payout" value="1">
+                                                        <button type="submit" class="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                                            </svg>
+                                                            Auto Pay via {{ ucfirst($payoutGateway->gateway_name) }}
+                                                        </button>
+                                                    </form>
+                                                @else
+                                                    <p class="text-xs text-center text-gray-500 bg-gray-100 rounded p-2">
+                                                        <a href="{{ route('admin.payment-gateways.index') }}" class="text-blue-600 hover:underline">Configure a payout gateway</a> to enable automatic payments
+                                                    </p>
+                                                @endif
+                                                
+                                                <button @click="showApproveModal = false" type="button" class="w-full inline-flex justify-center items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-deep-blue">
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
                                 <form method="POST" action="{{ route('admin.withdrawals.reject', $withdrawal) }}" class="flex flex-col space-y-2">
                                     @csrf
                                     <input type="text" name="notes" required placeholder="Reason"
