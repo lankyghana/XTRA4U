@@ -6,95 +6,112 @@
 @section('content')
 <x-vendor-layout :vendor="$vendor" title="Dashboard" subtitle="Manage your vendor account and track your performance" active="dashboard">
     <x-slot name="actions">
-        <button class="p-2 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-deep-blue" aria-label="Sync data">
-            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-5-5 5-5H15" />
-            </svg>
-        </button>
+        @if($vendor->vendor_code)
+        <div x-data="{ copied: false }">
+            <button 
+                @click="navigator.clipboard.writeText('{{ route('storefront.vendor', ['vendor' => $vendor->vendor_code]) }}'); copied = true; setTimeout(() => copied = false, 2000)"
+                class="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-full shadow-md transition-all duration-300 transform hover:scale-105"
+                :class="copied ? 'bg-green-500 text-white shadow-green-200' : 'bg-gradient-to-r from-brand-deep-blue to-brand-bright-blue text-white hover:shadow-lg hover:shadow-blue-200'"
+            >
+                <svg x-show="!copied" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                <svg x-show="copied" x-cloak class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+                <span x-text="copied ? 'Link Copied!' : 'Share Store Link'"></span>
+            </button>
+        </div>
+        @endif
     </x-slot>
 
-    <div class="grid grid-cols-1 gap-6 mb-8 md:grid-cols-2 lg:grid-cols-4">
-        <!-- Gross Sales Card -->
-        <div class="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
-            <div class="px-5 py-5">
-                <div class="flex items-center">
-                    <div class="shrink-0">
-                        <div class="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
-                            </svg>
-                        </div>
-                    </div>
-                    <div class="ml-4 w-0 flex-1">
-                        <dl>
-                            <dt class="text-sm font-medium text-green-100 truncate">Gross Sales</dt>
-                            <dd class="text-xl font-bold text-white mt-1">GHS {{ number_format($totalSales, 2) }}</dd>
-                        </dl>
-                    </div>
+    <!-- Sales Overview Section -->
+    <div x-data="salesFilter()" class="mb-8">
+        <!-- Section Header with Filter -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-4">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <h2 class="text-lg font-bold text-gray-900">Sales Overview</h2>
+                    <p class="text-sm text-gray-500">Track your revenue and earnings</p>
+                </div>
+                <div class="flex items-center gap-1 p-1 bg-gray-100 rounded-xl">
+                    <button @click="setFilter('today')" :class="activeFilter === 'today' ? 'bg-white text-brand-deep-blue shadow-sm' : 'text-gray-600 hover:text-gray-900'" class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all duration-200">
+                        Today
+                    </button>
+                    <button @click="setFilter('yesterday')" :class="activeFilter === 'yesterday' ? 'bg-white text-brand-deep-blue shadow-sm' : 'text-gray-600 hover:text-gray-900'" class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all duration-200">
+                        Yesterday
+                    </button>
+                    <button @click="setFilter('this_week')" :class="activeFilter === 'this_week' ? 'bg-white text-brand-deep-blue shadow-sm' : 'text-gray-600 hover:text-gray-900'" class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all duration-200 hidden sm:block">
+                        Week
+                    </button>
+                    <button @click="setFilter('this_month')" :class="activeFilter === 'this_month' ? 'bg-white text-brand-deep-blue shadow-sm' : 'text-gray-600 hover:text-gray-900'" class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all duration-200">
+                        Month
+                    </button>
+                    <button @click="setFilter('all_time')" :class="activeFilter === 'all_time' ? 'bg-white text-brand-deep-blue shadow-sm' : 'text-gray-600 hover:text-gray-900'" class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all duration-200">
+                        All
+                    </button>
                 </div>
             </div>
         </div>
 
-        <!-- Total Earnings Card -->
-        <div class="bg-gradient-to-br from-brand-deep-blue to-brand-bright-blue rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
-            <div class="px-5 py-5">
-                <div class="flex items-center">
-                    <div class="shrink-0">
-                        <div class="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z" />
-                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z" clip-rule="evenodd" />
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <!-- Gross Sales Card -->
+            <div class="relative overflow-hidden bg-gradient-to-br from-green-500 to-green-600 rounded-2xl shadow-lg group">
+                <div class="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <div class="absolute -right-8 -top-8 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
+                <div class="absolute -left-4 -bottom-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
+                <div class="relative p-6">
+                    <div class="flex items-start justify-between">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="text-green-100 text-sm font-medium">Gross Sales</span>
+                                <span class="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-white/20 text-white rounded-full" x-text="filterLabel"></span>
+                            </div>
+                            <div class="mt-3">
+                                <span x-show="loading" class="inline-block w-8 h-8 border-3 border-white/30 border-t-white rounded-full animate-spin"></span>
+                                <div x-show="!loading" class="flex items-baseline gap-1">
+                                    <span class="text-white/70 text-lg font-medium">GHS</span>
+                                    <span class="text-3xl font-bold text-white tracking-tight" x-text="sales"></span>
+                                </div>
+                            </div>
+                            <p class="mt-2 text-green-100/80 text-xs">Total revenue before fees</p>
+                        </div>
+                        <div class="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center ring-1 ring-white/30">
+                            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                         </div>
-                    </div>
-                    <div class="ml-4 w-0 flex-1">
-                        <dl>
-                            <dt class="text-sm font-medium text-blue-100 truncate">Total Earnings (Net)</dt>
-                            <dd class="text-xl font-bold text-white mt-1">GHS {{ number_format($totalEarnings, 2) }}</dd>
-                        </dl>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Withdrawable Balance Card -->
-        <div class="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
-            <div class="px-5 py-5">
-                <div class="flex items-center">
-                    <div class="shrink-0">
-                        <div class="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z" />
-                                <path fill-rule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clip-rule="evenodd" />
+            <!-- Total Earnings Card -->
+            <div class="relative overflow-hidden bg-gradient-to-br from-brand-deep-blue to-brand-bright-blue rounded-2xl shadow-lg group">
+                <div class="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <div class="absolute -right-8 -top-8 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
+                <div class="absolute -left-4 -bottom-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
+                <div class="relative p-6">
+                    <div class="flex items-start justify-between">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="text-blue-100 text-sm font-medium">Total Earnings (Net)</span>
+                                <span class="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-white/20 text-white rounded-full" x-text="filterLabel"></span>
+                            </div>
+                            <div class="mt-3">
+                                <span x-show="loading" class="inline-block w-8 h-8 border-3 border-white/30 border-t-white rounded-full animate-spin"></span>
+                                <div x-show="!loading" class="flex items-baseline gap-1">
+                                    <span class="text-white/70 text-lg font-medium">GHS</span>
+                                    <span class="text-3xl font-bold text-white tracking-tight" x-text="earnings"></span>
+                                </div>
+                            </div>
+                            <p class="mt-2 text-blue-100/80 text-xs">1% Xtra4u + 1% payment fee deducted.</p>
+                        </div>
+                        <div class="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center ring-1 ring-white/30">
+                            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                             </svg>
                         </div>
-                    </div>
-                    <div class="ml-4 w-0 flex-1">
-                        <dl>
-                            <dt class="text-sm font-medium text-purple-100 truncate">Withdrawable Balance</dt>
-                            <dd class="text-xl font-bold text-white mt-1">GHS {{ number_format($withdrawableBalance, 2) }}</dd>
-                        </dl>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Commission Paid Card -->
-        <div class="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
-            <div class="px-5 py-5">
-                <div class="flex items-center">
-                    <div class="shrink-0">
-                        <div class="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 8.707 8.293a1 1 0 00-1.414 0l-2 2a1 1 0 101.414 1.414L8 10.414l1.293 1.293a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                            </svg>
-                        </div>
-                    </div>
-                    <div class="ml-4 w-0 flex-1">
-                        <dl>
-                            <dt class="text-sm font-medium text-yellow-100 truncate">Commission Paid</dt>
-                            <dd class="text-xl font-bold text-white mt-1">GHS {{ number_format($commissions, 2) }}</dd>
-                        </dl>
                     </div>
                 </div>
             </div>
@@ -102,11 +119,21 @@
     </div>
 
     <div class="grid grid-cols-1 gap-6 mb-8 lg:grid-cols-3">
-        <div class="lg:col-span-2 bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl shadow-lg border border-purple-100">
+        <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="bg-gradient-to-r from-purple-50 to-blue-50 px-6 py-4 border-b border-gray-100">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-xl flex items-center justify-center">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-900">Wallet & Withdrawals</h3>
+                        <p class="text-xs text-gray-500">A 1% Xtra4u fee and a 1% payment provider fee are automatically applied.</p>
+                    </div>
+                </div>
+            </div>
             <div class="px-6 py-6">
-                <h3 class="text-lg leading-6 font-bold text-gray-900">Wallet & Withdrawals</h3>
-                <p class="text-sm text-gray-600 mb-6">You keep 99% of every sale. 1% is deducted automatically for platform fees.</p>
-
                 @if (session('status'))
                     <div class="mb-4 bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">
                         {{ session('status') }}
@@ -297,3 +324,53 @@
     </div>
 </x-vendor-layout>
 @endsection
+
+@push('scripts')
+<script>
+function salesFilter() {
+    return {
+        activeFilter: '{{ $filter ?? "today" }}',
+        sales: '{{ number_format($totalSales, 2) }}',
+        earnings: '{{ number_format($totalEarnings, 2) }}',
+        loading: false,
+        
+        get filterLabel() {
+            const labels = {
+                'today': 'Today',
+                'yesterday': 'Yesterday',
+                'this_week': 'This Week',
+                'this_month': 'This Month',
+                'all_time': 'All Time'
+            };
+            return labels[this.activeFilter] || 'Today';
+        },
+        
+        async setFilter(filter) {
+            if (this.activeFilter === filter) return;
+            
+            this.activeFilter = filter;
+            this.loading = true;
+            
+            try {
+                const response = await fetch(`{{ route('vendor.dashboard.sales-stats') }}?filter=${filter}`, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    this.sales = data.sales;
+                    this.earnings = data.earnings;
+                }
+            } catch (error) {
+                console.error('Failed to fetch stats:', error);
+            } finally {
+                this.loading = false;
+            }
+        }
+    }
+}
+</script>
+@endpush
