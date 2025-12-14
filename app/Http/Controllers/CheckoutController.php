@@ -7,7 +7,6 @@ use App\Models\Vendor;
 use App\Models\ResellerProduct;
 use App\Models\NetworkService;
 use App\Services\PaymentService;
-use App\Services\PaystackPaymentService;
 use Illuminate\Http\Request;
 
 class CheckoutController extends Controller
@@ -16,7 +15,7 @@ class CheckoutController extends Controller
 
 	public function __construct()
 	{
-		$this->paymentService = new PaymentService(new PaystackPaymentService());
+		$this->paymentService = new PaymentService();
 	}
 
 	public function show()
@@ -135,7 +134,6 @@ class CheckoutController extends Controller
 			'service_id' => 'required|string',
 			'package_id' => 'required',
 			'amount' => 'required|numeric|min:0.1',
-			'customer_email' => 'required|email',
 			'recipient_phone' => 'required|string',
 			'payer_phone' => 'required|string',
 			'is_reseller_product' => 'sometimes|boolean',
@@ -159,7 +157,11 @@ class CheckoutController extends Controller
 			'payment_gateway' => 'paystack',
 		]);
 
-		$init = $this->paymentService->initiatePayment($order, $validated['customer_email'], (float) $validated['amount']);
+		// Use vendor's email for Paystack instead of requiring customer email
+		$vendor = Vendor::find($validated['vendor_id']);
+		$vendorEmail = $vendor->email ?? 'noreply@xtra4u.com';
+		
+		$init = $this->paymentService->initiatePayment($order, $vendorEmail, (float) $validated['amount']);
 
 		if (! ($init['success'] ?? false)) {
 			return response()->json([
