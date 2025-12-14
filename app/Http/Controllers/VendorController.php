@@ -95,7 +95,7 @@ class VendorController extends Controller
             ->whereNotIn('status', ['Cancelled', 'Failed'])
             ->sum('amount_paid');
 
-        // Earnings summary: after 1% commission (sum of vendor_earning from completed transactions)
+        // Earnings summary: after 2% commission (sum of vendor_earning from completed transactions)
         $totalEarnings = Transaction::where('vendor_id', $vendor->id)
             ->where('payment_status', 'completed')
             ->sum('vendor_earning');
