@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\VendorWithdrawal;
 use App\Models\VendorNotification;
-use App\Services\MoolrePayoutService;
+use App\Services\MomoPayoutService;
 use App\Services\SmsService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -51,7 +51,7 @@ class AdminWithdrawalController extends Controller
         );
     }
 
-    public function approve(Request $request, VendorWithdrawal $withdrawal, MoolrePayoutService $payoutService): RedirectResponse
+    public function approve(Request $request, VendorWithdrawal $withdrawal): RedirectResponse
     {
         $withdrawal->refresh();
 
@@ -61,35 +61,63 @@ class AdminWithdrawalController extends Controller
             ]);
         }
 
-        // Process the mobile money payout via Moolre
-        $result = $payoutService->processPayout($withdrawal);
+        // Check if we should use automatic payout or manual approval
+        $useAutomaticPayout = $request->boolean('automatic_payout', false);
+        
+        if ($useAutomaticPayout) {
+            // Process the mobile money payout via configured gateway
+            $payoutService = app(MomoPayoutService::class);
+            $result = $payoutService->processPayout($withdrawal);
 
-        if (!$result['success']) {
-            return back()->withErrors([
-                'withdrawal' => $result['message'],
+            if (!$result['success']) {
+                return back()->withErrors([
+                    'withdrawal' => $result['message'],
+                ]);
+            }
+
+            // Update withdrawal with payout details
+            $withdrawal->update([
+                'status' => VendorWithdrawal::STATUS_APPROVED,
+                'payout_reference' => $result['reference'],
+                'payout_transaction_id' => $result['transaction_id'] ?? null,
+                'payout_status' => $result['status'] ?? 'pending',
+                'paid_at' => now(),
             ]);
-        }
 
-        // Update withdrawal with payout details
-        $withdrawal->update([
-            'status' => VendorWithdrawal::STATUS_APPROVED,
-            'payout_reference' => $result['reference'],
-            'payout_transaction_id' => $result['transaction_id'] ?? null,
-            'payout_status' => $result['status'] ?? 'pending',
-            'paid_at' => now(),
-        ]);
+            Log::info('Withdrawal approved via automatic payout', [
+                'withdrawal_id' => $withdrawal->id,
+                'vendor_id' => $withdrawal->vendor_id,
+                'amount' => $withdrawal->amount,
+                'reference' => $result['reference'],
+            ]);
+
+            $successMessage = 'Withdrawal approved! Payout of GHS ' . number_format($withdrawal->amount, 2) . ' sent to ' . $withdrawal->momo_number . '.';
+        } else {
+            // Manual approval - admin will send money manually
+            $manualReference = 'MANUAL-' . strtoupper(substr(md5(uniqid()), 0, 8));
+            
+            $withdrawal->update([
+                'status' => VendorWithdrawal::STATUS_APPROVED,
+                'payout_reference' => $request->input('manual_reference', $manualReference),
+                'payout_status' => 'completed',
+                'paid_at' => now(),
+                'notes' => $request->input('notes', 'Manually approved by admin'),
+            ]);
+
+            Log::info('Withdrawal manually approved', [
+                'withdrawal_id' => $withdrawal->id,
+                'vendor_id' => $withdrawal->vendor_id,
+                'amount' => $withdrawal->amount,
+                'reference' => $withdrawal->payout_reference,
+            ]);
+
+            $successMessage = 'Withdrawal manually approved! Please send GHS ' . number_format($withdrawal->amount, 2) . ' to ' . $withdrawal->momo_number . ' (' . ucfirst($withdrawal->momo_network) . ').';
+        }
 
         // Notify vendor about successful payout
         $this->notifyVendorPayoutApproved($withdrawal);
 
-        Log::info('Withdrawal approved via Moolre', [
-            'withdrawal_id' => $withdrawal->id,
-            'vendor_id' => $withdrawal->vendor_id,
-            'amount' => $withdrawal->amount,
-            'reference' => $result['reference'],
-        ]);
-
-        return back()->with('status', 'Withdrawal approved! Payout of GHS ' . number_format($withdrawal->amount, 2) . ' sent to ' . $withdrawal->momo_number . '.');
+        return back()->with('status', $successMessage);
     }
 
     /**
