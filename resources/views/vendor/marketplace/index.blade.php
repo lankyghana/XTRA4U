@@ -273,11 +273,11 @@
                         </div>
                         <div class="border-t border-gray-200 pt-3 space-y-2">
                             <div class="flex justify-between text-sm">
-                                <span class="text-gray-500">Owner Earning (after 1% fee)</span>
+                                <span class="text-gray-500">Owner Earning (after 2% fee)</span>
                                 <span id="owner_earning" class="text-gray-700">₵0.00</span>
                             </div>
                             <div class="flex justify-between text-sm">
-                                <span class="text-gray-500">Your Earning (after 1% fee)</span>
+                                <span class="text-gray-500">Your Earning (after 2% fee)</span>
                                 <span id="reseller_earning" class="font-medium text-green-600">₵0.00</span>
                             </div>
                             <div class="flex justify-between text-sm">
@@ -350,9 +350,9 @@
             const markup = parseFloat(document.getElementById('markup_price').value) || 0;
             const sellingPrice = currentBasePrice + markup;
             
-            // Calculate platform fees (1% from each party)
-            const ownerFee = currentBasePrice * 0.01;
-            const resellerFee = markup * 0.01;
+            // Calculate platform fees (2% from each party)
+            const ownerFee = currentBasePrice * 0.02;
+            const resellerFee = markup * 0.02;
             const totalPlatformFee = ownerFee + resellerFee;
             
             const ownerEarning = currentBasePrice - ownerFee;
