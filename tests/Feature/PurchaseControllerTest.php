@@ -6,7 +6,7 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\Transaction;
 use App\Models\Vendor;
-use App\Services\MoolrePaymentService;
+use App\Services\PaymentService;
 use Illuminate\Support\Str;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
