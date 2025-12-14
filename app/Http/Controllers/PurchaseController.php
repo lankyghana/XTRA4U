@@ -28,8 +28,8 @@ class PurchaseController extends Controller
     public function __construct(?PaymentService $paymentService = null)
     {
         // Allow PaymentService to be injected (helpful for tests). If not provided,
-        // fall back to the default Paystack-backed implementation.
-        $this->paymentService = $paymentService ?? new PaymentService(new PaystackPaymentService());
+        // fall back to the default implementation with GatewayManager.
+        $this->paymentService = $paymentService ?? new PaymentService();
     }
 
     public function store(Request $request)
@@ -37,7 +37,6 @@ class PurchaseController extends Controller
         $validated = $request->validate([
             'recipient_phone_number' => 'required|string',
             'mobile_money_number' => 'required|string',
-            'customer_email' => 'required|email',
             'vendor_id' => 'required|exists:vendors,id',
             'vendor_service_id' => 'required|exists:products,id',
             'is_reseller_product' => 'nullable|boolean',
@@ -96,10 +95,14 @@ class PurchaseController extends Controller
             'is_reseller_order' => $isResellerOrder,
         ]);
 
-        // Initiate Moolre payment
+        // Use vendor's email for Paystack instead of requiring customer email
+        $vendor = Vendor::find($validated['vendor_id']);
+        $vendorEmail = $vendor->email ?? 'noreply@xtra4u.com';
+        
+        // Initiate payment
         $paymentResult = $this->paymentService->initiatePayment(
             $order,
-            $validated['customer_email'],
+            $vendorEmail,
             (float) $price
         );
 
@@ -205,9 +208,9 @@ class PurchaseController extends Controller
                 $basePrice = $resellerProduct->base_price;
                 $markupPrice = $resellerProduct->markup_price;
                 
-                // Calculate commissions (1% each)
-                $ownerCommission = round($basePrice * 0.01, 2);
-                $resellerCommission = round($markupPrice * 0.01, 2);
+                // Calculate commissions (2% each)
+                $ownerCommission = round($basePrice * 0.02, 2);
+                $resellerCommission = round($markupPrice * 0.02, 2);
                 $totalPlatformCommission = $ownerCommission + $resellerCommission;
                 
                 // Calculate earnings (after commission)
@@ -311,8 +314,8 @@ class PurchaseController extends Controller
                     Mail::to($resellerVendor->email)->send(new OrderPlacedMail($order, $resellerVendor, 'reseller', $resellerEarning));
                 }
             } else {
-                // **REGULAR ORDER - Standard 1% commission**
-                $commission = round($amountPaid * 0.01, 2);
+                // **REGULAR ORDER - Standard 2% commission**
+                $commission = round($amountPaid * 0.02, 2);
                 $vendorEarnings = round($amountPaid - $commission, 2);
 
                 $order = Order::create([
