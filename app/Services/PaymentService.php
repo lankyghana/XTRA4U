@@ -16,13 +16,17 @@ use Illuminate\Support\Facades\Mail;
 
 class PaymentService
 {
-    protected PaystackPaymentService $paystackService;
+    protected GatewayManager $gatewayManager;
+    protected ?object $paymentGateway;
     protected ?SmsService $smsService;
+    protected ?MomoPayoutService $payoutService;
 
-    public function __construct(PaystackPaymentService $paystackService, ?SmsService $smsService = null)
+    public function __construct(?GatewayManager $gatewayManager = null)
     {
-        $this->paystackService = $paystackService;
-        $this->smsService = $smsService;
+        $this->gatewayManager = $gatewayManager ?? new GatewayManager();
+        $this->paymentGateway = $this->gatewayManager->getPaymentService();
+        $this->smsService = $this->gatewayManager->getSmsService();
+        $this->payoutService = $this->gatewayManager->getPayoutService();
     }
 
     /**
@@ -30,8 +34,16 @@ class PaymentService
      */
     public function initiatePayment(Order $order, string $email, float $amount): array
     {
-        // Request payment via Paystack (returns authorization URL)
-        $result = $this->paystackService->requestPayment($order, $email, $amount);
+        if (!$this->paymentGateway) {
+            return [
+                'success' => false,
+                'message' => 'No active payment gateway configured.',
+                'reference' => null,
+            ];
+        }
+
+        // Request payment via active gateway (returns authorization URL)
+        $result = $this->paymentGateway->requestPayment($order, $email, $amount);
 
         if ($result['success']) {
             $order->update([
@@ -75,7 +87,7 @@ class PaymentService
     protected function completeRegularOrder(Order $order): bool
     {
         $amountPaid = (float) $order->amount_paid;
-        $commission = round($amountPaid * 0.01, 2);
+        $commission = round($amountPaid * 0.02, 2);
         $vendorEarnings = round($amountPaid - $commission, 2);
 
         // Create transaction
@@ -160,9 +172,9 @@ class PaymentService
         $basePrice = $resellerProduct->base_price;
         $markupPrice = $resellerProduct->markup_price;
 
-        // Calculate commissions (1% each)
-        $ownerCommission = round($basePrice * 0.01, 2);
-        $resellerCommission = round($markupPrice * 0.01, 2);
+        // Calculate commissions (2% each)
+        $ownerCommission = round($basePrice * 0.02, 2);
+        $resellerCommission = round($markupPrice * 0.02, 2);
         $totalPlatformCommission = $ownerCommission + $resellerCommission;
 
         // Calculate earnings (after commission)
@@ -315,7 +327,14 @@ class PaymentService
      */
     public function handleWebhook(string $reference): array
     {
-        $result = $this->paystackService->verifyPayment($reference);
+        if (!$this->paymentGateway) {
+            return [
+                'success' => false,
+                'message' => 'No active payment gateway configured.',
+            ];
+        }
+        
+        $result = $this->paymentGateway->verifyPayment($reference);
 
         if (!$result['success']) {
             return $result;
@@ -375,7 +394,14 @@ class PaymentService
      */
     public function checkPaymentStatus(string $reference): array
     {
-        return $this->paystackService->verifyPayment($reference);
+        if (!$this->paymentGateway) {
+            return [
+                'success' => false,
+                'message' => 'No active payment gateway configured.',
+            ];
+        }
+        
+        return $this->paymentGateway->verifyPayment($reference);
     }
 
     /**
@@ -383,7 +409,18 @@ class PaymentService
      */
     public function getBalance(): array
     {
-        return $this->moolreService->getBalance();
+        if (!$this->payoutService) {
+            return [
+                'success' => false,
+                'message' => 'No active payout gateway configured.',
+            ];
+        }
+        
+        $balance = $this->payoutService->getBalance();
+        return [
+            'success' => $balance !== null,
+            'balance' => $balance ?? 0,
+        ];
     }
 
     /**
@@ -391,8 +428,8 @@ class PaymentService
      */
     public function processPayment(Order $order, $recipientPhone, $amount)
     {
-        $commission = round($amount * 0.01, 2);
-        $vendorEarning = round($amount * 0.99, 2);
+        $commission = round($amount * 0.02, 2);
+        $vendorEarning = round($amount * 0.98, 2);
 
         $transaction = Transaction::create([
             'order_id' => $order->id,
@@ -418,5 +455,50 @@ class PaymentService
         }
 
         return $transaction;
+    }
+
+    /**
+     * Get available payment gateways
+     */
+    public function getAvailablePaymentGateways(): array
+    {
+        return $this->gatewayManager->getAllPaymentServices();
+    }
+
+    /**
+     * Switch to a different payment gateway
+     */
+    public function switchPaymentGateway(string $gatewayName): bool
+    {
+        $newGateway = $this->gatewayManager->getPaymentServiceByGateway($gatewayName);
+        if ($newGateway && $newGateway->isConfigured()) {
+            $this->paymentGateway = $newGateway;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Get current payment gateway info
+     */
+    public function getCurrentGatewayInfo(): ?array
+    {
+        if (!$this->paymentGateway) {
+            return null;
+        }
+
+        return [
+            'name' => get_class($this->paymentGateway),
+            'environment' => method_exists($this->paymentGateway, 'getEnvironment') ? $this->paymentGateway->getEnvironment() : 'unknown',
+            'configured' => $this->paymentGateway->isConfigured(),
+        ];
+    }
+
+    /**
+     * Check if payment system is ready
+     */
+    public function isReady(): bool
+    {
+        return $this->paymentGateway && $this->paymentGateway->isConfigured();
     }
 }
