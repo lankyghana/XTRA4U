@@ -1,0 +1,15 @@
+deployment:
+  tasks:
+    # Set base path
+    - export DEPLOYPATH=/home/xtraucom/public_html
+
+    # Deploy Laravel core
+    - /bin/mkdir -p $DEPLOYPATH/core
+    - /bin/cp -R app bootstrap config database resources routes storage vendor artisan composer.json composer.lock $DEPLOYPATH/core
+
+    # Deploy public assets
+    - /bin/cp -R public/* $DEPLOYPATH/
+
+    # Permissions
+    - /bin/chmod -R 755 $DEPLOYPATH/core
+    - /bin/chmod -R 775 $DEPLOYPATH/core/storage $DEPLOYPATH/core/bootstrap/cache
