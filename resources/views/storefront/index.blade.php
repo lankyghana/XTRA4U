@@ -40,11 +40,14 @@
                         </svg>
                     </x-button>
                     
-                    <x-button href="{{ route('checkout.show') }}" 
+                    <x-button href="{{ route('order.status') }}" 
                               variant="outline" 
                               size="lg"
                               class="w-full sm:w-auto">
-                        Explore Services
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+                        </svg>
+                        Order Status
                     </x-button>
                 </div>
                 
@@ -67,25 +70,17 @@
             
             <!-- Hero Image/Visual -->
             <div class="relative">
-                <div class="relative mx-auto w-full max-w-md lg:max-w-none">
-                    <!-- Mobile mockup or illustration -->
-                    <div class="bg-white rounded-2xl shadow-2xl p-8 transform rotate-3 hover:rotate-0 transition-transform duration-500">
-                        <div class="space-y-4">
-                            <div class="flex items-center space-x-3">
-                                <div class="w-3 h-3 bg-red-400 rounded-full"></div>
-                                <div class="w-3 h-3 bg-yellow-400 rounded-full"></div>
-                                <div class="w-3 h-3 bg-green-400 rounded-full"></div>
-                            </div>
-                            <div class="space-y-3">
-                                <div class="h-4 bg-linear-to-r from-brand-deep-blue/30 to-brand-green/30 rounded"></div>
-                                <div class="h-4 bg-gray-200 rounded w-2/3"></div>
-                                <div class="h-4 bg-gray-200 rounded w-1/2"></div>
-                            </div>
-                            <div class="mt-6 flex space-x-2">
-                                <div class="flex-1 h-8 bg-brand-green rounded-lg"></div>
-                                <div class="w-8 h-8 bg-gray-200 rounded-lg"></div>
-                            </div>
-                        </div>
+                <div class="relative mx-auto w-full max-w-lg lg:max-w-xl">
+                    <!-- Hero Image -->
+                    <div class="relative transform hover:scale-105 transition-transform duration-500">
+                        <img 
+                            src="{{ asset('images/hero-image.png') }}" 
+                            alt="XTRA4U - Your Gateway to Digital Services" 
+                            class="w-full h-auto rounded-2xl shadow-2xl object-cover"
+                            loading="eager"
+                        >
+                        <!-- Decorative glow effect behind image -->
+                        <div class="absolute -inset-4 bg-gradient-to-r from-brand-deep-blue/20 to-brand-xtra-green/20 rounded-3xl blur-2xl -z-10"></div>
                     </div>
                 </div>
             </div>
@@ -121,15 +116,31 @@
             
             <!-- Feature 2 -->
             <x-card hover="true" class="text-center group">
-                <div class="w-16 h-16 bg-brand-green rounded-full flex items-center justify-center mx-auto group-hover:scale-110 transition-transform duration-200">
+                <div class="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto group-hover:scale-110 transition-transform duration-200">
                     <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
                 </div>
                 <h3 class="mt-6 text-xl font-semibold text-gray-900">Verified Vendors</h3>
                 <p class="mt-3 text-gray-600">
-                    All vendors go through our strict verification process to ensure quality and reliability.
+                    All vendors go through our strict verification process to ensure quality and reliability. 
+                    Every vendor is thoroughly vetted, background checked, and continuously monitored to maintain 
+                    the highest standards of service delivery across our platform.
                 </p>
+                <div class="mt-4 flex items-center justify-center space-x-4 text-sm text-green-600 font-semibold">
+                    <span class="flex items-center">
+                        <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                        </svg>
+                        ID Verified
+                    </span>
+                    <span class="flex items-center">
+                        <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                        </svg>
+                        Quality Assured
+                    </span>
+                </div>
             </x-card>
             
             <!-- Feature 3 -->
@@ -188,9 +199,18 @@
                 
                 <!-- Step 3 -->
                 <div class="text-center">
-                    <div class="flex items-center justify-center w-16 h-16 bg-brand-green text-white rounded-full text-xl font-bold mx-auto">3</div>
+                    <div class="flex items-center justify-center w-16 h-16 bg-brand-bright-blue text-white rounded-full text-xl font-bold mx-auto">3</div>
                     <h3 class="mt-6 text-xl font-semibold text-gray-900">Get Service</h3>
-                    <p class="mt-3 text-gray-600">Receive your service and track the progress in real-time.</p>
+                    <p class="mt-3 text-gray-600">
+                        Receive your service instantly and track the progress in real-time. Get SMS notifications, 
+                        email confirmations, and access to 24/7 customer support throughout your service delivery.
+                    </p>
+                    <div class="mt-4 inline-flex items-center text-sm text-green-600 font-semibold">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        Usually within 5 minutes
+                    </div>
                 </div>
             </div>
         </div>
