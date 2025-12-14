@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="<?php echo e(str_replace('_', '-', app()->getLocale())); ?>" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="<?php echo e(csrf_token()); ?>">
+    <link rel="icon" type="image/png" sizes="32x32" href="<?php echo e(asset('favicon-32x32.png')); ?>">
+    <title><?php echo $__env->yieldContent('title', 'XTRA4U - Digital Services Platform'); ?></title>
+    <meta name="description" content="<?php echo $__env->yieldContent('description', 'XTRA4U - Your trusted platform for digital services, vendor management, and secure transactions.'); ?>">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.bunny.net">
+    <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700&display=swap" rel="stylesheet" />
+    
+    <!-- Vite Assets -->
+    <?php echo app('Illuminate\Foundation\Vite')(['resources/css/app.css', 'resources/js/app.js']); ?>
+    
+    
+    <script>
+        function vendorStore(opts = {}) {
+            return {
+                // State properties
+                vendorId: opts.vendorId || null,
+                categories: opts.categories || [],
+                services: opts.services || [],
+                selectedCategory: null,
+                selectedService: null,
+                selectedPackage: null,
+                step: 1,
+                submitting: false,
+                orderMessage: '',
+                recipientPhone: '',
+                payerPhone: '',
+                loadingServices: false,
+                loadingPackages: false,
+                orderRoute: opts.orderRoute || '',
+
+                // Getters
+                get filteredServices() {
+                    if (!this.selectedCategory) return [];
+                    try {
+                        const cat = String(this.selectedCategory.value || '').toLowerCase().trim();
+                        return (this.services || []).filter((s) => {
+                            const sc = String(s.category || '').toLowerCase().trim();
+                            if (!sc && !cat) return true;
+                            if (sc === cat) return true;
+                            if (sc.includes(cat) || cat.includes(sc)) return true;
+                            return false;
+                        });
+                    } catch (e) {
+                        return [];
+                    }
+                },
+
+                get availablePackages() {
+                    return this.selectedService?.packages || [];
+                },
+
+                // Initialization
+                init() {
+                    this.selectedCategory = null;
+                    // Auto-select first available category after Alpine binds
+                    this.$nextTick(() => {
+                        const firstAvailable = this.categories.find((cat) => {
+                            const key = String(cat.value || '').toLowerCase().trim();
+                            return (this.services || []).some((service) => {
+                                const sc = String(service.category || '').toLowerCase().trim();
+                                return sc === key || sc.includes(key) || key.includes(sc);
+                            });
+                        });
+                        if (firstAvailable) {
+                            this.selectCategory(firstAvailable);
+                            // Optionally pre-select the first service under that category
+                            const matches = this.filteredServices;
+                            if (matches && matches.length) {
+                                this.selectedService = matches[0];
+                            }
+                        }
+                    });
+                },
+
+                // Methods
+                selectCategory(cat) {
+                    if (!cat) return;
+                    this.selectedCategory = cat;
+                    this.selectedService = null;
+                    this.selectedPackage = null;
+                    this.step = 2;
+                },
+
+                selectService(svc) {
+                    if (!svc) return;
+                    
+                    // If this is an AFA service, redirect to AFA registration page
+                    if (svc.is_afa && svc.afa_url) {
+                        window.location.href = svc.afa_url;
+                        return;
+                    }
+                    
+                    this.selectedService = svc;
+                    this.selectedPackage = null;
+                    this.step = 3;
+                },
+
+                selectPackage(pkg) {
+                    if (!pkg) return;
+                    
+                    // If this is an AFA package, redirect to AFA registration page
+                    if (pkg.is_afa && pkg.afa_url) {
+                        window.location.href = pkg.afa_url;
+                        return;
+                    }
+                    
+                    this.selectedPackage = pkg;
+                    this.step = 4;
+                },
+
+                formatCurrency(v) {
+                    if (v === null || typeof v === 'undefined') return '';
+                    try {
+                        return new Intl.NumberFormat('en-GH', { style: 'currency', currency: 'GHS' }).format(v);
+                    } catch (error) {
+                        return 'GHS ' + Number(v).toFixed(2);
+                    }
+                },
+
+                async submitOrder() {
+                    if (!this.selectedPackage) {
+                        this.orderMessage = 'Please select a package first.';
+                        return;
+                    }
+
+                    this.submitting = true;
+                    this.orderMessage = '';
+
+                    const payload = {
+                        vendor_id: this.vendorId,
+                        category_id: this.selectedCategory?.value,
+                        service_id: this.selectedService?.key,
+                        package_id: this.selectedPackage?.id,
+                        amount: this.selectedPackage?.price,
+                        recipient_phone: this.recipientPhone,
+                        payer_phone: this.payerPhone,
+                        is_reseller_product: this.selectedPackage?.is_reseller_product ? 1 : 0,
+                        reseller_product_id: this.selectedPackage?.reseller_product_id || null,
+                        original_product_id: this.selectedPackage?.original_product_id || this.selectedPackage?.id,
+                    };
+
+                    try {
+                        const res = await fetch(this.orderRoute, {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (!res.ok) {
+                            const text = await res.text();
+                            throw new Error(text || 'Order submission failed');
+                        }
+
+                        const resp = await res.json();
+                        if (resp.success) {
+                            if (resp.redirect) {
+                                window.location.href = resp.redirect;
+                                return;
+                            }
+                            this.orderMessage = resp.message || 'Order submitted successfully';
+                        } else {
+                            this.orderMessage = resp.message || 'Order failed';
+                        }
+                    } catch (err) {
+                        console.error(err);
+                        this.orderMessage = err.message || 'An error occurred while submitting the order';
+                    } finally {
+                        this.submitting = false;
+                    }
+                }
+            };
+        }
+    </script>
+    
+    <?php echo $__env->yieldPushContent('head-scripts'); ?>
+    
+    <?php echo $__env->yieldPushContent('styles'); ?>
+</head>
+<body class="h-full bg-gray-50 antialiased" x-data="{ mobileMenuOpen: false }">
+    <!-- Header/Navigation -->
+    <?php echo $__env->make('components.navigation', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
+    
+    <!-- Main Content -->
+    <main class="min-h-screen">
+        <!-- Alert Messages -->
+        <?php if(session('success')): ?>
+            <?php echo $__env->make('components.alert', ['type' => 'success', 'message' => session('success')], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
+        <?php endif; ?>
+        
+        <?php if(session('error')): ?>
+            <?php echo $__env->make('components.alert', ['type' => 'error', 'message' => session('error')], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
+        <?php endif; ?>
+        
+        <?php if($errors->any()): ?>
+            <?php echo $__env->make('components.alert', ['type' => 'error', 'message' => 'Please fix the errors below.'], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
+        <?php endif; ?>
+        
+        <?php echo $__env->yieldContent('content'); ?>
+    </main>
+    
+    <!-- Footer -->
+    <?php echo $__env->make('components.footer', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
+    
+    <!-- WhatsApp Channel Widget -->
+    <?php echo $__env->make('components.whatsapp-widget', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
+    
+    <!-- CSRF Token Auto-Refresh Script -->
+    <script>
+        (function() {
+            // Refresh CSRF token when page becomes visible (after tab switch or wake from sleep)
+            document.addEventListener('visibilitychange', function() {
+                if (document.visibilityState === 'visible') {
+                    refreshCsrfToken();
+                }
+            });
+
+            // Also refresh when window regains focus
+            window.addEventListener('focus', function() {
+                refreshCsrfToken();
+            });
+
+            // Refresh token every 30 minutes to prevent expiration
+            setInterval(refreshCsrfToken, 30 * 60 * 1000);
+
+            function refreshCsrfToken() {
+                fetch('/csrf-token', {
+                    method: 'GET',
+                    credentials: 'same-origin',
+                    headers: { 'Accept': 'application/json' }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.token) {
+                        // Update meta tag
+                        const meta = document.querySelector('meta[name="csrf-token"]');
+                        if (meta) meta.setAttribute('content', data.token);
+                        
+                        // Update all hidden CSRF inputs in forms
+                        document.querySelectorAll('input[name="_token"]').forEach(input => {
+                            input.value = data.token;
+                        });
+                    }
+                })
+                .catch(err => console.log('CSRF refresh skipped'));
+            }
+        })();
+    </script>
+    
+    <?php echo $__env->yieldPushContent('scripts'); ?>
+</body>
+</html>
+<?php /**PATH C:\Users\dktakyi001\Desktop\XTRA4U\resources\views/layouts/app.blade.php ENDPATH**/ ?>
