@@ -16,7 +16,7 @@
         </div>
         <div class="mb-6">
             <h3 class="text-lg font-semibold mb-2">Earnings Summary</h3>
-            <p>Total Earnings (after 1% commission): <span class="font-bold text-green-700">₵{{ number_format($totalEarnings, 2) }}</span></p>
+            <p>Total Earnings (after 2% commission): <span class="font-bold text-green-700">₵{{ number_format($totalEarnings, 2) }}</span></p>
         </div>
         <div class="mb-6">
             <h3 class="text-lg font-semibold mb-2">Order List</h3>
