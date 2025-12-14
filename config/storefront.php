@@ -23,5 +23,10 @@ return [
             'icon' => 'chart',
             'description' => 'Access exam results and status updates.',
         ],
+        'afa' => [
+            'label' => 'AFA Registration',
+            'icon' => 'clipboard',
+            'description' => 'Register for AFA (Agricultural Finance Authority) services.',
+        ],
     ],
 ];
