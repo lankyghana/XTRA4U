@@ -8,7 +8,31 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
-    <div class="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <!-- Simple Header -->
+    <header class="bg-white shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <!-- Logo -->
+                <a href="{{ route('storefront.index') }}" class="flex items-center">
+                    <div class="w-8 h-8 bg-brand-deep-blue rounded-lg flex items-center justify-center">
+                        <span class="text-white font-bold text-sm">X4U</span>
+                    </div>
+                    <span class="ml-2 text-xl font-bold text-gray-900">XTRA4U</span>
+                </a>
+                
+                <!-- Back to Home -->
+                <a href="{{ route('storefront.index') }}" 
+                   class="inline-flex items-center text-sm font-medium text-gray-600 hover:text-brand-deep-blue transition-colors">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                    </svg>
+                    Back to Home
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <div class="min-h-[calc(100vh-4rem)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
         <div class="max-w-md w-full space-y-8">
             <!-- Header Section -->
             <div class="text-center">
@@ -101,7 +125,8 @@
                                 </label>
                             </div>
                             <div class="text-sm">
-                                <a href="#" class="font-medium text-brand-deep-blue hover:text-brand-bright-blue transition-colors">
+                                <a href="{{ route('vendor.password.forgot') }}" 
+                                   class="font-medium text-brand-deep-blue hover:text-brand-bright-blue transition-colors">
                                     Forgot password?
                                 </a>
                             </div>
