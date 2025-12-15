@@ -2,14 +2,13 @@ import './bootstrap';
 import Alpine from 'alpinejs';
 import collapse from '@alpinejs/collapse';
 
-// Register Alpine plugins
-Alpine.plugin(collapse);
-
 // Make Alpine available globally
 window.Alpine = Alpine;
 
 // Alpine.js global store for app state
 document.addEventListener('alpine:init', () => {
+    // Register Alpine plugins
+    Alpine.plugin(collapse);
     Alpine.store('app', {
         mobileMenuOpen: false,
         userMenuOpen: false,
@@ -97,7 +96,6 @@ document.addEventListener('alpine:init', () => {
         handleVendorChange() {
             this.selectedService = null;
         },
-
         selectService(service) {
             this.selectedService = service;
         },
