@@ -55,37 +55,7 @@
         </div>
 
         <!-- Stats Cards -->
-        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <!-- Gross Sales Card -->
-            <div class="relative overflow-hidden bg-gradient-to-br from-green-500 to-green-600 rounded-2xl shadow-lg group">
-                <div class="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                <div class="absolute -right-8 -top-8 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
-                <div class="absolute -left-4 -bottom-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
-                <div class="relative p-6">
-                    <div class="flex items-start justify-between">
-                        <div class="flex-1">
-                            <div class="flex items-center gap-2 mb-1">
-                                <span class="text-green-100 text-sm font-medium">Gross Sales</span>
-                                <span class="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-white/20 text-white rounded-full" x-text="filterLabel"></span>
-                            </div>
-                            <div class="mt-3">
-                                <span x-show="loading" class="inline-block w-8 h-8 border-3 border-white/30 border-t-white rounded-full animate-spin"></span>
-                                <div x-show="!loading" class="flex items-baseline gap-1">
-                                    <span class="text-white/70 text-lg font-medium">GHS</span>
-                                    <span class="text-3xl font-bold text-white tracking-tight" x-text="sales"></span>
-                                </div>
-                            </div>
-                            <p class="mt-2 text-green-100/80 text-xs">Total revenue before fees</p>
-                        </div>
-                        <div class="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center ring-1 ring-white/30">
-                            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-1">
             <!-- Total Earnings Card -->
             <div class="relative overflow-hidden bg-gradient-to-br from-brand-deep-blue to-brand-bright-blue rounded-2xl shadow-lg group">
                 <div class="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>

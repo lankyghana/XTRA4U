@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('favicon-32x32.png') }}">
     <title>Vendor Login - XTRA4U</title>
     <meta name="description" content="Secure login portal for XTRA4U vendors">
     @vite(['resources/css/app.css', 'resources/js/app.js'])

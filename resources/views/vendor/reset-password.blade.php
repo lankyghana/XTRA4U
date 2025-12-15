@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('favicon-32x32.png') }}">
     <title>Reset Password - XTRA4U Vendor Portal</title>
     <meta name="description" content="Create a new password for your XTRA4U vendor account">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
