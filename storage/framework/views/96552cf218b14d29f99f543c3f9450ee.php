@@ -133,10 +133,10 @@
         <h2 class="text-2xl font-semibold mt-2">Choose a category</h2>
 
         <div class="mt-4">
-            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 mt-3">
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mt-3">
                 <?php $__empty_1 = true; $__currentLoopData = $categories; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $category): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
                     <button type="button"
-                        class="flex flex-col items-center justify-center p-6 rounded-2xl border text-lg shadow-md transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 min-h-[110px]"
+                        class="flex flex-col items-center justify-center p-5 rounded-xl border text-base shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 min-h-[80px]"
                         :class="selectedCategory && selectedCategory.value === '<?php echo e($category['value']); ?>' ? 'bg-purple-100 border-purple-400 text-purple-700 font-semibold ring-2 ring-purple-300' : 'bg-white border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-200'"
                         @click='selectCategory(<?php echo json_encode($category, 15, 512) ?>)'>
                         <span class="text-center font-medium"><?php echo e($category['label']); ?></span>

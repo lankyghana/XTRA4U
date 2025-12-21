@@ -7,7 +7,6 @@ use App\Models\Product;
 use App\Models\ResellerProduct;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class ProductController extends Controller
@@ -111,19 +110,6 @@ class ProductController extends Controller
         }
 
         return redirect()->route('vendor.products.index')->with('success', 'Product updated successfully.');
-    }
-
-    // Delete product
-    public function destroy($id)
-    {
-        $product = $this->findVendorProduct($id);
-
-        DB::transaction(function () use ($product) {
-            ResellerProduct::where('product_id', $product->id)->delete();
-            $product->delete();
-        });
-
-        return redirect()->route('vendor.products.index')->with('success', 'Product deleted successfully.');
     }
 
     protected function resolveVendor()

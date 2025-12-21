@@ -31,7 +31,7 @@
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-4">
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <h2 class="text-lg font-bold text-gray-900">Gross Sales</h2>
+                    <h2 class="text-lg font-bold text-gray-900">Sales Overview</h2>
                     <p class="text-sm text-gray-500">Track your revenue and earnings</p>
                 </div>
                 <div class="flex items-center gap-1 p-1 bg-gray-100 rounded-xl">
@@ -240,21 +240,13 @@
                 <h3 class="text-lg leading-6 font-bold text-gray-900 mb-4">Recent Orders</h3>
                 <div class="overflow-hidden rounded-lg border border-gray-200">
                     <x-table :headers="['Order ID', 'Recipient', 'Amount', 'Status']">
-                        @forelse ($orders->where('payment_status', 'completed')->take(5) as $order)
+                        @forelse ($orders->take(5) as $order)
                             <tr class="hover:bg-gray-50 transition-colors duration-150">
                                 <td class="px-6 py-4 text-sm font-medium text-gray-900">#{{ $order->id }}</td>
                                 <td class="px-6 py-4 text-sm text-gray-900">{{ $order->recipient_phone_number }}</td>
                                 <td class="px-6 py-4 text-sm text-gray-900">GHS {{ number_format($order->amount_paid, 2) }}</td>
                                 <td class="px-6 py-4 text-sm">
-                                    @if($order->status === 'Completed')
-                                        <x-badge variant="completed">Completed</x-badge>
-                                    @elseif($order->status === 'Processing')
-                                        <x-badge variant="processing">Processing</x-badge>
-                                    @elseif($order->status === 'Cancelled')
-                                        <x-badge variant="warning">Cancelled</x-badge>
-                                    @else
-                                        <x-badge variant="pending">Pending</x-badge>
-                                    @endif
+                                    <x-badge :variant="$order->status === 'Completed' ? 'completed' : 'pending'">{{ $order->status }}</x-badge>
                                 </td>
                             </tr>
                         @empty

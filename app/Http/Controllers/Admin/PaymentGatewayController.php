@@ -350,24 +350,6 @@ class PaymentGatewayController extends Controller
                         $envContent = $this->setEnvValue($envContent, 'HUBTEL_BASE_URL', $configData['base_url']);
                     }
                     break;
-
-                case 'moolre':
-                    if (isset($configData['api_key'])) {
-                        $envContent = $this->setEnvValue($envContent, 'MOOLRE_API_KEY', $configData['api_key']);
-                    }
-                    if (isset($configData['api_secret'])) {
-                        $envContent = $this->setEnvValue($envContent, 'MOOLRE_API_SECRET', $configData['api_secret']);
-                    }
-                    if (isset($configData['webhook_secret'])) {
-                        $envContent = $this->setEnvValue($envContent, 'MOOLRE_WEBHOOK_SECRET', $configData['webhook_secret']);
-                    }
-                    if (isset($configData['base_url'])) {
-                        $envContent = $this->setEnvValue($envContent, 'MOOLRE_BASE_URL', $configData['base_url']);
-                    }
-                    if (isset($configData['merchant_id'])) {
-                        $envContent = $this->setEnvValue($envContent, 'MOOLRE_MERCHANT_ID', $configData['merchant_id']);
-                    }
-                    break;
             }
 
             File::put($envPath, $envContent);

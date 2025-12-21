@@ -19,7 +19,6 @@ class PaymentGatewayConfig extends Model
     public const GATEWAY_BULKCLIX = 'bulkclix';
     public const GATEWAY_HUBTEL = 'hubtel';
     public const GATEWAY_MOMO = 'momo';
-    public const GATEWAY_MOOLRE = 'moolre';
 
     public const ENV_SANDBOX = 'sandbox';
     public const ENV_LIVE = 'live';
@@ -191,25 +190,6 @@ class PaymentGatewayConfig extends Model
                     'bank_transfer' => true,
                     'sms' => true,
                     'bulk_sms' => true,
-                ]
-            ],
-            // Moolre Gateway
-            'moolre' => [
-                'name' => 'Moolre',
-                'types' => [self::TYPE_PAYMENT_COLLECTION, self::TYPE_PAYOUT],
-                'config_fields' => [
-                    'merchant_id' => 'Merchant ID',
-                    'api_key' => 'API Key',
-                    'api_secret' => 'API Secret',
-                    'base_url' => 'Base URL',
-                ],
-                'default_config' => [
-                    'base_url' => 'https://api.moolre.com',
-                ],
-                'supported_features' => [
-                    'mobile_money' => true,
-                    'bank_transfer' => true,
-                    'payout' => true,
                 ]
             ],
         ];

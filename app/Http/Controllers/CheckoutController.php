@@ -128,66 +128,30 @@ class CheckoutController extends Controller
         return view('checkout.success', compact('order'));
     }	public function process(Request $request)
 	{
-		try {
-			$validated = $request->validate([
-				'vendor_id' => 'required|exists:vendors,id',
-				'category_id' => 'nullable|string',
-				'service_id' => 'required|string',
-				'package_id' => 'required',
-				'amount' => 'required|numeric|min:0.1',
-				'recipient_phone' => 'required|string',
-				'payer_phone' => 'required|string',
-				'is_reseller_product' => 'sometimes|boolean',
-				'reseller_product_id' => 'nullable',
-				'original_product_id' => 'nullable',
-			]);
-		} catch (\Illuminate\Validation\ValidationException $e) {
-			return response()->json([
-				'success' => false,
-				'message' => 'Validation failed.',
-				'errors' => $e->errors(),
-			], 422);
-		}
-
-		$isResellerOrder = $request->boolean('is_reseller_product', false);
-		$resellerProductId = $validated['reseller_product_id'] ?? null;
-		$ownerVendorId = null;
-		$resellerVendorId = null;
-		$servicePurchased = $validated['service_id']; // Default to service_id (fallback)
-
-		// Fetch the actual product name from the database
-		$productId = $validated['original_product_id'] ?? $validated['package_id'];
-		if ($productId && is_numeric($productId)) {
-			$product = Product::find($productId);
-			if ($product) {
-				$servicePurchased = $product->name;
-			}
-		}
-
-		// If this is a reseller product, fetch the owner and reseller vendor IDs from the ResellerProduct
-		if ($isResellerOrder && $resellerProductId) {
-			$resellerProduct = ResellerProduct::with('product')->find($resellerProductId);
-			if ($resellerProduct) {
-				$ownerVendorId = $resellerProduct->owner_vendor_id;
-				$resellerVendorId = $resellerProduct->reseller_vendor_id;
-				// Use the product name from the reseller product relationship
-				if ($resellerProduct->product) {
-					$servicePurchased = $resellerProduct->product->name;
-				}
-			}
-		}
+		$validated = $request->validate([
+			'vendor_id' => 'required|exists:vendors,id',
+			'category_id' => 'nullable|string',
+			'service_id' => 'required|string',
+			'package_id' => 'required',
+			'amount' => 'required|numeric|min:0.1',
+			'recipient_phone' => 'required|string',
+			'payer_phone' => 'required|string',
+			'is_reseller_product' => 'sometimes|boolean',
+			'reseller_product_id' => 'nullable',
+			'original_product_id' => 'nullable',
+		]);
 
 		$order = Order::create([
 			'recipient_phone_number' => $validated['recipient_phone'],
 			'mobile_money_number' => $validated['payer_phone'],
-			'service_purchased' => $servicePurchased,
+			'service_purchased' => $validated['service_id'],
 			'amount_paid' => $validated['amount'],
 			'vendor_id' => $validated['vendor_id'],
 			'vendor_service_id' => $validated['original_product_id'] ?? $validated['package_id'],
-			'reseller_product_id' => $resellerProductId,
-			'owner_vendor_id' => $ownerVendorId,
-			'reseller_vendor_id' => $resellerVendorId,
-			'is_reseller_order' => $isResellerOrder,
+			'reseller_product_id' => $validated['reseller_product_id'] ?? null,
+			'owner_vendor_id' => $request->owner_vendor_id ?? null,
+			'reseller_vendor_id' => $request->reseller_vendor_id ?? null,
+			'is_reseller_order' => $request->boolean('is_reseller_product', false),
 			'status' => 'pending',
 			'payment_status' => 'pending',
 			'payment_gateway' => 'paystack',

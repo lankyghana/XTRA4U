@@ -23,52 +23,25 @@ class PaymentCallbackController extends Controller
 			return response()->json(['success' => false, 'message' => 'Missing payment reference'], 400);
 		}
 
-		// Find order FIRST to prevent orphaned verifications
+		$verification = $this->paymentService->checkPaymentStatus($reference);
+		if (! ($verification['success'] ?? false)) {
+			Log::warning('Paystack verification failed', ['reference' => $reference, 'response' => $verification]);
+			return response()->json(['success' => false, 'message' => $verification['message'] ?? 'Verification failed'], 400);
+		}
+
 		$order = Order::where('payment_reference', $reference)->first();
 		if (! $order) {
-			Log::warning('Payment callback for unknown order', ['reference' => $reference]);
 			return response()->json(['success' => false, 'message' => 'Order not found for reference'], 404);
 		}
 
-		// Check if already completed (idempotency)
-		if ($order->payment_status === 'completed') {
-			Log::info('Payment already completed', ['order_id' => $order->id, 'reference' => $reference]);
-			return redirect()->route('checkout.success', ['order' => $order->id]);
-		}
-
-		// VERIFY payment with gateway before completing
-		$verification = $this->paymentService->verifyPayment($reference);
-		if (! ($verification['success'] ?? false)) {
-			Log::warning('Payment verification failed - deleting order', [
-				'order_id' => $order->id,
-				'reference' => $reference,
-				'response' => $verification,
-			]);
-
-			// Delete failed order (unsuccessful payments not recorded)
-			$this->paymentService->markTransactionFailed($order, 'Gateway verification failed');
-
-			return response()->json([
-				'success' => false,
-				'message' => $verification['message'] ?? 'Payment verification failed',
-			], 400);
-		}
-
-		// Update order amount if gateway returned it
+		// Update order amount if Paystack returned it (kobo/pesewas)
 		$amount = data_get($verification, 'data.amount');
 		if ($amount) {
-			// Convert from kobo/pesewas to main currency if needed
 			$order->amount_paid = $amount / 100;
-			$order->save();
 		}
 
-		// Complete order ONLY after successful verification
+		// Complete order flows (wallet, notifications, transactions)
 		$this->paymentService->completeOrder($order);
-
-		Log::info('Payment verified and order completed', [
-			'order_id' => $order->id,
-			'reference' => $reference,
-		]);
 
 		return redirect()->route('checkout.success', ['order' => $order->id]);
 	}

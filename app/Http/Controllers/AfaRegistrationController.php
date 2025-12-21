@@ -3,18 +3,20 @@
 namespace App\Http\Controllers;
 
 use App\Models\AfaRegistration;
-use App\Models\Order;
-use App\Models\PaymentGatewayConfig;
 use App\Models\Vendor;
-use App\Services\GatewayManager;
-use App\Services\PaymentService;
+use App\Services\PaystackPaymentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class AfaRegistrationController extends Controller
 {
-    // Remove paymentService property and constructor assignment
+    protected PaystackPaymentService $paymentService;
+
+    public function __construct(PaystackPaymentService $paymentService)
+    {
+        $this->paymentService = $paymentService;
+    }
 
     /**
      * Show the AFA registration form for a vendor
@@ -62,12 +64,6 @@ class AfaRegistrationController extends Controller
      */
     public function store(Request $request, Vendor $vendor)
     {
-        $gatewayManager = app(GatewayManager::class);
-        $activePaymentGateway = $gatewayManager->getPaymentService();
-
-        if (!$activePaymentGateway) {
-            return back()->with('error', 'Payment gateway is currently unavailable. Please try again later.');
-        }
         // Build validation rules based on ID type
         $idType = $request->input('id_type');
         $idNumberRules = ['required', 'string', 'max:50'];
@@ -144,16 +140,8 @@ class AfaRegistrationController extends Controller
             $resellerEarning = 0;
         }
 
-        $registration = null;
-        $order = null;
-        $gatewayName = 'custom';
-        $paymentEmail = $vendor->email;
-
         try {
             DB::beginTransaction();
-
-            // Ensure we always have a source vendor associated
-            $sourceVendorId = $sourceVendorId ?: $vendor->id;
 
             // Create the AFA registration
             $registration = AfaRegistration::create([
@@ -178,34 +166,43 @@ class AfaRegistrationController extends Controller
                 'reference' => AfaRegistration::generateReference(),
             ]);
 
-            // Determine gateway for the order
-            $gatewayConfig = PaymentGatewayConfig::getDefault(PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION);
-            $gatewayName = $gatewayConfig?->gateway_name ?? 'custom';
-
-            $orderData = [
-                'recipient_phone_number' => $registration->phone_number,
-                'mobile_money_number' => $request->input('payer_phone'),
-                'service_purchased' => 'AFA Registration - ' . $registration->full_name,
-                'amount_paid' => $afaPrice,
-                'vendor_id' => $sourceVendorId,
-                'status' => 'Pending',
-                'payment_status' => 'pending',
-                'payment_gateway' => $gatewayName,
-                'payment_reference' => null,
-                'platform_commission' => $platformCommission,
-                'owner_vendor_id' => $sourceVendorId,
-                'reseller_vendor_id' => $isResellerOrder ? $vendor->id : null,
-                'is_reseller_order' => $isResellerOrder,
-                'owner_earning' => $vendorEarning,
-                'reseller_earning' => $isResellerOrder ? $resellerEarning : null,
-                'base_price' => $isResellerOrder ? $basePrice : null,
-                'markup_price' => $isResellerOrder ? $markupPrice : null,
-            ];
-
-            $order = Order::create($orderData);
-
             DB::commit();
-        } catch (\Throwable $e) {
+
+            // Use the selling vendor's email for payment (reseller or direct)
+            $paymentEmail = $vendor->email;
+
+            // Initiate payment using the generic payment method
+            $paymentResult = $this->paymentService->initiatePayment(
+                $paymentEmail,
+                $afaPrice,
+                route('afa.callback'),
+                $registration->reference,
+                [
+                    'type' => 'afa_registration',
+                    'registration_id' => $registration->id,
+                    'vendor_id' => $sourceVendorId,
+                    'reseller_vendor_id' => $isResellerOrder ? $vendor->id : null,
+                    'customer_name' => $registration->full_name,
+                    'is_reseller_order' => $isResellerOrder,
+                ]
+            );
+
+            if ($paymentResult['success']) {
+                // Update registration with payment reference
+                $registration->update([
+                    'payment_reference' => $paymentResult['reference'],
+                    'payment_gateway' => 'paystack',
+                ]);
+
+                return redirect($paymentResult['authorization_url']);
+            }
+
+            // Payment initiation failed
+            $registration->update(['status' => AfaRegistration::STATUS_CANCELLED]);
+
+            return back()->with('error', 'Payment could not be initiated: ' . ($paymentResult['message'] ?? 'Unknown error'));
+
+        } catch (\Exception $e) {
             DB::rollBack();
             Log::error('AFA Registration Error', [
                 'vendor_id' => $vendor->id,
@@ -214,34 +211,6 @@ class AfaRegistrationController extends Controller
 
             return back()->with('error', 'An error occurred. Please try again.');
         }
-
-        // Initiate payment using the unified PaymentService (fresh instance per request)
-        $paymentService = new PaymentService($gatewayManager);
-        $paymentResult = $paymentService->initiatePayment(
-            $order,
-            $paymentEmail,
-            $afaPrice
-        );
-
-        if ($paymentResult['success']) {
-            $order->refresh();
-            // Update registration with payment reference
-            $registration->update([
-                'payment_reference' => $paymentResult['reference'],
-                'payment_gateway' => $order->payment_gateway ?? $gatewayName,
-            ]);
-
-            return redirect($paymentResult['authorization_url']);
-        }
-
-        // Payment initiation failed
-        $registration->update([
-            'status' => AfaRegistration::STATUS_CANCELLED,
-            'payment_status' => AfaRegistration::PAYMENT_FAILED,
-        ]);
-        $order?->delete();
-
-        return back()->with('error', 'Payment could not be initiated: ' . ($paymentResult['message'] ?? 'Unknown error'));
     }
 
     /**
@@ -262,24 +231,10 @@ class AfaRegistrationController extends Controller
             return redirect()->route('storefront.index')->with('error', 'Registration not found.');
         }
 
-        // Verify payment with the active gateway (fresh instance to pick current settings)
-        $paymentService = new PaymentService();
-        $verificationResult = $paymentService->verifyPayment($reference);
+        // Verify payment with Paystack
+        $verificationResult = $this->paymentService->verifyPayment($reference);
 
         if ($verificationResult['success']) {
-            $order = Order::where('payment_reference', $reference)->first();
-            if ($order) {
-                $order->update([
-                    'payment_status' => 'completed',
-                    'status' => 'Completed',
-                    'payment_completed_at' => now(),
-                    'payment_gateway' => $registration->payment_gateway,
-                    'owner_earning' => $registration->vendor_earning,
-                    'reseller_earning' => $registration->is_reseller_order ? $registration->reseller_earning : null,
-                    'platform_commission' => $registration->platform_commission,
-                ]);
-            }
-
             $registration->update([
                 'payment_status' => AfaRegistration::PAYMENT_COMPLETED,
                 'payment_completed_at' => now(),
@@ -310,10 +265,6 @@ class AfaRegistrationController extends Controller
         }
 
         // Payment verification failed
-        if ($order = Order::where('payment_reference', $reference)->first()) {
-            $paymentService->markTransactionFailed($order, 'AFA payment verification failed');
-        }
-
         $registration->update([
             'payment_status' => AfaRegistration::PAYMENT_FAILED,
             'status' => AfaRegistration::STATUS_CANCELLED,

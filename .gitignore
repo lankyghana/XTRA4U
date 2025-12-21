@@ -1,42 +1,27 @@
-# Logs
 *.log
-error_log
-public/error_log
-
-# OS / Editor
 .DS_Store
-Thumbs.db
+.env
+.env.backup
+.env.production
+.phpactor.json
+.phpunit.result.cache
 /.fleet
 /.idea
+/.nova
+/.phpunit.cache
 /.vscode
 /.zed
-/.nova
-
-# Environment
-.env
-.env.*
 /auth.json
-
-# PHP / Laravel
-/phpunit.result.cache
-/.phpunit.cache
-/bootstrap/cache/*
-!/bootstrap/cache/.gitignore
-
-# Storage (ignore everything except placeholder)
-/storage/*
-!/storage/.gitignore
-
-# Frontend
 /node_modules
 /public/hot
 /public/storage
 /public/build/*.map
-
-# Dependencies (keep OR remove depending on workflow)
+/storage/framework/cache
+/storage/framework/sessions
+/storage/framework/views
+/storage/*.key
+/storage/pail
 /vendor
-
-# Misc
-vendor.zip
 Homestead.json
 Homestead.yaml
+Thumbs.db

@@ -7,11 +7,10 @@ class TransactionService
 {
     /**
      * Get all transactions for a vendor.
-     * UPDATED: Only returns successfully verified transactions
      */
     public function getVendorTransactions($vendorId)
     {
-        return $this->successfulTransactionsQuery($vendorId)->get();
+        return Transaction::where('vendor_id', $vendorId)->get();
     }
 
     /**
@@ -19,7 +18,9 @@ class TransactionService
      */
     public function getVendorCommissions($vendorId)
     {
-        return $this->successfulTransactionsQuery($vendorId)->sum('commission_amount');
+        return Transaction::where('vendor_id', $vendorId)
+            ->where('payment_status', 'completed')
+            ->sum('commission_amount');
     }
 
     /**
@@ -27,15 +28,8 @@ class TransactionService
      */
     public function getVendorEarnings($vendorId)
     {
-        return $this->successfulTransactionsQuery($vendorId)->sum('vendor_earning');
-    }
-
-    /**
-     * Base query for all successfully verified transactions.
-     */
-    protected function successfulTransactionsQuery($vendorId)
-    {
         return Transaction::where('vendor_id', $vendorId)
-            ->where('status', Transaction::STATUS_SUCCESSFUL);
+            ->where('payment_status', 'completed')
+            ->sum('vendor_earning');
     }
 }

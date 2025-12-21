@@ -42,39 +42,6 @@ class Order extends Model
         'payment_completed_at' => 'datetime',
     ];
 
-    public function getDisplayProductNameAttribute(): string
-    {
-        if ($this->service_purchased && trim((string) $this->service_purchased) !== '') {
-            return trim((string) $this->service_purchased);
-        }
-        return 'Archived Product';
-    }
-
-    public function getOwnerEarningAmountAttribute(): float
-    {
-        if (! is_null($this->owner_earning)) {
-            return (float) $this->owner_earning;
-        }
-
-        $transaction = $this->relationLoaded('transactions')
-            ? $this->transactions->firstWhere('vendor_id', $this->owner_vendor_id)
-            : $this->transactions()
-                ->when($this->owner_vendor_id, function ($query) {
-                    $query->where('vendor_id', $this->owner_vendor_id);
-                })
-                ->first();
-
-        if ($transaction) {
-            return (float) $transaction->vendor_earning;
-        }
-
-        if (! is_null($this->base_price)) {
-            return (float) $this->base_price;
-        }
-
-        return 0.0;
-    }
-
     public function vendor(): BelongsTo
     {
         return $this->belongsTo(Vendor::class);

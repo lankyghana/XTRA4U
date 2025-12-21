@@ -349,18 +349,17 @@
                 <!-- Purchase Form -->
                 <form method="POST" action="{{ route('purchase') }}" @submit.prevent="submitPayment($event)" class="flex flex-col sm:flex-row gap-3 lg:gap-4">
                     @csrf
-                    <input type="hidden" name="service_id" :value="selectedProduct ? selectedProduct.service_id || selectedProduct.id : ''">
-                    <input type="hidden" name="amount" :value="selectedProduct ? selectedProduct.price : ''">
-                    <input type="hidden" name="package_id" :value="selectedProduct ? selectedProduct.package_id || selectedProduct.id : ''">
-                    <input type="hidden" name="original_product_id" :value="selectedProduct ? selectedProduct.original_product_id || '' : ''">
+                    <input type="hidden" name="service_purchased" :value="selectedProduct ? selectedProduct.name : ''">
+                    <input type="hidden" name="amount_paid" :value="selectedProduct ? selectedProduct.price : ''">
+                    <input type="hidden" name="vendor_service_id" :value="selectedProduct ? (selectedProduct.original_product_id || selectedProduct.product_id || selectedProduct.id) : ''">
                     <input type="hidden" name="vendor_id" :value="selectedProduct ? selectedProduct.vendor_id : ''">
                     <input type="hidden" name="is_reseller_product" :value="selectedProduct && selectedProduct.is_reseller_product ? '1' : '0'">
-                    <input type="hidden" name="reseller_product_id" :value="selectedProduct ? selectedProduct.reseller_product_id || '' : ''">
+                    <input type="hidden" name="reseller_product_id" :value="selectedProduct ? (selectedProduct.reseller_product_id || '') : ''">
                     
                     <div class="flex-1 sm:w-40">
                         <input 
                             type="tel"
-                            name="recipient_phone"
+                            name="recipient_phone_number"
                             x-model="recipientPhone"
                             placeholder="Recipient Phone"
                             required
@@ -370,7 +369,7 @@
                     <div class="flex-1 sm:w-40">
                         <input 
                             type="tel"
-                            name="payer_phone"
+                            name="mobile_money_number"
                             x-model="momoNumber"
                             placeholder="MoMo Number"
                             required

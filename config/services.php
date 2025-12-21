@@ -41,19 +41,10 @@ return [
         'base_url' => env('BULKCLIX_BASE_URL', 'https://bulkclix.com/api/v1'),
     ],
 
-
     'paystack' => [
         'public_key' => env('PAYSTACK_PUBLIC_KEY'),
         'secret_key' => env('PAYSTACK_SECRET_KEY'),
         'payment_url' => env('PAYSTACK_PAYMENT_URL', 'https://api.paystack.co'),
-    ],
-
-    'moolre' => [
-        'api_key' => env('MOOLRE_API_KEY'),
-        'api_pubkey' => env('MOOLRE_API_PUBKEY'),
-        'api_user' => env('MOOLRE_API_USER'),
-        'account_number' => env('MOOLRE_ACCOUNT_NUMBER'),
-        'base_url' => env('MOOLRE_BASE_URL', 'https://api.moolre.com'),
     ],
 
 
