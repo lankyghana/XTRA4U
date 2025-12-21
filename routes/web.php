@@ -1,6 +1,4 @@
-
 <?php
-use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AdminLoginController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AdminAuthController;
@@ -22,7 +20,17 @@ use App\Http\Controllers\AdminNetworkServiceController;
 use App\Http\Controllers\OrderStatusController;
 use App\Http\Controllers\AfaRegistrationController;
 use App\Http\Controllers\VendorAfaController;
+use App\Http\Controllers\MoolreWebhookController;
 use Illuminate\Support\Facades\Artisan;
+
+// Moolre webhook endpoints (payment + payouts)
+Route::post('/payment/webhook', [MoolreWebhookController::class, 'handlePaymentWebhook'])
+    ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class])
+    ->name('payment.webhook');
+
+Route::post('/payment/payout-webhook', [MoolreWebhookController::class, 'handlePayoutWebhook'])
+    ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class])
+    ->name('payment.payout-webhook');
 
 // Admin login routes - moved to consolidated section below
 

@@ -10,3 +10,7 @@ Artisan::command('inspire', function () {
 
 // Schedule cleanup of abandoned payments every 6 hours
 Schedule::command('payments:cleanup --hours=24')->everySixHours();
+
+// Schedule cleanup of pending orders older than 24 hours (delete unsuccessful payments)
+// Runs daily at 2 AM
+Schedule::command('orders:cleanup-pending')->dailyAt('02:00');

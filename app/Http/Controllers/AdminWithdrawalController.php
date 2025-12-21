@@ -57,17 +57,30 @@ class AdminWithdrawalController extends Controller
 
         if (! in_array($withdrawal->status, [VendorWithdrawal::STATUS_PENDING, VendorWithdrawal::STATUS_PROCESSING], true)) {
             return back()->withErrors([
-                'withdrawal' => 'This withdrawal can no longer be updated. Please refresh the page.',
+                'withdrawal' => 'This withdrawal can no longer be updated. Please refresh the page.'
             ]);
         }
 
-        // Check if we should use automatic payout or manual approval
-        $useAutomaticPayout = $request->boolean('automatic_payout', false);
-        
-        if ($useAutomaticPayout) {
-            // Process the mobile money payout via configured gateway
+        // Only allow automatic payout when a service is available; otherwise, fallback to manual approval
+        $gatewayManager = app(\App\Services\GatewayManager::class);
+        $payoutService = $gatewayManager->getPayoutService();
+        if (!$payoutService && app()->bound(MomoPayoutService::class)) {
             $payoutService = app(MomoPayoutService::class);
-            $result = $payoutService->processPayout($withdrawal);
+        }
+        $useAutomaticPayout = (bool) $payoutService;
+
+        if ($useAutomaticPayout) {
+            // Some services may require vendor info for payout
+            $vendor = $withdrawal->vendor;
+            if (method_exists($payoutService, 'processPayout')) {
+                $result = $payoutService->processPayout($withdrawal, $vendor);
+            } elseif (method_exists($payoutService, 'createPayout')) {
+                $result = $payoutService->createPayout($withdrawal, $vendor);
+            } else {
+                return back()->withErrors([
+                    'withdrawal' => 'Payout service does not support payouts.',
+                ]);
+            }
 
             if (!$result['success']) {
                 return back()->withErrors([
@@ -78,7 +91,7 @@ class AdminWithdrawalController extends Controller
             // Update withdrawal with payout details
             $withdrawal->update([
                 'status' => VendorWithdrawal::STATUS_APPROVED,
-                'payout_reference' => $result['reference'],
+                'payout_reference' => $result['reference'] ?? null,
                 'payout_transaction_id' => $result['transaction_id'] ?? null,
                 'payout_status' => $result['status'] ?? 'pending',
                 'paid_at' => now(),
@@ -88,30 +101,24 @@ class AdminWithdrawalController extends Controller
                 'withdrawal_id' => $withdrawal->id,
                 'vendor_id' => $withdrawal->vendor_id,
                 'amount' => $withdrawal->amount,
-                'reference' => $result['reference'],
+                'reference' => $result['reference'] ?? null,
             ]);
 
             $successMessage = 'Withdrawal approved! Payout of GHS ' . number_format($withdrawal->amount, 2) . ' sent to ' . $withdrawal->momo_number . '.';
         } else {
-            // Manual approval - admin will send money manually
-            $manualReference = 'MANUAL-' . strtoupper(substr(md5(uniqid()), 0, 8));
-            
             $withdrawal->update([
                 'status' => VendorWithdrawal::STATUS_APPROVED,
-                'payout_reference' => $request->input('manual_reference', $manualReference),
-                'payout_status' => 'completed',
+                'payout_status' => 'manual',
                 'paid_at' => now(),
-                'notes' => $request->input('notes', 'Manually approved by admin'),
             ]);
 
-            Log::info('Withdrawal manually approved', [
+            Log::info('Withdrawal approved manually (no payout gateway configured)', [
                 'withdrawal_id' => $withdrawal->id,
                 'vendor_id' => $withdrawal->vendor_id,
                 'amount' => $withdrawal->amount,
-                'reference' => $withdrawal->payout_reference,
             ]);
 
-            $successMessage = 'Withdrawal manually approved! Please send GHS ' . number_format($withdrawal->amount, 2) . ' to ' . $withdrawal->momo_number . ' (' . ucfirst($withdrawal->momo_network) . ').';
+            $successMessage = 'Withdrawal approved. Please process the payout manually.';
         }
 
         // Notify vendor about successful payout

@@ -3,7 +3,7 @@
 @section('title', 'Affiliate Orders - XTRA4U')
 
 @section('content')
-<x-vendor-layout :vendor="$vendor" title="Affiliate Orders" subtitle="Orders for your products sold by resellers" active="orders">
+<x-vendor-layout :vendor="$vendor" title="Affiliate Orders" subtitle="Track earnings from products sold by resellers" active="orders">
     <div class="space-y-6">
         @if(session('success'))
             <div class="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg shadow-md">
@@ -35,7 +35,7 @@
                 </svg>
                 <div>
                     <h3 class="text-sm font-semibold text-purple-900">Affiliate Orders</h3>
-                    <p class="text-sm text-purple-700 mt-1">These are orders for your products that were sold by your resellers. You are responsible for fulfilling these orders and updating their status.</p>
+                    <p class="text-sm text-purple-700 mt-1">These are orders for your products that were sold by your resellers. You can track these orders to monitor your earnings. The reseller is responsible for fulfilling these orders.</p>
                 </div>
             </div>
         </div>
@@ -55,7 +55,7 @@
                 <div class="flex items-center justify-between mb-6">
                     <div>
                         <h1 class="text-xl font-bold text-gray-900">Affiliate Orders</h1>
-                        <p class="text-sm text-gray-600">Orders for your products sold by resellers. Update status to fulfill orders.</p>
+                        <p class="text-sm text-gray-600">Track orders for your products sold by resellers. Resellers fulfill these orders.</p>
                     </div>
                     <p class="text-sm text-gray-500">Showing <span class="font-semibold text-purple-600">{{ $orders->count() }}</span> of <span class="font-semibold text-purple-600">{{ $orders->total() }}</span> orders</p>
                 </div>
@@ -80,13 +80,13 @@
                                     <tr class="hover:bg-gradient-to-r hover:from-purple-50 hover:to-indigo-50 transition-all duration-200">
                                         <td class="px-6 py-4 text-sm font-semibold text-gray-900">#{{ $order->id }}</td>
                                         <td class="px-6 py-4 text-sm text-gray-900">{{ $order->recipient_phone_number }}</td>
-                                        <td class="px-6 py-4 text-sm text-gray-900">{{ $order->service_purchased }}</td>
+                                        <td class="px-6 py-4 text-sm text-gray-900">{{ $order->display_product_name }}</td>
                                         <td class="px-6 py-4 text-sm">
                                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
                                                 {{ $order->resellerVendor?->name ?? 'Unknown' }}
                                             </span>
                                         </td>
-                                        <td class="px-6 py-4 text-sm font-semibold text-green-600">GHS {{ number_format($order->owner_earning ?? 0, 2) }}</td>
+                                        <td class="px-6 py-4 text-sm font-semibold text-green-600">GHS {{ number_format($order->owner_earning_amount, 2) }}</td>
                                         <td class="px-6 py-4 text-sm">
                                             @if($order->status === 'Completed')
                                                 <x-badge variant="completed">Completed</x-badge>
@@ -98,21 +98,15 @@
                                                 <x-badge variant="pending">Pending</x-badge>
                                             @endif
                                         </td>
-                                        <td class="px-6 py-4 text-sm text-gray-500">{{ $order->created_at?->format('M d, Y') }}</td>
+                                        <td class="px-6 py-4 text-sm text-gray-500">{{ $order->created_at?->timezone(config('app.timezone'))->format('M d, Y \at g:i A') }}</td>
                                         <td class="px-6 py-4 text-sm">
-                                            <form method="POST" action="{{ route('vendor.orders.update-status', $order) }}" class="inline-block">
-                                                @csrf
-                                                @method('PATCH')
-                                                <select name="status" 
-                                                        onchange="this.form.submit()" 
-                                                        class="text-sm border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500 px-3 py-2 font-medium shadow-sm"
-                                                        {{ $order->status === 'Completed' || $order->status === 'Cancelled' ? 'disabled' : '' }}>
-                                                    <option value="Pending" {{ $order->status === 'Pending' ? 'selected' : '' }}>Pending</option>
-                                                    <option value="Processing" {{ $order->status === 'Processing' ? 'selected' : '' }}>Processing</option>
-                                                    <option value="Completed" {{ $order->status === 'Completed' ? 'selected' : '' }}>Completed</option>
-                                                    <option value="Cancelled" {{ $order->status === 'Cancelled' ? 'selected' : '' }}>Cancelled</option>
-                                                </select>
-                                            </form>
+                                            <span class="inline-flex items-center px-3 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg">
+                                                <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                                </svg>
+                                                View Only
+                                            </span>
                                         </td>
                                     </tr>
                                 @empty
@@ -123,7 +117,7 @@
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
                                                 </svg>
                                                 <p class="text-sm font-medium text-gray-500">No affiliate orders yet.</p>
-                                                <p class="text-xs text-gray-400 mt-1">When resellers sell your products, orders will appear here for you to fulfill.</p>
+                                                <p class="text-xs text-gray-400 mt-1">When resellers sell your products, orders will appear here for tracking. The reseller fulfills these orders.</p>
                                             </div>
                                         </td>
                                     </tr>

@@ -97,6 +97,7 @@ class VendorController extends Controller
 
         // Earnings summary: after 2% commission (sum of vendor_earning from completed transactions)
         $totalEarnings = Transaction::where('vendor_id', $vendor->id)
+            ->where('status', Transaction::STATUS_SUCCESSFUL)
             ->where('payment_status', 'completed')
             ->sum('vendor_earning');
 

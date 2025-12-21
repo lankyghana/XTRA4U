@@ -23,37 +23,26 @@ class ContentSecurityPolicy
             $csp = implode('; ', [
                 // Default: only allow same-origin resources
                 "default-src 'self'",
-                
                 // Scripts: allow self, Vite dev server (in dev), and inline for Alpine.js
                 "script-src 'self' 'unsafe-inline' 'unsafe-eval'" . $this->getViteScriptSrc(),
-                
                 // Styles: allow self, inline styles (Tailwind), and Google Fonts
                 "style-src 'self' 'unsafe-inline' https://fonts.bunny.net https://fonts.googleapis.com",
-                
                 // Fonts: allow self and trusted font CDNs
                 "font-src 'self' https://fonts.bunny.net https://fonts.gstatic.com data:",
-                
                 // Images: allow self, data URIs, and HTTPS images
                 "img-src 'self' data: https: blob:",
-                
                 // Connect: allow API calls to self and payment providers
-                "connect-src 'self' https://paystack.com https://*.paystack.co https://bulkclix.com" . $this->getViteConnectSrc(),
-                
-                // Frames: only self (for payment modals if needed)
-                "frame-src 'self' https://paystack.com https://*.paystack.co",
-                
+                "connect-src 'self' http://127.0.0.1:8000 https://paystack.com https://*.paystack.co https://bulkclix.com https://api.moolre.com https://checkout.flutterwave.com https://hubtel.com" . $this->getViteConnectSrc(),
+                // Frames: only self and payment providers (for payment modals if needed)
+                "frame-src 'self' https://paystack.com https://*.paystack.co https://checkout.flutterwave.com https://hubtel.com",
                 // Object/Embed: none (no Flash, etc.)
                 "object-src 'none'",
-                
                 // Base URI: only self
                 "base-uri 'self'",
-                
-                // Form actions: allow self and payment providers
-                "form-action 'self' https://paystack.com https://*.paystack.co https://checkout.paystack.com",
-                
+                // Form actions: allow self, localhost (dev), and payment providers
+                "form-action 'self' http://localhost:8000 http://127.0.0.1:8000 https://paystack.com https://*.paystack.co https://checkout.paystack.com https://api.moolre.com https://checkout.flutterwave.com https://hubtel.com",
                 // Frame ancestors: none (prevent clickjacking)
                 "frame-ancestors 'none'",
-                
                 // Upgrade insecure requests in production
                 app()->environment('production') ? "upgrade-insecure-requests" : "",
             ]);

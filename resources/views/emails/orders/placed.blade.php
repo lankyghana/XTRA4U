@@ -4,9 +4,9 @@
 Hello **{{ $vendor->name }}**,
 
 @if($vendorRole === 'owner')
-Great news! A reseller has successfully sold your product. Here are the order details:
+Great news! A reseller has successfully sold your product. Your earnings are being tracked:
 @elseif($vendorRole === 'reseller')
-You have received a new order through your reseller store. Here are the details:
+You have received a new order to fulfill through your reseller store. Here are the details:
 @else
 You have received a new order! Here are the details:
 @endif
@@ -29,13 +29,13 @@ You have received a new order! Here are the details:
 
 @if($order->is_reseller_order && $vendorRole === 'owner')
 <x-mail::panel>
-**Affiliate Order Information**
+**Affiliate Sale Information**
 
-This order was placed through a reseller. Your product was sold at the base price of **GHS {{ number_format($order->base_price, 2) }}**.
+Great news! A reseller sold your product at the base price of **GHS {{ number_format($order->base_price, 2) }}**.
 
 The reseller added a markup of **GHS {{ number_format($order->markup_price, 2) }}** to the final price.
 
-*As the product owner, you need to fulfill this order.*
+*The reseller will fulfill this order. You'll receive your earnings once the order is completed.*
 </x-mail::panel>
 @endif
 
@@ -45,7 +45,7 @@ The reseller added a markup of **GHS {{ number_format($order->markup_price, 2) }
 
 You sold this product at **GHS {{ number_format($order->amount_paid, 2) }}** (Base: GHS {{ number_format($order->base_price, 2) }} + Your Markup: GHS {{ number_format($order->markup_price, 2) }}).
 
-*The product owner (Vendor A) will fulfill this order.*
+*You are responsible for fulfilling this order. Please process it promptly.*
 </x-mail::panel>
 @endif
 
@@ -56,7 +56,9 @@ View Order Details
 ---
 
 @if($vendorRole === 'owner' && $order->is_reseller_order)
-**Important:** Please process this order promptly to maintain a good relationship with your resellers.
+**Note:** The reseller will fulfill this order. Your earnings will be credited once the order is completed.
+@elseif($vendorRole === 'reseller')
+**Important:** Please fulfill this order promptly to maintain great customer satisfaction!
 @else
 **Tip:** Respond quickly to orders to maintain great customer satisfaction!
 @endif

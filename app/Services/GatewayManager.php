@@ -28,6 +28,7 @@ class GatewayManager
             PaymentGatewayConfig::GATEWAY_PAYSTACK => new PaystackPaymentService($config),
             PaymentGatewayConfig::GATEWAY_FLUTTERWAVE => new FlutterwavePaymentService($config),
             PaymentGatewayConfig::GATEWAY_HUBTEL => new HubtelPaymentService($config->config_data),
+            PaymentGatewayConfig::GATEWAY_MOOLRE => new MoolrePaymentService($config),
             default => throw new \Exception("Unsupported payment gateway: {$config->gateway_name}")
         };
     }
@@ -50,6 +51,7 @@ class GatewayManager
             PaymentGatewayConfig::GATEWAY_PAYSTACK => new PaystackPaymentService($config),
             PaymentGatewayConfig::GATEWAY_FLUTTERWAVE => new FlutterwavePaymentService($config),
             PaymentGatewayConfig::GATEWAY_HUBTEL => new HubtelPaymentService($config->config_data),
+            PaymentGatewayConfig::GATEWAY_MOOLRE => new MoolrePaymentService($config),
             default => null
         };
     }
@@ -67,6 +69,7 @@ class GatewayManager
                 PaymentGatewayConfig::GATEWAY_PAYSTACK => new PaystackPaymentService($config),
                 PaymentGatewayConfig::GATEWAY_FLUTTERWAVE => new FlutterwavePaymentService($config),
                 PaymentGatewayConfig::GATEWAY_HUBTEL => new HubtelPaymentService($config->config_data),
+                PaymentGatewayConfig::GATEWAY_MOOLRE => new MoolrePaymentService($config),
                 default => null
             };
 
@@ -95,6 +98,7 @@ class GatewayManager
         }
 
         return match ($config->gateway_name) {
+            PaymentGatewayConfig::GATEWAY_MOOLRE => new MoolrePaymentService($config),
             PaymentGatewayConfig::GATEWAY_BULKCLIX => new MomoPayoutService($config),
             PaymentGatewayConfig::GATEWAY_HUBTEL => new HubtelPaymentService($config->config_data),
             default => throw new \Exception("Unsupported payout gateway: {$config->gateway_name}")
@@ -116,6 +120,7 @@ class GatewayManager
         }
 
         return match ($gatewayName) {
+            PaymentGatewayConfig::GATEWAY_MOOLRE => new MoolrePaymentService($config),
             PaymentGatewayConfig::GATEWAY_BULKCLIX => new MomoPayoutService($config),
             PaymentGatewayConfig::GATEWAY_HUBTEL => new HubtelPaymentService($config->config_data),
             default => null

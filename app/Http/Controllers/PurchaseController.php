@@ -274,8 +274,8 @@ class PurchaseController extends Controller
                 VendorNotification::create([
                     'vendor_id' => $resellerProduct->owner_vendor_id,
                     'type' => VendorNotification::TYPE_AFFILIATE_ORDER,
-                    'title' => 'New Affiliate Order',
-                    'message' => "A reseller has made a sale of your product '{$product->name}'. Your earning: GHS " . number_format($ownerEarning, 2),
+                    'title' => 'New Affiliate Sale',
+                    'message' => "Your product '{$product->name}' was sold by a reseller! Your earning: GHS " . number_format($ownerEarning, 2) . " (reseller will fulfill this order)",
                     'order_id' => $order->id,
                     'data' => [
                         'product_name' => $product->name,
@@ -289,8 +289,8 @@ class PurchaseController extends Controller
                 VendorNotification::create([
                     'vendor_id' => $resellerProduct->reseller_vendor_id,
                     'type' => VendorNotification::TYPE_NEW_ORDER,
-                    'title' => 'New Order Received',
-                    'message' => "You have a new order for '{$product->name}'. Your markup earning: GHS " . number_format($resellerEarning, 2),
+                    'title' => 'New Order to Fulfill',
+                    'message' => "You have a new order for '{$product->name}' to fulfill. Your earning: GHS " . number_format($resellerEarning, 2),
                     'order_id' => $order->id,
                     'data' => [
                         'product_name' => $product->name,

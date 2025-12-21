@@ -44,9 +44,12 @@ class VendorDashboardController extends Controller
 		$totalEarnings = $filteredStats['earnings'];
 		$commissions = $filteredStats['commissions'];
 		
-		// Get orders (both direct and as owner of affiliate orders)
-		$orders = Order::where('vendor_id', $vendorId)
-			->orWhere('owner_vendor_id', $vendorId)
+		// Get fully paid orders (direct or owned affiliate orders)
+		$orders = Order::where(function ($query) use ($vendorId) {
+			$query->where('vendor_id', $vendorId)
+				->orWhere('owner_vendor_id', $vendorId);
+		})
+			->where('payment_status', 'completed')
 			->latest()
 			->get();
 		$products = Product::where('vendor_id', $vendorId)->orderBy('name')->get();
@@ -115,7 +118,41 @@ class VendorDashboardController extends Controller
 	public function orders()
 	{
 		$vendor = $this->resolveVendor();
-		$orders = Order::where('vendor_id', $vendor->id)
+		
+		// "My Orders" shows orders this vendor is responsible for fulfilling:
+		// 1. Regular orders where vendor_id = this vendor AND is_reseller_order = false
+		// 2. Reseller orders where this vendor IS the reseller (reseller_vendor_id = this vendor OR vendor_id = this vendor for reseller orders)
+		// NOTE: Does NOT include orders where this vendor is ONLY the owner (those go to Affiliate Orders)
+		$orders = Order::where(function ($outer) use ($vendor) {
+			$outer->where(function ($query) use ($vendor) {
+				// Case 1: Regular (non-reseller) orders where this vendor made the sale
+				$query->where('vendor_id', $vendor->id)
+					->where(function ($q) {
+						$q->where('is_reseller_order', false)
+							->orWhereNull('is_reseller_order');
+					});
+			})
+			->orWhere(function ($query) use ($vendor) {
+				// Case 2: Reseller orders where this vendor is the reseller (they sold it through their store)
+				$query->where('is_reseller_order', true)
+					->where(function ($q) use ($vendor) {
+						$q->where('reseller_vendor_id', $vendor->id)
+							->orWhere(function ($inner) use ($vendor) {
+								// Also check vendor_id for reseller orders (backwards compatibility)
+								$inner->where('vendor_id', $vendor->id)
+									->where('owner_vendor_id', '!=', $vendor->id);
+							});
+					});
+			});
+		})
+			->where('payment_status', 'completed')
+			->with([
+				'resellerVendor',
+				'ownerVendor',
+				'service',
+				'resellerProduct.product',
+				'transactions',
+			])
 			->latest()
 			->paginate(20);
 
@@ -133,7 +170,13 @@ class VendorDashboardController extends Controller
 		// Get orders where this vendor is the owner (their products sold by resellers)
 		$orders = Order::where('owner_vendor_id', $vendor->id)
 			->where('is_reseller_order', true)
-			->with('resellerVendor')
+			->where('payment_status', 'completed')
+			->with([
+				'resellerVendor',
+				'service',
+				'resellerProduct.product',
+				'transactions',
+			])
 			->latest()
 			->paginate(20);
 
@@ -208,10 +251,11 @@ class VendorDashboardController extends Controller
 		})->count();
 
 		// Use Transactions for accurate earnings (this correctly tracks both owner and reseller earnings)
-		$transactions = Transaction::where('vendor_id', $vendorId)->get();
-		$completedTransactions = $transactions->filter(function ($t) {
-			return $t->payment_status === 'completed';
-		});
+		// UPDATED: Only get successfully verified transactions
+		$transactions = Transaction::where('vendor_id', $vendorId)
+			->where('status', Transaction::STATUS_SUCCESSFUL)
+			->get();
+		$completedTransactions = $transactions;
 
 		// Average earning per transaction (more accurate than order amount for vendors with mixed roles)
 		$averageOrderValue = $completedTransactions->avg('vendor_earning') ?? 0;
@@ -233,6 +277,7 @@ class VendorDashboardController extends Controller
 			$date = now()->subDays($i);
 			$amount = Transaction::where('vendor_id', $vendorId)
 				->whereDate('created_at', $date)
+				->where('status', Transaction::STATUS_SUCCESSFUL)
 				->where('payment_status', 'completed')
 				->sum('vendor_earning');
 			$maxAmount = max($maxAmount, $amount);
@@ -294,6 +339,7 @@ class VendorDashboardController extends Controller
 		// Revenue summaries - use transactions for accurate vendor-specific earnings
 		$revenueToday = Transaction::where('vendor_id', $vendorId)
 			->whereDate('created_at', now())
+			->where('status', Transaction::STATUS_SUCCESSFUL)
 			->where('payment_status', 'completed')
 			->sum('vendor_earning');
 		$ordersToday = $allVendorOrders->filter(function ($order) {
@@ -302,6 +348,7 @@ class VendorDashboardController extends Controller
 
 		$revenueThisWeek = Transaction::where('vendor_id', $vendorId)
 			->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()])
+			->where('status', Transaction::STATUS_SUCCESSFUL)
 			->where('payment_status', 'completed')
 			->sum('vendor_earning');
 		$ordersThisWeek = $allVendorOrders->filter(function ($order) {
@@ -311,6 +358,7 @@ class VendorDashboardController extends Controller
 		$revenueThisMonth = Transaction::where('vendor_id', $vendorId)
 			->whereMonth('created_at', now()->month)
 			->whereYear('created_at', now()->year)
+			->where('status', Transaction::STATUS_SUCCESSFUL)
 			->where('payment_status', 'completed')
 			->sum('vendor_earning');
 
@@ -336,13 +384,16 @@ class VendorDashboardController extends Controller
 		$vendor = $this->resolveVendor();
 		
 		// Check authorization:
-		// - Regular orders: vendor_id must match
-		// - Affiliate orders: owner_vendor_id must match (owner manages fulfillment)
-		$isOwnerOfAffiliateOrder = $order->is_reseller_order && $order->owner_vendor_id === $vendor->id;
+		// - Regular orders: vendor_id must match (vendor fulfills their own orders)
+		// - Affiliate/Reseller orders: reseller_vendor_id OR vendor_id must match (reseller manages fulfillment)
+		//   Note: vendor_id is also checked for reseller orders because when orders are placed through
+		//   a vendor's store, vendor_id is set to the reseller's ID
+		$isResellerOfAffiliateOrder = $order->is_reseller_order && 
+			($order->reseller_vendor_id === $vendor->id || $order->vendor_id === $vendor->id);
 		$isRegularOrder = !$order->is_reseller_order && $order->vendor_id === $vendor->id;
 		
-		if (!$isOwnerOfAffiliateOrder && !$isRegularOrder) {
-			abort(403, 'Unauthorized action.');
+		if (!$isResellerOfAffiliateOrder && !$isRegularOrder) {
+			abort(403, 'Unauthorized action. Only the reseller can fulfill this order.');
 		}
 
 		$request->validate([
@@ -425,10 +476,10 @@ class VendorDashboardController extends Controller
 			'notes' => $data['notes'] ?? null,
 		]);
 
-		// Notify admin about new withdrawal request
-		AdminNotification::notifyWithdrawalRequest($withdrawal);
+		// Process withdrawal automatically
+		$this->processWithdrawalAutomatically($withdrawal);
 
-		return back()->with('status', 'Withdrawal request submitted. Our team will review it shortly.');
+		return back()->with('status', 'Withdrawal processed successfully. Funds will be sent to ' . $data['momo_number'] . ' shortly.');
 	}
 
 
@@ -488,22 +539,28 @@ class VendorDashboardController extends Controller
 
 		$affiliateParent = Vendor::find($vendor->affiliate_vendor_id);
 		
-		// Get all resellable products from affiliate parent
+		// Get all resellable products from affiliate parent with optimized query
 		$products = Product::where('vendor_id', $affiliateParent->id)
 			->where('is_active', true)
 			->where('is_resellable', true)
 			->with(['resellerProducts' => function ($query) use ($vendor) {
-				$query->where('reseller_vendor_id', $vendor->id);
+				$query->where('reseller_vendor_id', $vendor->id)
+					->select('id', 'product_id', 'reseller_vendor_id'); // Only select needed columns
 			}])
+			->select('id', 'vendor_id', 'name', 'description', 'price', 'min_base_price', 'is_active', 'is_resellable')
+			->orderBy('created_at', 'desc')
 			->paginate(12);
 
-		// Get network services for logos
-		$networkServices = \App\Models\NetworkService::active()
-			->whereNotNull('image_path')
-			->get()
-			->keyBy(function ($service) {
-				return strtolower($service->name);
-			});
+		// Cache network services for 1 hour to avoid repeated queries
+		$networkServices = cache()->remember('network_services_logos', 3600, function () {
+			return \App\Models\NetworkService::active()
+				->whereNotNull('image_path')
+				->select('id', 'name', 'image_path')
+				->get()
+				->keyBy(function ($service) {
+					return strtolower($service->name);
+				});
+		});
 
 		return view('vendor.marketplace.index', compact('vendor', 'products', 'affiliateParent', 'networkServices'));
 	}
@@ -722,5 +779,103 @@ class VendorDashboardController extends Controller
 		]);
 
 		return back()->with('success', 'Password updated successfully.');
+	}
+
+	/**
+	 * Process withdrawal automatically without admin approval
+	 */
+	private function processWithdrawalAutomatically(VendorWithdrawal $withdrawal): void
+	{
+		// Get payout service
+		$gatewayManager = app(\App\Services\GatewayManager::class);
+		$payoutService = $gatewayManager->getPayoutService();
+		if (!$payoutService && app()->bound(MomoPayoutService::class)) {
+			$payoutService = app(MomoPayoutService::class);
+		}
+
+		if ($payoutService) {
+			// Process automatic payout
+			$vendor = $withdrawal->vendor;
+			
+			if (method_exists($payoutService, 'processPayout')) {
+				$result = $payoutService->processPayout($withdrawal, $vendor);
+			} elseif (method_exists($payoutService, 'createPayout')) {
+				$result = $payoutService->createPayout($withdrawal, $vendor);
+			} else {
+				$result = ['success' => false, 'message' => 'Payout service not available'];
+			}
+
+			if ($result['success']) {
+				// Update withdrawal with payout details
+				$withdrawal->update([
+					'status' => VendorWithdrawal::STATUS_APPROVED,
+					'payout_reference' => $result['reference'] ?? null,
+					'payout_transaction_id' => $result['transaction_id'] ?? null,
+					'payout_status' => $result['status'] ?? 'pending',
+					'paid_at' => now(),
+				]);
+
+				Log::info('Withdrawal processed automatically', [
+					'withdrawal_id' => $withdrawal->id,
+					'vendor_id' => $withdrawal->vendor_id,
+					'amount' => $withdrawal->amount,
+					'reference' => $result['reference'] ?? null,
+				]);
+			} else {
+				Log::error('Automatic withdrawal failed', [
+					'withdrawal_id' => $withdrawal->id,
+					'error' => $result['message'] ?? 'Unknown error',
+				]);
+			}
+		} else {
+			// No payout service - mark as approved for manual processing
+			$withdrawal->update([
+				'status' => VendorWithdrawal::STATUS_APPROVED,
+				'payout_status' => 'manual',
+				'paid_at' => now(),
+			]);
+
+			Log::info('Withdrawal approved automatically (manual processing)', [
+				'withdrawal_id' => $withdrawal->id,
+				'vendor_id' => $withdrawal->vendor_id,
+				'amount' => $withdrawal->amount,
+			]);
+		}
+
+		// Notify vendor
+		$this->notifyVendorPayoutProcessed($withdrawal);
+	}
+
+	/**
+	 * Notify vendor about processed withdrawal
+	 */
+	private function notifyVendorPayoutProcessed(VendorWithdrawal $withdrawal): void
+	{
+		// In-app notification
+		VendorNotification::create([
+			'vendor_id' => $withdrawal->vendor_id,
+			'type' => VendorNotification::TYPE_WITHDRAWAL_APPROVED ?? 'withdrawal_approved',
+			'title' => 'Withdrawal Processed',
+			'message' => 'Your withdrawal of GHS ' . number_format($withdrawal->amount, 2) . ' has been processed and sent to ' . $withdrawal->momo_number . '.',
+			'data' => [
+				'withdrawal_id' => $withdrawal->id,
+				'amount' => $withdrawal->amount,
+				'momo_number' => $withdrawal->momo_number,
+				'reference' => $withdrawal->payout_reference ?? $withdrawal->reference,
+			],
+		]);
+
+		// SMS notification
+		try {
+			$smsService = app(SmsService::class);
+			$vendor = $withdrawal->vendor;
+			
+			if ($vendor && $vendor->phone_number) {
+				$message = "XTRA4U: Your withdrawal of GHS " . number_format($withdrawal->amount, 2) . " has been processed and sent to {$withdrawal->momo_number}. Ref: {$withdrawal->reference}";
+				$smsService->send($vendor->phone_number, $message);
+			}
+		} catch (\Exception $e) {
+			Log::warning('Failed to send withdrawal SMS notification', ['error' => $e->getMessage()]);
+		}
 	}
 }
