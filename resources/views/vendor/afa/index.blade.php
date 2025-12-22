@@ -27,62 +27,6 @@
             </div>
         @endif
 
-        <!-- Stats Overview -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div class="bg-gradient-to-br from-yellow-50 to-amber-50 rounded-xl p-4 border border-yellow-200">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-sm text-yellow-600 font-medium">Pending</p>
-                        <p class="text-2xl font-bold text-yellow-800">{{ $stats['pending'] ?? 0 }}</p>
-                    </div>
-                    <div class="w-10 h-10 bg-yellow-200 rounded-full flex items-center justify-center">
-                        <svg class="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
-                    </div>
-                </div>
-            </div>
-            <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-sm text-blue-600 font-medium">Processing</p>
-                        <p class="text-2xl font-bold text-blue-800">{{ $stats['processing'] ?? 0 }}</p>
-                    </div>
-                    <div class="w-10 h-10 bg-blue-200 rounded-full flex items-center justify-center">
-                        <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                        </svg>
-                    </div>
-                </div>
-            </div>
-            <div class="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-sm text-green-600 font-medium">Completed</p>
-                        <p class="text-2xl font-bold text-green-800">{{ $stats['completed'] ?? 0 }}</p>
-                    </div>
-                    <div class="w-10 h-10 bg-green-200 rounded-full flex items-center justify-center">
-                        <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                        </svg>
-                    </div>
-                </div>
-            </div>
-            <div class="bg-gradient-to-br from-purple-50 to-violet-50 rounded-xl p-4 border border-purple-200">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-sm text-purple-600 font-medium">Total Earnings</p>
-                        <p class="text-2xl font-bold text-purple-800">GH₵ {{ number_format($stats['total_earnings'] ?? 0, 2) }}</p>
-                    </div>
-                    <div class="w-10 h-10 bg-purple-200 rounded-full flex items-center justify-center">
-                        <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <!-- Navigation Tabs -->
         <div class="flex flex-wrap gap-2 border-b border-gray-200 pb-2">
             <a href="{{ route('vendor.afa.index') }}" 

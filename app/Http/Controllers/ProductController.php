@@ -112,6 +112,17 @@ class ProductController extends Controller
         return redirect()->route('vendor.products.index')->with('success', 'Product updated successfully.');
     }
 
+    // Delete product
+    public function destroy($id)
+    {
+        $product = $this->findVendorProduct($id);
+
+        // ResellerProduct rows are removed by FK cascade (see migration).
+        $product->delete();
+
+        return redirect()->route('vendor.products.index')->with('success', 'Product deleted successfully.');
+    }
+
     protected function resolveVendor()
     {
         $vendorGuardUser = Auth::guard('vendor')->user();

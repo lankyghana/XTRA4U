@@ -66,6 +66,31 @@ class PaymentService
     }
 
     /**
+     * Initiate a generic payment (non-Order flows like AFA Registration).
+     * Uses the active default payment gateway selected in /admin/payment-gateways.
+     */
+    public function initiateGenericPayment(string $email, float $amount, string $callbackUrl, ?string $reference = null, array $metadata = []): array
+    {
+        if (!$this->paymentGateway) {
+            return [
+                'success' => false,
+                'message' => 'No active payment gateway configured.',
+                'reference' => $reference,
+            ];
+        }
+
+        if (! method_exists($this->paymentGateway, 'initiatePayment')) {
+            return [
+                'success' => false,
+                'message' => 'Selected payment gateway does not support generic payments for this flow.',
+                'reference' => $reference,
+            ];
+        }
+
+        return $this->paymentGateway->initiatePayment($email, $amount, $callbackUrl, $reference, $metadata);
+    }
+
+    /**
      * Complete an order after successful payment
      * This handles all post-payment logic: transactions, notifications, emails, SMS, wallet updates
      */

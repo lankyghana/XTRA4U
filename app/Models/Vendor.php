@@ -11,6 +11,17 @@ class Vendor extends Authenticatable
 {
     use HasFactory;
 
+    protected static function booted(): void
+    {
+        static::saving(function (Vendor $vendor): void {
+            // Business rule: A vendor cannot be an Affiliate without also being an AFA Affiliate.
+            // Enforce idempotently at the model layer so it applies across all entry points.
+            if (!is_null($vendor->affiliate_vendor_id) && $vendor->is_afa_affiliate !== true) {
+                $vendor->is_afa_affiliate = true;
+            }
+        });
+    }
+
     // Vendor has many orders
     public function orders()
     {
@@ -34,6 +45,7 @@ class Vendor extends Authenticatable
         'phone_number',
         'password',
         'is_approved',
+        'affiliate_vendor_id',
         'vendor_code',
         'balance',
         'afa_price',
@@ -43,10 +55,12 @@ class Vendor extends Authenticatable
         'afa_base_price',
         'afa_markup',
         'afa_selling_price',
+        'is_afa_affiliate',
     ];
 
     protected $casts = [
         'is_approved' => 'boolean',
+        'is_afa_affiliate' => 'boolean',
         'afa_enabled' => 'boolean',
         'afa_reseller_enabled' => 'boolean',
         'balance' => 'decimal:2',

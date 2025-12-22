@@ -65,7 +65,7 @@
                                    id="email" 
                                    value="{{ old('email') }}"
                                    class="pl-10 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue transition-colors py-3" 
-                                   placeholder="admin@xtra4u.com"
+                                placeholder="you@example.com"
                                    required 
                                    autofocus>
                         </div>

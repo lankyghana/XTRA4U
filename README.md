@@ -137,8 +137,11 @@ Use sqlite for tests (`DB_CONNECTION=sqlite`) or a dedicated test DB. Factories 
 - Set `APP_ENV=production`, `APP_DEBUG=false`
 - Build assets: `npm ci && npm run build`
 - Optimize: `composer install --no-dev --optimize-autoloader`
+- Public uploads: run `php artisan storage:link` so `/storage/*` URLs resolve (this creates `public/storage` → `storage/app/public`)
 - Run migrations: `php artisan migrate --force`
 - Keep a queue worker alive (Supervisor/systemd)
+
+If you deploy by uploading only the `public/` folder (shared hosting), note that `public/storage` is usually a symlink and may not transfer; in that case you must either run `php artisan storage:link` on the server or copy `storage/app/public/*` into a real `public/storage/` directory.
 
 ## Contributing
 1) Branch from `main`

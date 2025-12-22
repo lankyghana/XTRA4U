@@ -23,9 +23,22 @@ class VendorAfaController extends Controller
     public function index(Request $request)
     {
         $vendor = $this->vendor();
-        
-        $query = AfaRegistration::where('vendor_id', $vendor->id)
-            ->where('payment_status', AfaRegistration::PAYMENT_COMPLETED);
+
+        // Fulfillment rule:
+        // - Direct AFA registrations are fulfilled by the vendor who owns them (vendor_id = me, reseller_vendor_id IS NULL)
+        // - Reseller AFA registrations are fulfilled by the reseller who sold them (reseller_vendor_id = me)
+        $baseQuery = AfaRegistration::query()
+            ->where('payment_status', AfaRegistration::PAYMENT_COMPLETED)
+            ->where(function ($q) use ($vendor) {
+                $q->where(function ($direct) use ($vendor) {
+                    $direct->where('vendor_id', $vendor->id)
+                        ->whereNull('reseller_vendor_id');
+                })->orWhere(function ($reseller) use ($vendor) {
+                    $reseller->where('reseller_vendor_id', $vendor->id);
+                });
+            });
+
+        $query = clone $baseQuery;
 
         // Filter by status
         if ($request->filled('status') && $request->status !== 'all') {
@@ -47,37 +60,16 @@ class VendorAfaController extends Controller
 
         // Get counts for tabs
         $counts = [
-            'all' => AfaRegistration::where('vendor_id', $vendor->id)
-                ->where('payment_status', AfaRegistration::PAYMENT_COMPLETED)->count(),
-            'pending' => AfaRegistration::where('vendor_id', $vendor->id)
-                ->where('payment_status', AfaRegistration::PAYMENT_COMPLETED)
-                ->where('status', AfaRegistration::STATUS_PENDING)->count(),
-            'processing' => AfaRegistration::where('vendor_id', $vendor->id)
-                ->where('payment_status', AfaRegistration::PAYMENT_COMPLETED)
-                ->where('status', AfaRegistration::STATUS_PROCESSING)->count(),
-            'completed' => AfaRegistration::where('vendor_id', $vendor->id)
-                ->where('payment_status', AfaRegistration::PAYMENT_COMPLETED)
-                ->where('status', AfaRegistration::STATUS_COMPLETED)->count(),
-            'rejected' => AfaRegistration::where('vendor_id', $vendor->id)
-                ->where('payment_status', AfaRegistration::PAYMENT_COMPLETED)
-                ->where('status', AfaRegistration::STATUS_REJECTED)->count(),
-        ];
-
-        // Get stats for the dashboard
-        $stats = [
-            'pending' => $counts['pending'],
-            'processing' => $counts['processing'],
-            'completed' => $counts['completed'],
-            'total_earnings' => AfaRegistration::where('vendor_id', $vendor->id)
-                ->where('payment_status', AfaRegistration::PAYMENT_COMPLETED)
-                ->where('status', AfaRegistration::STATUS_COMPLETED)
-                ->sum('vendor_earning'),
+            'all' => (clone $baseQuery)->count(),
+            'pending' => (clone $baseQuery)->where('status', AfaRegistration::STATUS_PENDING)->count(),
+            'processing' => (clone $baseQuery)->where('status', AfaRegistration::STATUS_PROCESSING)->count(),
+            'completed' => (clone $baseQuery)->where('status', AfaRegistration::STATUS_COMPLETED)->count(),
+            'rejected' => (clone $baseQuery)->where('status', AfaRegistration::STATUS_REJECTED)->count(),
         ];
 
         return view('vendor.afa.index', [
             'vendor' => $vendor,
             'registrations' => $registrations,
-            'stats' => $stats,
             'counts' => $counts,
             'currentStatus' => $request->status ?? 'all',
             'search' => $request->search,
@@ -91,8 +83,13 @@ class VendorAfaController extends Controller
     {
         $vendor = $this->vendor();
 
-        // Ensure vendor owns this registration
-        if ($registration->vendor_id !== $vendor->id) {
+        // Authorization: vendor can manage direct registrations they own, OR reseller registrations they sold.
+        $canManage = (
+            ((int) $registration->vendor_id === (int) $vendor->id && is_null($registration->reseller_vendor_id))
+            || ((int) $registration->reseller_vendor_id === (int) $vendor->id)
+        );
+
+        if (!$canManage) {
             abort(403, 'Unauthorized');
         }
 
@@ -109,8 +106,12 @@ class VendorAfaController extends Controller
     {
         $vendor = $this->vendor();
 
-        // Ensure vendor owns this registration
-        if ($registration->vendor_id !== $vendor->id) {
+        $canManage = (
+            ((int) $registration->vendor_id === (int) $vendor->id && is_null($registration->reseller_vendor_id))
+            || ((int) $registration->reseller_vendor_id === (int) $vendor->id)
+        );
+
+        if (!$canManage) {
             abort(403, 'Unauthorized');
         }
 
@@ -159,8 +160,16 @@ class VendorAfaController extends Controller
             'status' => ['required', 'in:processing,approved,completed'],
         ]);
 
-        $updated = AfaRegistration::where('vendor_id', $vendor->id)
+        $updated = AfaRegistration::query()
             ->whereIn('id', $request->registration_ids)
+            ->where(function ($q) use ($vendor) {
+                $q->where(function ($direct) use ($vendor) {
+                    $direct->where('vendor_id', $vendor->id)
+                        ->whereNull('reseller_vendor_id');
+                })->orWhere(function ($reseller) use ($vendor) {
+                    $reseller->where('reseller_vendor_id', $vendor->id);
+                });
+            })
             ->update(['status' => $request->status]);
 
         return back()->with('success', "{$updated} registration(s) updated successfully.");
@@ -172,14 +181,18 @@ class VendorAfaController extends Controller
     public function settings()
     {
         $vendor = $this->vendor();
-        
-        // Get vendors who offer AFA for reselling (exclude self)
-        $availableAfaVendors = Vendor::where('id', '!=', $vendor->id)
-            ->where('is_approved', true)
-            ->where('afa_enabled', true)
-            ->where('afa_price', '>', 0)
-            ->select('id', 'name', 'vendor_code', 'afa_price')
-            ->get();
+
+        // Only show AFA providers that this vendor is linked to as an affiliate.
+        // Today that means: the affiliate parent vendor referenced by affiliate_vendor_id.
+        $availableAfaVendors = collect();
+        if (!is_null($vendor->affiliate_vendor_id)) {
+            $availableAfaVendors = Vendor::where('id', $vendor->affiliate_vendor_id)
+                ->where('is_approved', true)
+                ->where('afa_enabled', true)
+                ->where('afa_price', '>', 0)
+                ->select('id', 'name', 'vendor_code', 'afa_price')
+                ->get();
+        }
         
         // Get current source vendor if reseller is enabled
         $sourceVendor = null;
@@ -229,6 +242,15 @@ class VendorAfaController extends Controller
                 'afa_source_vendor_id' => ['required', 'exists:vendors,id'],
                 'afa_markup' => ['required', 'numeric', 'min:0', 'max:10000'],
             ]);
+
+            // Enforce business rule: vendor can only resell AFA from their affiliate parent.
+            if (is_null($vendor->affiliate_vendor_id)) {
+                return back()->with('error', 'You must join an affiliate (parent vendor) before selecting an AFA provider.');
+            }
+
+            if ((int) $request->afa_source_vendor_id !== (int) $vendor->affiliate_vendor_id) {
+                return back()->with('error', 'You can only select your affiliate parent as your AFA provider.');
+            }
             
             // Get the source vendor's base price
             $sourceVendor = Vendor::find($request->afa_source_vendor_id);

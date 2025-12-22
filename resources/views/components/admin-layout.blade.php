@@ -167,7 +167,7 @@
                         </div>
                         <div class="ml-3">
                             <p class="text-sm font-medium text-gray-700">{{ Auth::user()->name ?? 'Admin User' }}</p>
-                            <p class="text-xs text-gray-500">{{ Auth::user()->email ?? 'admin@xtra4u.com' }}</p>
+                            <p class="text-xs text-gray-500">{{ Auth::user()->email ?? '' }}</p>
                         </div>
                     </div>
                     <form method="POST" action="{{ route('admin.logout') }}">
@@ -219,7 +219,7 @@
                             </div>
                             <div class="ml-3">
                                 <p class="text-sm font-medium text-gray-700">{{ Auth::user()->name ?? 'Admin User' }}</p>
-                                <p class="text-xs text-gray-500">{{ Auth::user()->email ?? 'admin@xtra4u.com' }}</p>
+                                <p class="text-xs text-gray-500">{{ Auth::user()->email ?? '' }}</p>
                             </div>
                         </div>
                         <form method="POST" action="{{ route('admin.logout') }}">

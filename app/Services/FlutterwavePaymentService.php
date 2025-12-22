@@ -137,6 +137,80 @@ class FlutterwavePaymentService
     }
 
     /**
+     * Initiate generic payment (non-Order flows like AFA)
+     */
+    public function initiatePayment(string $email, float $amount, string $callbackUrl, ?string $reference = null, array $metadata = []): array
+    {
+        if (!$this->isConfigured()) {
+            return [
+                'success' => false,
+                'message' => 'Flutterwave payment gateway not configured.',
+                'reference' => $reference,
+            ];
+        }
+
+        $reference = $reference ?? ('XTRA4U-FLW-' . strtoupper(uniqid()) . '-' . time());
+
+        $payload = [
+            'tx_ref' => $reference,
+            'amount' => $amount,
+            'currency' => 'GHS',
+            'redirect_url' => $callbackUrl,
+            'customer' => [
+                'email' => $email,
+                'name' => 'XTRA4U Customer',
+            ],
+            'customizations' => [
+                'title' => 'XTRA4U Payment',
+                'description' => 'Payment',
+            ],
+        ];
+
+        if (! empty($metadata)) {
+            // Flutterwave commonly accepts additional metadata under `meta`.
+            $payload['meta'] = $metadata;
+        }
+
+        try {
+            $response = $this->getHttpClient()->post($this->paymentUrl . '/payments', $payload);
+            $data = $response->json();
+
+            if ($response->successful() && (($data['status'] ?? null) === 'success')) {
+                return [
+                    'success' => true,
+                    'message' => $data['message'] ?? 'Payment initialized.',
+                    'reference' => $reference,
+                    'authorization_url' => $data['data']['link'] ?? null,
+                ];
+            }
+
+            Log::warning('Flutterwave generic payment init failed', [
+                'payload' => $payload,
+                'response' => $data,
+                'http_status' => $response->status(),
+            ]);
+
+            return [
+                'success' => false,
+                'message' => $data['message'] ?? 'Failed to initialize payment.',
+                'reference' => $reference,
+                'http_status' => $response->status(),
+            ];
+        } catch (\Exception $e) {
+            Log::error('Flutterwave Generic Payment Exception', [
+                'payload' => $payload,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'success' => false,
+                'message' => 'Error initializing payment.',
+                'reference' => $reference,
+            ];
+        }
+    }
+
+    /**
      * Verify payment
      */
     public function verifyPayment(string $reference): array

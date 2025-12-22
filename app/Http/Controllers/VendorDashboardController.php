@@ -10,6 +10,7 @@ use App\Models\Vendor;
 use App\Models\VendorNotification;
 use App\Models\VendorWithdrawal;
 use App\Models\AdminNotification;
+use App\Models\AfaRegistration;
 use App\Services\MomoPayoutService;
 use App\Services\SmsService;
 use App\Services\TransactionService;
@@ -35,13 +36,16 @@ class VendorDashboardController extends Controller
 		
 		// Only count completed transactions for sales/earnings (all time for withdrawable balance)
 		$completedTransactions = $transactions->where('payment_status', 'completed');
-		$allTimeEarnings = $completedTransactions->sum('vendor_earning');
+		$transactionAllTimeEarnings = (float) $completedTransactions->sum('vendor_earning');
+		$afaAllTimeStats = $this->getAfaFilteredStats($vendorId, 'all_time');
+		$allTimeEarnings = $transactionAllTimeEarnings + $afaAllTimeStats['earnings'];
 		
 		// Default to "today" filter for display
 		$filter = request('filter', 'today');
 		$filteredStats = $this->getFilteredStats($completedTransactions, $filter);
-		$totalSales = $filteredStats['sales'];
-		$totalEarnings = $filteredStats['earnings'];
+		$afaFilteredStats = $this->getAfaFilteredStats($vendorId, $filter);
+		$totalSales = $filteredStats['sales'] + $afaFilteredStats['sales'];
+		$totalEarnings = $filteredStats['earnings'] + $afaFilteredStats['earnings'];
 		$commissions = $filteredStats['commissions'];
 		
 		// Get orders (both direct and as owner of affiliate orders)
@@ -81,10 +85,11 @@ class VendorDashboardController extends Controller
 		
 		$filter = request('filter', 'today');
 		$stats = $this->getFilteredStats($completedTransactions, $filter);
+		$afaStats = $this->getAfaFilteredStats($vendorId, $filter);
 		
 		return response()->json([
-			'sales' => number_format($stats['sales'], 2),
-			'earnings' => number_format($stats['earnings'], 2),
+			'sales' => number_format($stats['sales'] + $afaStats['sales'], 2),
+			'earnings' => number_format($stats['earnings'] + $afaStats['earnings'], 2),
 			'filter' => $filter,
 		]);
 	}
@@ -110,6 +115,66 @@ class VendorDashboardController extends Controller
 			'earnings' => $filtered->sum('vendor_earning'),
 			'commissions' => $filtered->sum('commission_amount'),
 		];
+	}
+
+	/**
+	 * Get AFA earnings/sales for vendor by date filter.
+	 *
+	 * Notes:
+	 * - Vendor earnings come from:
+	 *   - source/provider role: sum(vendor_earning) where vendor_id = vendor
+	 *   - reseller role: sum(reseller_earning) where reseller_vendor_id = vendor
+	 * - For sales, we mirror the transaction pattern (amount attributable to that vendor):
+	 *   - provider sales: sum(vendor_price)
+	 *   - reseller sales: sum(amount - vendor_price) (computed as sum(amount) - sum(vendor_price))
+	 */
+	private function getAfaFilteredStats(int $vendorId, string $filter): array
+	{
+		[$from, $to] = $this->resolveDateRange($filter);
+
+		$providerQuery = AfaRegistration::query()
+			->paid()
+			->where('vendor_id', $vendorId)
+			->whereNotNull('payment_completed_at');
+
+		$resellerQuery = AfaRegistration::query()
+			->paid()
+			->where('reseller_vendor_id', $vendorId)
+			->whereNotNull('payment_completed_at');
+
+		if ($from && $to) {
+			$providerQuery->whereBetween('payment_completed_at', [$from, $to]);
+			$resellerQuery->whereBetween('payment_completed_at', [$from, $to]);
+		}
+
+		$providerEarnings = (float) $providerQuery->sum('vendor_earning');
+		$resellerEarnings = (float) $resellerQuery->sum('reseller_earning');
+		$earnings = $providerEarnings + $resellerEarnings;
+
+		$providerSales = (float) $providerQuery->sum('vendor_price');
+		$resellerTotalSales = (float) $resellerQuery->sum('amount');
+		$resellerBaseSales = (float) $resellerQuery->sum('vendor_price');
+		$resellerSales = max($resellerTotalSales - $resellerBaseSales, 0);
+		$sales = $providerSales + $resellerSales;
+
+		return [
+			'sales' => $sales,
+			'earnings' => $earnings,
+		];
+	}
+
+	private function resolveDateRange(string $filter): array
+	{
+		$now = now();
+
+		return match ($filter) {
+			'today' => [$now->copy()->startOfDay(), $now->copy()->endOfDay()],
+			'yesterday' => [$now->copy()->subDay()->startOfDay(), $now->copy()->subDay()->endOfDay()],
+			'this_week' => [$now->copy()->startOfWeek(), $now->copy()->endOfDay()],
+			'this_month' => [$now->copy()->startOfMonth(), $now->copy()->endOfDay()],
+			'all_time' => [null, null],
+			default => [$now->copy()->startOfDay(), $now->copy()->endOfDay()],
+		};
 	}
 
 	public function orders()
@@ -396,7 +461,8 @@ class VendorDashboardController extends Controller
 	{
 		$vendor = $this->resolveVendor();
 		$vendorId = $vendor->id;
-		$totalEarnings = $this->transactionService->getVendorEarnings($vendorId);
+		$totalEarnings = (float) $this->transactionService->getVendorEarnings($vendorId)
+			+ $this->getAfaFilteredStats($vendorId, 'all_time')['earnings'];
 		$withdrawableBalance = $this->calculateWithdrawableBalance($vendorId, $totalEarnings);
 
 		$data = $request->validate([
@@ -437,7 +503,8 @@ class VendorDashboardController extends Controller
 	{
 		$vendor = $this->resolveVendor();
 		$vendorId = $vendor->id;
-		$totalEarnings = $this->transactionService->getVendorEarnings($vendorId);
+		$totalEarnings = (float) $this->transactionService->getVendorEarnings($vendorId)
+			+ $this->getAfaFilteredStats($vendorId, 'all_time')['earnings'];
 		$withdrawableBalance = $this->calculateWithdrawableBalance($vendorId, $totalEarnings);
 		$withdrawals = VendorWithdrawal::where('vendor_id', $vendorId)
 			->latest()

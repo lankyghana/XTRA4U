@@ -83,6 +83,14 @@
                                     </svg>
                                     Edit
                                 </x-button>
+
+                                <form action="{{ route('vendor.products.destroy', $product) }}" method="POST" class="inline" onsubmit="return confirm('Delete this product? This cannot be undone.');">
+                                    @csrf
+                                    @method('DELETE')
+                                    <x-button type="submit" variant="danger" size="sm">
+                                        Delete
+                                    </x-button>
+                                </form>
                             </td>
                         </tr>
                     @empty

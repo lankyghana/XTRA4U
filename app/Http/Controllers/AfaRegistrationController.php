@@ -4,16 +4,17 @@ namespace App\Http\Controllers;
 
 use App\Models\AfaRegistration;
 use App\Models\Vendor;
-use App\Services\PaystackPaymentService;
+use App\Models\PaymentGatewayConfig;
+use App\Services\PaymentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class AfaRegistrationController extends Controller
 {
-    protected PaystackPaymentService $paymentService;
+    protected PaymentService $paymentService;
 
-    public function __construct(PaystackPaymentService $paymentService)
+    public function __construct(PaymentService $paymentService)
     {
         $this->paymentService = $paymentService;
     }
@@ -171,8 +172,8 @@ class AfaRegistrationController extends Controller
             // Use the selling vendor's email for payment (reseller or direct)
             $paymentEmail = $vendor->email;
 
-            // Initiate payment using the generic payment method
-            $paymentResult = $this->paymentService->initiatePayment(
+            // Initiate payment using the active default payment gateway
+            $paymentResult = $this->paymentService->initiateGenericPayment(
                 $paymentEmail,
                 $afaPrice,
                 route('afa.callback'),
@@ -188,10 +189,12 @@ class AfaRegistrationController extends Controller
             );
 
             if ($paymentResult['success']) {
+                $defaultGateway = PaymentGatewayConfig::getDefault(PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION);
+
                 // Update registration with payment reference
                 $registration->update([
                     'payment_reference' => $paymentResult['reference'],
-                    'payment_gateway' => 'paystack',
+                    'payment_gateway' => $defaultGateway?->gateway_name,
                 ]);
 
                 return redirect($paymentResult['authorization_url']);
@@ -218,7 +221,8 @@ class AfaRegistrationController extends Controller
      */
     public function paymentCallback(Request $request)
     {
-        $reference = $request->get('reference');
+        // Paystack returns `reference`, Flutterwave returns `tx_ref`
+        $reference = $request->get('reference') ?? $request->get('trxref') ?? $request->get('tx_ref');
 
         if (!$reference) {
             return redirect()->route('storefront.index')->with('error', 'Invalid payment reference.');
@@ -231,8 +235,8 @@ class AfaRegistrationController extends Controller
             return redirect()->route('storefront.index')->with('error', 'Registration not found.');
         }
 
-        // Verify payment with Paystack
-        $verificationResult = $this->paymentService->verifyPayment($reference);
+        // Verify payment with the active default gateway
+        $verificationResult = $this->paymentService->checkPaymentStatus($reference);
 
         if ($verificationResult['success']) {
             $registration->update([

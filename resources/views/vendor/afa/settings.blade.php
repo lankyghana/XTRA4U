@@ -197,9 +197,9 @@
                                     @endforeach
                                 </select>
                                 @if(empty($availableAfaVendors) || $availableAfaVendors->isEmpty())
-                                    <p class="mt-1 text-sm text-yellow-600">No vendors are currently offering AFA service for reselling.</p>
+                                    <p class="mt-1 text-sm text-yellow-600">No eligible AFA provider found. You can only resell AFA from your affiliate parent vendor (and only if they have AFA enabled).</p>
                                 @else
-                                    <p class="mt-1 text-sm text-gray-500">Choose a vendor whose AFA service you want to resell.</p>
+                                    <p class="mt-1 text-sm text-gray-500">You can only resell AFA from your affiliate parent vendor.</p>
                                 @endif
                                 @error('afa_source_vendor_id')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>

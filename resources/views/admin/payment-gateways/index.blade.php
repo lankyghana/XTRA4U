@@ -46,6 +46,12 @@
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-200">
                             @foreach($gateways[$typeKey] as $gateway)
+                                @php
+                                    // "Generic payments" are used for non-Order flows (e.g. AFA Registration).
+                                    // Currently supported by Paystack + Flutterwave. Hubtel payment collection is not wired for this flow yet.
+                                    $supportsGenericPayments = in_array($gateway->gateway_name, ['paystack', 'flutterwave'], true);
+                                    $isPaymentCollectionType = ($typeKey === 'payment_collection');
+                                @endphp
                                 <tr>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <div class="flex items-center">
@@ -78,14 +84,30 @@
                                             <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
                                                 Default
                                             </span>
+
+                                            @if($isPaymentCollectionType && ! $supportsGenericPayments)
+                                                <div class="mt-1 text-xs text-red-600">
+                                                    Warning: AFA payments may fail on this gateway.
+                                                </div>
+                                            @endif
                                         @else
                                             <form method="POST" action="{{ route('admin.payment-gateways.set-default', $gateway) }}" class="inline">
                                                 @csrf
                                                 @method('PATCH')
-                                                <button type="submit" class="text-sm text-blue-600 hover:text-blue-800">
+                                                <button type="submit"
+                                                        class="text-sm text-blue-600 hover:text-blue-800"
+                                                        @if($isPaymentCollectionType && ! $supportsGenericPayments)
+                                                            onclick="return confirm('This gateway is not yet wired for AFA (generic) payments. Regular checkout may work, but AFA Registration payments can fail. Continue setting as default?')"
+                                                        @endif>
                                                     Set Default
                                                 </button>
                                             </form>
+
+                                            @if($isPaymentCollectionType && ! $supportsGenericPayments)
+                                                <div class="mt-1 text-xs text-red-600">
+                                                    AFA not supported on this gateway.
+                                                </div>
+                                            @endif
                                         @endif
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
