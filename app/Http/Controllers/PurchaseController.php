@@ -88,7 +88,7 @@ class PurchaseController extends Controller
             'vendor_id' => $validated['vendor_id'],
             'vendor_service_id' => $product->id,
             'status' => 'Pending',
-            'payment_status' => 'pending',
+            'payment_status' => 'unpaid',
             'reseller_product_id' => $resellerProduct?->id ?? null,
             'owner_vendor_id' => $resellerProduct?->owner_vendor_id ?? null,
             'reseller_vendor_id' => $isResellerOrder ? $validated['vendor_id'] : null,
