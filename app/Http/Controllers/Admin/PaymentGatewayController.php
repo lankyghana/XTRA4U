@@ -65,10 +65,33 @@ class PaymentGatewayController extends Controller
             return back()->withErrors(['gateway_type' => 'Selected gateway does not support this type.']);
         }
 
+        $capabilities = $gatewayInfo['capabilities'] ?? PaymentGatewayConfig::defaultCapabilitiesFor($request->gateway_name);
+
+        // Safety: do not allow enabling a gateway for a flow it doesn't support.
+        if ($request->gateway_type === PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION && $request->boolean('is_active') && empty($capabilities['supports_collection'])) {
+            return back()->withErrors(['is_active' => 'This gateway is not wired for checkout collections in this system.']);
+        }
+        if ($request->gateway_type === PaymentGatewayConfig::TYPE_PAYOUT && $request->boolean('is_active') && empty($capabilities['supports_payout'])) {
+            return back()->withErrors(['is_active' => 'This gateway does not support payouts.']);
+        }
+        if ($request->gateway_type === PaymentGatewayConfig::TYPE_SMS && $request->boolean('is_active') && empty($capabilities['supports_sms'])) {
+            return back()->withErrors(['is_active' => 'This gateway is not wired for SMS in this system.']);
+        }
+
+        // Safety: payment collection default is used by both checkout + generic flows.
+        if (
+            $request->gateway_type === PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION
+            && $request->boolean('is_default')
+            && (empty($capabilities['supports_collection']) || empty($capabilities['supports_generic']))
+        ) {
+            return back()->withErrors(['is_default' => 'This gateway cannot be set as the default payment collection gateway because it does not support generic (AFA) payments.']);
+        }
+
         // Build config data from form inputs
         $configData = [];
-        if (isset($gatewayInfo['config_fields'])) {
-            foreach (array_keys($gatewayInfo['config_fields']) as $field) {
+        $fieldsForType = $gatewayInfo['config_fields_by_type'][$request->gateway_type] ?? ($gatewayInfo['config_fields'] ?? null);
+        if (is_array($fieldsForType)) {
+            foreach (array_keys($fieldsForType) as $field) {
                 $configData[$field] = $request->input("config.{$field}", '');
             }
         }
@@ -84,6 +107,11 @@ class PaymentGatewayController extends Controller
             $gateway = PaymentGatewayConfig::create([
                 'gateway_name' => $request->gateway_name,
                 'gateway_type' => $request->gateway_type,
+                'supports_collection' => (bool) ($capabilities['supports_collection'] ?? false),
+                'supports_generic' => (bool) ($capabilities['supports_generic'] ?? false),
+                'supports_payout' => (bool) ($capabilities['supports_payout'] ?? false),
+                'supports_sms' => (bool) ($capabilities['supports_sms'] ?? false),
+                'supports_webhook' => (bool) ($capabilities['supports_webhook'] ?? false),
                 'environment' => $request->environment,
                 'is_active' => $request->boolean('is_active'),
                 'is_default' => $request->boolean('is_default'),
@@ -136,10 +164,13 @@ class PaymentGatewayController extends Controller
 
         // Build config data from form inputs
         $gatewayInfo = $availableGateways[$gateway->gateway_name];
+        $capabilities = $gatewayInfo['capabilities'] ?? PaymentGatewayConfig::defaultCapabilitiesFor($gateway->gateway_name);
         $configData = $gateway->config_data; // Start with existing data
 
-        if (isset($gatewayInfo['config_fields'])) {
-            foreach (array_keys($gatewayInfo['config_fields']) as $field) {
+        $fieldsForType = $gatewayInfo['config_fields_by_type'][$gateway->gateway_type] ?? ($gatewayInfo['config_fields'] ?? null);
+
+        if (is_array($fieldsForType)) {
+            foreach (array_keys($fieldsForType) as $field) {
                 $value = $request->input("config.{$field}");
                 if ($value !== null) {
                     $configData[$field] = $value;
@@ -150,10 +181,35 @@ class PaymentGatewayController extends Controller
         try {
             DB::beginTransaction();
 
+            // Safety: payment collection default is used by both checkout + generic flows.
+            if (
+                $gateway->gateway_type === PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION
+                && $request->boolean('is_default')
+                && (empty($capabilities['supports_collection']) || empty($capabilities['supports_generic']))
+            ) {
+                DB::rollBack();
+                return back()->withErrors(['is_default' => 'This gateway cannot be set as the default payment collection gateway because it does not support generic (AFA) payments.']);
+            }
+
+            // Safety: do not allow enabling a gateway for a flow it doesn't support.
+            if ($gateway->gateway_type === PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION && $request->boolean('is_active') && empty($capabilities['supports_collection'])) {
+                DB::rollBack();
+                return back()->withErrors(['is_active' => 'This gateway is not wired for checkout collections in this system.']);
+            }
+            if ($gateway->gateway_type === PaymentGatewayConfig::TYPE_SMS && $request->boolean('is_active') && empty($capabilities['supports_sms'])) {
+                DB::rollBack();
+                return back()->withErrors(['is_active' => 'This gateway is not wired for SMS in this system.']);
+            }
+
             $gateway->update([
                 'environment' => $request->environment,
                 'is_active' => $request->boolean('is_active'),
                 'is_default' => $request->boolean('is_default'),
+                'supports_collection' => (bool) ($capabilities['supports_collection'] ?? false),
+                'supports_generic' => (bool) ($capabilities['supports_generic'] ?? false),
+                'supports_payout' => (bool) ($capabilities['supports_payout'] ?? false),
+                'supports_sms' => (bool) ($capabilities['supports_sms'] ?? false),
+                'supports_webhook' => (bool) ($capabilities['supports_webhook'] ?? false),
                 'config_data' => $configData,
             ]);
 
@@ -210,6 +266,21 @@ class PaymentGatewayController extends Controller
     public function setDefault(PaymentGatewayConfig $gateway)
     {
         try {
+            if (
+                $gateway->gateway_type === PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION
+                && (!$gateway->supports_collection || !$gateway->supports_generic)
+            ) {
+                return back()->withErrors(['error' => 'This gateway cannot be set as the default payment collection gateway because it does not support generic (AFA) payments.']);
+            }
+
+            if ($gateway->gateway_type === PaymentGatewayConfig::TYPE_PAYOUT && !$gateway->supports_payout) {
+                return back()->withErrors(['error' => 'This gateway cannot be set as the default payout gateway because it does not support payouts.']);
+            }
+
+            if ($gateway->gateway_type === PaymentGatewayConfig::TYPE_SMS && !$gateway->supports_sms) {
+                return back()->withErrors(['error' => 'This gateway cannot be set as the default SMS gateway because it is not wired for SMS.']);
+            }
+
             $gateway->setAsDefault();
 
             return redirect()->route('admin.payment-gateways.index')
@@ -226,6 +297,19 @@ class PaymentGatewayController extends Controller
     public function toggleActive(PaymentGatewayConfig $gateway)
     {
         try {
+            // Prevent activating unsupported flows.
+            if (!$gateway->is_active) {
+                if ($gateway->gateway_type === PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION && !$gateway->supports_collection) {
+                    return back()->withErrors(['error' => 'This gateway is not wired for checkout collections in this system.']);
+                }
+                if ($gateway->gateway_type === PaymentGatewayConfig::TYPE_PAYOUT && !$gateway->supports_payout) {
+                    return back()->withErrors(['error' => 'This gateway does not support payouts.']);
+                }
+                if ($gateway->gateway_type === PaymentGatewayConfig::TYPE_SMS && !$gateway->supports_sms) {
+                    return back()->withErrors(['error' => 'This gateway is not wired for SMS in this system.']);
+                }
+            }
+
             // Don't allow deactivating the default gateway if it's the only one of its type
             if ($gateway->is_active && $gateway->is_default) {
                 $otherActiveGateways = PaymentGatewayConfig::where('gateway_type', $gateway->gateway_type)
