@@ -2,12 +2,14 @@
 
 namespace App\Services;
 
+use App\Contracts\Gateways\CollectsPayments;
+use App\Contracts\Gateways\HandlesGenericPayments;
 use App\Models\Order;
 use App\Models\PaymentGatewayConfig;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
-class FlutterwavePaymentService
+class FlutterwavePaymentService implements CollectsPayments, HandlesGenericPayments
 {
     protected string $publicKey;
     protected string $secretKey;
