@@ -52,7 +52,7 @@ class CleanupPendingPayments extends Command
         $this->info("AFA Registrations cancelled: {$afaCount}");
 
         // Clean up abandoned Orders
-        $orderQuery = Order::where('payment_status', 'pending')
+        $orderQuery = Order::whereIn('payment_status', ['pending', 'unpaid'])
             ->where('created_at', '<', $cutoffTime);
         
         $orderCount = $orderQuery->count();
