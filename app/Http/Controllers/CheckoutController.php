@@ -152,8 +152,8 @@ class CheckoutController extends Controller
 			'owner_vendor_id' => $request->owner_vendor_id ?? null,
 			'reseller_vendor_id' => $request->reseller_vendor_id ?? null,
 			'is_reseller_order' => $request->boolean('is_reseller_product', false),
-			'status' => 'pending',
-			'payment_status' => 'pending',
+			'status' => 'Pending',
+			'payment_status' => 'unpaid',
 			'payment_gateway' => 'paystack',
 		]);
 
