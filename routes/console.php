@@ -52,3 +52,6 @@ Artisan::command('xtra4u:ensure-admin {email} {--password=} {--force}', function
 
 // Schedule cleanup of abandoned payments every 6 hours
 Schedule::command('payments:cleanup --hours=24')->everySixHours();
+
+// Retry any withdrawals that are stuck in processing (safe + idempotent)
+Schedule::command('withdrawals:retry-stuck --minutes=10 --limit=200')->everyFiveMinutes();
