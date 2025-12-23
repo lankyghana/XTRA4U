@@ -73,7 +73,7 @@
             
             @php
                 $gatewayInfo = $availableGateways[$gateway->gateway_name] ?? [];
-                $configFields = $gatewayInfo['config_fields'] ?? [];
+                $configFields = $gatewayInfo['config_fields_by_type'][$gateway->gateway_type] ?? ($gatewayInfo['config_fields'] ?? []);
             @endphp
 
             @if($configFields)
