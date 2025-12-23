@@ -13,16 +13,16 @@
                 <div class="px-6 py-5">
                     <p class="text-sm text-purple-100 font-medium">Withdrawable Balance</p>
                     <p class="text-2xl font-bold text-white mt-2">GHS {{ number_format($withdrawableBalance, 2) }}</p>
-                    <p class="text-xs text-purple-100 mt-2">Includes completed earnings minus pending payouts.</p>
+                    <p class="text-xs text-purple-100 mt-2">Available wallet balance for withdrawals.</p>
                 </div>
             </div>
 
-            <!-- Pending Requests Card -->
+            <!-- Processing Requests Card -->
             <div class="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
                 <div class="px-6 py-5">
-                    <p class="text-sm text-yellow-100 font-medium">Pending Requests</p>
+                    <p class="text-sm text-yellow-100 font-medium">Processing Requests</p>
                     <p class="text-2xl font-bold text-white mt-2">GHS {{ number_format($pendingTotal, 2) }}</p>
-                    <p class="text-xs text-yellow-100 mt-2">Awaiting finance review.</p>
+                    <p class="text-xs text-yellow-100 mt-2">Being processed automatically.</p>
                 </div>
             </div>
 
@@ -214,10 +214,10 @@
                                         <x-badge variant="completed">Approved</x-badge>
                                     @elseif ($withdrawal->status === \App\Models\VendorWithdrawal::STATUS_PROCESSING)
                                         <x-badge variant="processing">Processing</x-badge>
-                                    @elseif ($withdrawal->status === \App\Models\VendorWithdrawal::STATUS_REJECTED)
-                                        <x-badge variant="warning">Rejected</x-badge>
+                                    @elseif ($withdrawal->status === \App\Models\VendorWithdrawal::STATUS_FAILED)
+                                        <x-badge variant="warning">Failed</x-badge>
                                     @else
-                                        <x-badge variant="pending">Pending</x-badge>
+                                        <x-badge variant="pending">Unknown</x-badge>
                                     @endif
                                 </td>
                             </tr>
