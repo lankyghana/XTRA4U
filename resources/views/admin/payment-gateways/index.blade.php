@@ -48,9 +48,15 @@
                             @foreach($gateways[$typeKey] as $gateway)
                                 @php
                                     // "Generic payments" are used for non-Order flows (e.g. AFA Registration).
-                                    // Currently supported by Paystack + Flutterwave. Hubtel payment collection is not wired for this flow yet.
-                                    $supportsGenericPayments = in_array($gateway->gateway_name, ['paystack', 'flutterwave'], true);
+                                    $supportsGenericPayments = (bool) $gateway->supports_generic;
                                     $isPaymentCollectionType = ($typeKey === 'payment_collection');
+
+                                    $supportsThisType = match ($typeKey) {
+                                        'payment_collection' => (bool) $gateway->supports_collection,
+                                        'payout' => (bool) $gateway->supports_payout,
+                                        'sms' => (bool) $gateway->supports_sms,
+                                        default => false,
+                                    };
                                 @endphp
                                 <tr>
                                     <td class="px-6 py-4 whitespace-nowrap">
@@ -75,29 +81,34 @@
                                             @method('PATCH')
                                             <button type="submit" class="inline-flex px-2 py-1 text-xs font-semibold rounded-full border
                                                 {{ $gateway->is_active ? 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200' : 'bg-red-100 text-red-800 border-red-200 hover:bg-red-200' }}">
+                                                @if(! $supportsThisType)
+                                                    disabled
+                                                    title="This gateway is not supported for this flow"
+                                                @endif
+                                            >
                                                 {{ $gateway->is_active ? 'Active' : 'Inactive' }}
                                             </button>
                                         </form>
+
+                                        @if(! $supportsThisType)
+                                            <div class="mt-1 text-xs text-red-600">Not supported for this flow.</div>
+                                        @endif
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         @if($gateway->is_default)
                                             <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
                                                 Default
                                             </span>
-
-                                            @if($isPaymentCollectionType && ! $supportsGenericPayments)
-                                                <div class="mt-1 text-xs text-red-600">
-                                                    Warning: AFA payments may fail on this gateway.
-                                                </div>
-                                            @endif
                                         @else
                                             <form method="POST" action="{{ route('admin.payment-gateways.set-default', $gateway) }}" class="inline">
                                                 @csrf
                                                 @method('PATCH')
                                                 <button type="submit"
                                                         class="text-sm text-blue-600 hover:text-blue-800"
-                                                        @if($isPaymentCollectionType && ! $supportsGenericPayments)
-                                                            onclick="return confirm('This gateway is not yet wired for AFA (generic) payments. Regular checkout may work, but AFA Registration payments can fail. Continue setting as default?')"
+                                                        @if(! $supportsThisType || ($isPaymentCollectionType && ! $supportsGenericPayments))
+                                                            disabled
+                                                            class="text-sm text-gray-400 cursor-not-allowed"
+                                                            title="Not eligible as default for this flow"
                                                         @endif>
                                                     Set Default
                                                 </button>
