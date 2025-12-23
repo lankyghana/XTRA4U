@@ -213,6 +213,10 @@ Route::middleware('prune.purchase.tokens')->group(function () {
     Route::post('/purchase', [\App\Http\Controllers\PurchaseController::class, 'store'])->name('purchase');
     Route::get('/purchase/callback/{token}', [\App\Http\Controllers\PurchaseController::class, 'paymentCallback'])->name('purchase.callback');
 });
+
+Route::post('/webhooks/moolre/payment', [\App\Http\Controllers\Webhooks\MoolreWebhookController::class, 'handle'])
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
+    ->name('webhooks.moolre.payment');
 Route::match(['GET', 'POST'], '/payment/callback', [PaymentCallbackController::class, 'handle'])->name('payment.callback');
 
 // Admin Authentication Routes
@@ -231,9 +235,6 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
     Route::resource('orders', AdminOrderController::class);
     Route::resource('transactions', AdminTransactionController::class);
     Route::get('withdrawals', [AdminWithdrawalController::class, 'index'])->name('withdrawals.index');
-    Route::post('withdrawals/{withdrawal}/processing', [AdminWithdrawalController::class, 'markProcessing'])->name('withdrawals.processing');
-    Route::post('withdrawals/{withdrawal}/approve', [AdminWithdrawalController::class, 'approve'])->name('withdrawals.approve');
-    Route::post('withdrawals/{withdrawal}/reject', [AdminWithdrawalController::class, 'reject'])->name('withdrawals.reject');
     // Payment Gateway Management - replaces legacy paystack-config
     
     // Payment Gateway Management
