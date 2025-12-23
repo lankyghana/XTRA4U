@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Models\AfaRegistration;
 use App\Models\Vendor;
 use App\Models\VendorWithdrawal;
+use App\Models\Order;
+use App\Models\Transaction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -42,7 +44,7 @@ class VendorDashboardTest extends TestCase
         VendorWithdrawal::create([
             'vendor_id' => $vendor->id,
             'amount' => 150.00,
-            'status' => VendorWithdrawal::STATUS_PENDING,
+            'status' => VendorWithdrawal::STATUS_PROCESSING,
             'reference' => 'WITHDRAW123',
             'notes' => 'First request',
             'momo_number' => '0244123456',
@@ -101,5 +103,73 @@ class VendorDashboardTest extends TestCase
         $response->assertJson([
             'earnings' => '98.00',
         ]);
+    }
+
+    public function test_vendor_dashboard_does_not_show_unpaid_orders()
+    {
+        $vendor = Vendor::factory()->create([
+            'is_approved' => true,
+            'password' => bcrypt('password'),
+        ]);
+
+        $ghostOrder = Order::create([
+            'recipient_phone_number' => '0550000000',
+            'mobile_money_number' => '0550000000',
+            'service_purchased' => 'GHOST-ORDER-DO-NOT-SHOW',
+            'amount_paid' => 10.00,
+            'vendor_id' => $vendor->id,
+            'status' => 'Pending',
+            'payment_status' => 'unpaid',
+        ]);
+
+        // Even if a pending transaction exists, it must not be visible.
+        Transaction::create([
+            'order_id' => $ghostOrder->id,
+            'vendor_id' => $vendor->id,
+            'recipient_phone' => $ghostOrder->recipient_phone_number,
+            'amount' => 10.00,
+            'commission_amount' => 0,
+            'vendor_earning' => 0,
+            'payment_status' => 'pending',
+        ]);
+
+        $this->actingAs($vendor, 'vendor');
+        $response = $this->get('/vendor/dashboard');
+        $response->assertStatus(200);
+        $response->assertDontSeeText('#' . $ghostOrder->id);
+    }
+
+    public function test_vendor_dashboard_shows_paid_orders_in_processing_or_completed()
+    {
+        $vendor = Vendor::factory()->create([
+            'is_approved' => true,
+            'password' => bcrypt('password'),
+        ]);
+
+        $order = Order::create([
+            'recipient_phone_number' => '0551111111',
+            'mobile_money_number' => '0551111111',
+            'service_purchased' => 'PAID-ORDER-SHOULD-SHOW',
+            'amount_paid' => 20.00,
+            'vendor_id' => $vendor->id,
+            'status' => 'Processing',
+            'payment_status' => 'paid',
+            'payment_completed_at' => now(),
+        ]);
+
+        Transaction::create([
+            'order_id' => $order->id,
+            'vendor_id' => $vendor->id,
+            'recipient_phone' => $order->recipient_phone_number,
+            'amount' => 20.00,
+            'commission_amount' => 0.40,
+            'vendor_earning' => 19.60,
+            'payment_status' => 'successful',
+        ]);
+
+        $this->actingAs($vendor, 'vendor');
+        $response = $this->get('/vendor/dashboard');
+        $response->assertStatus(200);
+        $response->assertSeeText('#' . $order->id);
     }
 }
