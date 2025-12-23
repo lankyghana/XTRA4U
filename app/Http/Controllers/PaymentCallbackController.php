@@ -25,8 +25,8 @@ class PaymentCallbackController extends Controller
 
 		$verification = $this->paymentService->checkPaymentStatus($reference);
 		if (! ($verification['success'] ?? false)) {
-			Log::warning('Paystack verification failed', ['reference' => $reference, 'response' => $verification]);
-			return response()->json(['success' => false, 'message' => $verification['message'] ?? 'Verification failed'], 400);
+			Log::warning('Payment verification failed', ['reference' => $reference, 'response' => $verification]);
+			return redirect()->route('checkout.show')->withErrors(['payment' => $verification['message'] ?? 'Verification failed']);
 		}
 
 		$order = Order::where('payment_reference', $reference)->first();
@@ -34,10 +34,36 @@ class PaymentCallbackController extends Controller
 			return response()->json(['success' => false, 'message' => 'Order not found for reference'], 404);
 		}
 
-		// Update order amount if Paystack returned it (kobo/pesewas)
+		$paymentStatus = strtolower((string) data_get($verification, 'data.status', ''));
+
+		if ($paymentStatus === 'pending' || $paymentStatus === 'unknown') {
+			return redirect()->route('checkout.show')
+				->with('payment_pending', true)
+				->with('payment_reference', $reference)
+				->with('payment_message', 'Payment pending. Please wait for confirmation.');
+		}
+
+		if ($paymentStatus && $paymentStatus !== 'success') {
+			$order->update([
+				'payment_status' => 'failed',
+				'status' => 'Failed',
+			]);
+			\App\Models\Transaction::where('order_id', $order->id)
+				->whereNotIn('payment_status', ['completed', 'successful'])
+				->update(['payment_status' => 'failed']);
+
+			return redirect()->route('checkout.show')->withErrors(['payment' => 'Payment failed.']);
+		}
+
+		// Update order amount if gateway returned it.
 		$amount = data_get($verification, 'data.amount');
 		if ($amount) {
-			$order->amount_paid = $amount / 100;
+			$numericAmount = (float) $amount;
+			if (($order->payment_gateway ?? null) === 'paystack') {
+				$order->amount_paid = $numericAmount / 100;
+			} else {
+				$order->amount_paid = $numericAmount;
+			}
 		}
 
 		// Complete order flows (wallet, notifications, transactions)
