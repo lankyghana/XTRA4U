@@ -82,6 +82,10 @@ class MigrateGatewayConfig extends Command
                 PaymentGatewayConfig::create([
                     'gateway_name' => PaymentGatewayConfig::GATEWAY_PAYSTACK,
                     'gateway_type' => PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION,
+                    'supports_collection' => true,
+                    'supports_generic' => true,
+                    'supports_payout' => true,
+                    'supports_sms' => false,
                     'is_active' => true,
                     'is_default' => true,
                     'environment' => $this->detectEnvironment($publicKey ?: $secretKey),
@@ -127,6 +131,10 @@ class MigrateGatewayConfig extends Command
                 PaymentGatewayConfig::create([
                     'gateway_name' => PaymentGatewayConfig::GATEWAY_BULKCLIX,
                     'gateway_type' => PaymentGatewayConfig::TYPE_PAYOUT,
+                    'supports_collection' => false,
+                    'supports_generic' => false,
+                    'supports_payout' => true,
+                    'supports_sms' => true,
                     'is_active' => true,
                     'is_default' => true,
                     'environment' => $environment,
@@ -160,6 +168,10 @@ class MigrateGatewayConfig extends Command
                 PaymentGatewayConfig::create([
                     'gateway_name' => PaymentGatewayConfig::GATEWAY_BULKCLIX,
                     'gateway_type' => PaymentGatewayConfig::TYPE_SMS,
+                    'supports_collection' => false,
+                    'supports_generic' => false,
+                    'supports_payout' => true,
+                    'supports_sms' => true,
                     'is_active' => true,
                     'is_default' => true,
                     'environment' => $environment,
