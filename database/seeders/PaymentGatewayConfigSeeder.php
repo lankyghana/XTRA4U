@@ -16,6 +16,11 @@ class PaymentGatewayConfigSeeder extends Seeder
         $paystack = new PaymentGatewayConfig();
         $paystack->gateway_name = PaymentGatewayConfig::GATEWAY_PAYSTACK;
         $paystack->gateway_type = PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION;
+        $paystack->supports_collection = true;
+        $paystack->supports_generic = true;
+        $paystack->supports_payout = true;
+        $paystack->supports_sms = false;
+        $paystack->supports_webhook = false;
         $paystack->is_active = true;
         $paystack->is_default = true;
         $paystack->environment = env('APP_ENV') === 'production' ? PaymentGatewayConfig::ENV_LIVE : PaymentGatewayConfig::ENV_SANDBOX;
@@ -36,6 +41,11 @@ class PaymentGatewayConfigSeeder extends Seeder
         $flutterwave = new PaymentGatewayConfig();
         $flutterwave->gateway_name = PaymentGatewayConfig::GATEWAY_FLUTTERWAVE;
         $flutterwave->gateway_type = PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION;
+        $flutterwave->supports_collection = true;
+        $flutterwave->supports_generic = true;
+        $flutterwave->supports_payout = true;
+        $flutterwave->supports_sms = false;
+        $flutterwave->supports_webhook = false;
         $flutterwave->is_active = false;
         $flutterwave->is_default = false;
         $flutterwave->environment = PaymentGatewayConfig::ENV_SANDBOX;
@@ -59,6 +69,11 @@ class PaymentGatewayConfigSeeder extends Seeder
         $bulkclixPayout = new PaymentGatewayConfig();
         $bulkclixPayout->gateway_name = PaymentGatewayConfig::GATEWAY_BULKCLIX;
         $bulkclixPayout->gateway_type = PaymentGatewayConfig::TYPE_PAYOUT;
+        $bulkclixPayout->supports_collection = false;
+        $bulkclixPayout->supports_generic = false;
+        $bulkclixPayout->supports_payout = true;
+        $bulkclixPayout->supports_sms = true;
+        $bulkclixPayout->supports_webhook = false;
         $bulkclixPayout->is_active = true;
         $bulkclixPayout->is_default = true;
         $bulkclixPayout->environment = env('APP_ENV') === 'production' ? PaymentGatewayConfig::ENV_LIVE : PaymentGatewayConfig::ENV_SANDBOX;
@@ -78,6 +93,11 @@ class PaymentGatewayConfigSeeder extends Seeder
         $bulkclixSms = new PaymentGatewayConfig();
         $bulkclixSms->gateway_name = PaymentGatewayConfig::GATEWAY_BULKCLIX;
         $bulkclixSms->gateway_type = PaymentGatewayConfig::TYPE_SMS;
+        $bulkclixSms->supports_collection = false;
+        $bulkclixSms->supports_generic = false;
+        $bulkclixSms->supports_payout = true;
+        $bulkclixSms->supports_sms = true;
+        $bulkclixSms->supports_webhook = false;
         $bulkclixSms->is_active = true;
         $bulkclixSms->is_default = true;
         $bulkclixSms->environment = env('APP_ENV') === 'production' ? PaymentGatewayConfig::ENV_LIVE : PaymentGatewayConfig::ENV_SANDBOX;
@@ -99,6 +119,11 @@ class PaymentGatewayConfigSeeder extends Seeder
                 'gateway_type' => PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION,
             ],
             [
+                'supports_collection' => false,
+                'supports_generic' => false,
+                'supports_payout' => true,
+                'supports_sms' => false,
+                'supports_webhook' => false,
                 'is_active' => false,
                 'is_default' => false,
                 'environment' => env('APP_ENV') === 'production' ? PaymentGatewayConfig::ENV_LIVE : PaymentGatewayConfig::ENV_SANDBOX,
@@ -126,6 +151,11 @@ class PaymentGatewayConfigSeeder extends Seeder
                 'gateway_type' => PaymentGatewayConfig::TYPE_PAYOUT,
             ],
             [
+                'supports_collection' => false,
+                'supports_generic' => false,
+                'supports_payout' => true,
+                'supports_sms' => false,
+                'supports_webhook' => false,
                 'is_active' => false,
                 'is_default' => false,
                 'environment' => env('APP_ENV') === 'production' ? PaymentGatewayConfig::ENV_LIVE : PaymentGatewayConfig::ENV_SANDBOX,
@@ -151,6 +181,12 @@ class PaymentGatewayConfigSeeder extends Seeder
                 'gateway_type' => PaymentGatewayConfig::TYPE_SMS,
             ],
             [
+                'supports_collection' => false,
+                'supports_generic' => false,
+                'supports_payout' => true,
+                'supports_sms' => false,
+                'supports_webhook' => false,
+                'supports_webhook' => false,
                 'is_active' => false,
                 'is_default' => false,
                 'environment' => env('APP_ENV') === 'production' ? PaymentGatewayConfig::ENV_LIVE : PaymentGatewayConfig::ENV_SANDBOX,
@@ -164,6 +200,70 @@ class PaymentGatewayConfigSeeder extends Seeder
                 'supported_features' => [
                     'sms' => true,
                     'bulk_sms' => true,
+                ],
+            ]
+        );
+
+        // Create Moolre for Payment Collection (inactive by default)
+        PaymentGatewayConfig::firstOrCreate(
+            [
+                'gateway_name' => PaymentGatewayConfig::GATEWAY_MOOLRE,
+                'gateway_type' => PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION,
+            ],
+            [
+                'supports_collection' => true,
+                'supports_generic' => true,
+                'supports_payout' => true,
+                'supports_sms' => false,
+                'supports_webhook' => true,
+                'is_active' => false,
+                'is_default' => false,
+                'environment' => env('APP_ENV') === 'production' ? PaymentGatewayConfig::ENV_LIVE : PaymentGatewayConfig::ENV_SANDBOX,
+                'config_data' => [
+                    'api_user' => env('MOOLRE_API_USER', ''),
+                    'public_key' => env('MOOLRE_PUBLIC_KEY', ''),
+                    'account_number' => env('MOOLRE_ACCOUNT_NUMBER', ''),
+                    'business_email' => env('MOOLRE_BUSINESS_EMAIL', ''),
+                    'webhook_secret' => env('MOOLRE_WEBHOOK_SECRET', ''),
+                    'currency' => env('MOOLRE_CURRENCY', 'GHS'),
+                    'base_url' => env('MOOLRE_BASE_URL', 'https://api.moolre.com'),
+                ],
+                'supported_features' => [
+                    'mobile_money' => true,
+                    'mtn_momo' => true,
+                    'telecel_momo' => true,
+                    'airteltigo_momo' => true,
+                    'webhook' => true,
+                ],
+            ]
+        );
+
+        // Create Moolre for Payouts (inactive by default)
+        PaymentGatewayConfig::firstOrCreate(
+            [
+                'gateway_name' => PaymentGatewayConfig::GATEWAY_MOOLRE,
+                'gateway_type' => PaymentGatewayConfig::TYPE_PAYOUT,
+            ],
+            [
+                'supports_collection' => true,
+                'supports_generic' => true,
+                'supports_payout' => true,
+                'supports_sms' => false,
+                'supports_webhook' => true,
+                'is_active' => false,
+                'is_default' => false,
+                'environment' => env('APP_ENV') === 'production' ? PaymentGatewayConfig::ENV_LIVE : PaymentGatewayConfig::ENV_SANDBOX,
+                'config_data' => [
+                    'api_user' => env('MOOLRE_API_USER', ''),
+                    'api_key' => env('MOOLRE_API_KEY', ''),
+                    'account_number' => env('MOOLRE_ACCOUNT_NUMBER', ''),
+                    'currency' => env('MOOLRE_CURRENCY', 'GHS'),
+                    'base_url' => env('MOOLRE_BASE_URL', 'https://api.moolre.com'),
+                ],
+                'supported_features' => [
+                    'mtn_momo' => true,
+                    'telecel_momo' => true,
+                    'airteltigo_momo' => true,
                 ],
             ]
         );
