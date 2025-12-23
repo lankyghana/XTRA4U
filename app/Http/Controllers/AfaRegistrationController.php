@@ -189,12 +189,10 @@ class AfaRegistrationController extends Controller
             );
 
             if ($paymentResult['success']) {
-                $defaultGateway = PaymentGatewayConfig::getDefault(PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION);
-
                 // Update registration with payment reference
                 $registration->update([
                     'payment_reference' => $paymentResult['reference'],
-                    'payment_gateway' => $defaultGateway?->gateway_name,
+                    'payment_gateway' => $paymentResult['gateway_name'] ?? PaymentGatewayConfig::getDefault(PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION)?->gateway_name,
                 ]);
 
                 return redirect($paymentResult['authorization_url']);
