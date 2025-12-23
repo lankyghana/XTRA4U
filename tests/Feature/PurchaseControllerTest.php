@@ -62,7 +62,7 @@ class PurchaseControllerTest extends TestCase
         $this->assertEquals($product->id, $order->vendor_service_id);
         $this->assertEquals($product->price, (float) $order->amount_paid);
         $this->assertEquals('Pending', $order->status);
-        $this->assertEquals('pending', $order->payment_status);
+        $this->assertEquals('unpaid', $order->payment_status);
 
         // Controller flashes the payment reference to session; the order
         // model itself isn't updated at this point.
