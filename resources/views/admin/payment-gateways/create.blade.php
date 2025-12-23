@@ -42,7 +42,8 @@
             <div>
                 <label for="gateway_type" class="block text-sm font-medium text-gray-700 mb-1">Type</label>
                 <select name="gateway_type" id="gateway_type" required
-                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    onchange="updateConfigFields()">
                     <option value="">Select Type</option>
                     @foreach($gatewayTypes as $key => $name)
                         <option value="{{ $key }}" {{ old('gateway_type') === $key ? 'selected' : '' }}>
@@ -128,12 +129,31 @@ function updateGatewayFields() {
     });
     
     // Update config fields
+    updateConfigFields();
+}
+
+function updateConfigFields() {
+    const gatewaySelect = document.getElementById('gateway_name');
+    const typeSelect = document.getElementById('gateway_type');
     let fieldsHtml = '<h3 class="text-lg font-semibold text-gray-900 mb-4">Configuration</h3>';
-    
-    if (gatewayInfo.config_fields) {
+
+    const selectedGateway = gatewaySelect.value;
+    if (!selectedGateway) {
+        document.getElementById('config-fields').innerHTML = fieldsHtml + '<div class="text-gray-500">Select a gateway to see configuration options.</div>';
+        return;
+    }
+
+    const gatewayInfo = availableGateways[selectedGateway];
+    const selectedType = typeSelect.value;
+
+    const configFields = (gatewayInfo.config_fields_by_type && selectedType && gatewayInfo.config_fields_by_type[selectedType])
+        ? gatewayInfo.config_fields_by_type[selectedType]
+        : gatewayInfo.config_fields;
+
+    if (configFields) {
         fieldsHtml += '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">';
-        
-        Object.entries(gatewayInfo.config_fields).forEach(([key, label]) => {
+
+        Object.entries(configFields).forEach(([key, label]) => {
             const isSecret = key.includes('secret') || key.includes('key');
             const inputType = isSecret ? 'password' : 'text';
             const placeholder = gatewayInfo.default_config && gatewayInfo.default_config[key] || '';
@@ -155,8 +175,8 @@ function updateGatewayFields() {
     } else {
         fieldsHtml += '<div class="text-gray-500">No additional configuration required.</div>';
     }
-    
-    configFieldsDiv.innerHTML = fieldsHtml;
+
+    document.getElementById('config-fields').innerHTML = fieldsHtml;
 }
 
 // Initialize on page load
