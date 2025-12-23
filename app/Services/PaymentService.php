@@ -17,16 +17,12 @@ use Illuminate\Support\Facades\Mail;
 class PaymentService
 {
     protected GatewayManager $gatewayManager;
-    protected ?object $paymentGateway;
     protected ?SmsService $smsService;
-    protected ?MomoPayoutService $payoutService;
 
     public function __construct(?GatewayManager $gatewayManager = null)
     {
         $this->gatewayManager = $gatewayManager ?? new GatewayManager();
-        $this->paymentGateway = $this->gatewayManager->getPaymentService();
         $this->smsService = $this->gatewayManager->getSmsService();
-        $this->payoutService = $this->gatewayManager->getPayoutService();
     }
 
     /**
@@ -34,22 +30,18 @@ class PaymentService
      */
     public function initiatePayment(Order $order, string $email, float $amount): array
     {
-        if (!$this->paymentGateway) {
-            return [
-                'success' => false,
-                'message' => 'No active payment gateway configured.',
-                'reference' => null,
-            ];
-        }
-
-        // Request payment via active gateway (returns authorization URL)
-        $result = $this->paymentGateway->requestPayment($order, $email, $amount);
+        // All collection flows go through GatewayManager.
+        $result = $this->gatewayManager->collect($order, $email, $amount);
 
         if ($result['success']) {
             $order->update([
                 'payment_reference' => $result['reference'],
-                'payment_status' => 'pending',
+                // Canonical lifecycle: unpaid -> paid
+                'payment_status' => 'unpaid',
             ]);
+
+			// Payment lifecycle: create pending transaction(s) at checkout initiation.
+			$this->ensurePendingTransactions($order);
             return [
                 'success' => true,
                 'message' => $result['message'] ?? 'Payment initialized. Please complete payment.',
@@ -71,23 +63,13 @@ class PaymentService
      */
     public function initiateGenericPayment(string $email, float $amount, string $callbackUrl, ?string $reference = null, array $metadata = []): array
     {
-        if (!$this->paymentGateway) {
-            return [
-                'success' => false,
-                'message' => 'No active payment gateway configured.',
-                'reference' => $reference,
-            ];
-        }
-
-        if (! method_exists($this->paymentGateway, 'initiatePayment')) {
-            return [
-                'success' => false,
-                'message' => 'Selected payment gateway does not support generic payments for this flow.',
-                'reference' => $reference,
-            ];
-        }
-
-        return $this->paymentGateway->initiatePayment($email, $amount, $callbackUrl, $reference, $metadata);
+        return $this->gatewayManager->genericPayment([
+            'email' => $email,
+            'amount' => $amount,
+            'callback_url' => $callbackUrl,
+            'reference' => $reference,
+            'metadata' => $metadata,
+        ]);
     }
 
     /**
@@ -96,6 +78,11 @@ class PaymentService
      */
     public function completeOrder(Order $order): bool
     {
+		// Idempotency: avoid double-crediting wallets / duplicate transactions.
+        if (in_array($order->payment_status, ['paid', 'completed'], true)) {
+			return true;
+		}
+
         return DB::transaction(function () use ($order) {
             // Check if order is a reseller order
             if ($order->is_reseller_order && $order->reseller_product_id) {
@@ -115,21 +102,19 @@ class PaymentService
         $commission = round($amountPaid * 0.02, 2);
         $vendorEarnings = round($amountPaid - $commission, 2);
 
-        // Create transaction
-        Transaction::create([
-            'order_id' => $order->id,
-            'vendor_id' => $order->vendor_id,
-            'recipient_phone' => $order->recipient_phone_number,
-            'amount' => $amountPaid,
-            'commission_amount' => $commission,
-            'vendor_earning' => $vendorEarnings,
-            'payment_status' => 'completed',
-        ]);
+		// Update or create transaction (lifecycle: pending -> completed)
+		$this->upsertOrderTransaction($order, $order->vendor_id, [
+			'recipient_phone' => $order->recipient_phone_number,
+			'amount' => $amountPaid,
+			'commission_amount' => $commission,
+			'vendor_earning' => $vendorEarnings,
+            'payment_status' => 'successful',
+		]);
 
         // Update order status
         $order->update([
             'status' => 'Processing',
-            'payment_status' => 'completed',
+            'payment_status' => 'paid',
             'payment_completed_at' => now(),
         ]);
 
@@ -208,8 +193,8 @@ class PaymentService
 
         // Update order with earnings info
         $order->update([
-            'status' => 'Pending', // Reseller orders start as pending for owner to fulfill
-            'payment_status' => 'completed',
+			'status' => 'Processing',
+            'payment_status' => 'paid',
             'payment_completed_at' => now(),
             'base_price' => $basePrice,
             'markup_price' => $markupPrice,
@@ -218,27 +203,22 @@ class PaymentService
             'platform_commission' => $totalPlatformCommission,
         ]);
 
-        // Create transaction for OWNER VENDOR (base price earnings)
-        Transaction::create([
-            'order_id' => $order->id,
-            'vendor_id' => $resellerProduct->owner_vendor_id,
-            'recipient_phone' => $order->recipient_phone_number,
-            'amount' => $basePrice,
-            'commission_amount' => $ownerCommission,
-            'vendor_earning' => $ownerEarning,
-            'payment_status' => 'completed',
-        ]);
+		// Update or create transactions (lifecycle: pending -> completed)
+		$this->upsertOrderTransaction($order, $resellerProduct->owner_vendor_id, [
+			'recipient_phone' => $order->recipient_phone_number,
+			'amount' => $basePrice,
+			'commission_amount' => $ownerCommission,
+			'vendor_earning' => $ownerEarning,
+            'payment_status' => 'successful',
+		]);
 
-        // Create transaction for RESELLER VENDOR (markup earnings)
-        Transaction::create([
-            'order_id' => $order->id,
-            'vendor_id' => $resellerProduct->reseller_vendor_id,
-            'recipient_phone' => $order->recipient_phone_number,
-            'amount' => $markupPrice,
-            'commission_amount' => $resellerCommission,
-            'vendor_earning' => $resellerEarning,
-            'payment_status' => 'completed',
-        ]);
+		$this->upsertOrderTransaction($order, $resellerProduct->reseller_vendor_id, [
+			'recipient_phone' => $order->recipient_phone_number,
+			'amount' => $markupPrice,
+			'commission_amount' => $resellerCommission,
+			'vendor_earning' => $resellerEarning,
+            'payment_status' => 'successful',
+		]);
 
         // Update wallet balances
         $ownerVendor = $resellerProduct->ownerVendor;
@@ -352,14 +332,7 @@ class PaymentService
      */
     public function handleWebhook(string $reference): array
     {
-        if (!$this->paymentGateway) {
-            return [
-                'success' => false,
-                'message' => 'No active payment gateway configured.',
-            ];
-        }
-        
-        $result = $this->paymentGateway->verifyPayment($reference);
+        $result = $this->gatewayManager->verifyCollection($reference);
 
         if (!$result['success']) {
             return $result;
@@ -375,7 +348,7 @@ class PaymentService
         }
 
         // Prevent duplicate processing
-        if ($order->payment_status === 'completed') {
+        if (in_array($order->payment_status, ['paid', 'completed'], true)) {
             Log::info('Webhook: Order already completed', ['order_id' => $order->id]);
             return [
                 'success' => true,
@@ -396,11 +369,23 @@ class PaymentService
                 'message' => 'Payment processed successfully',
                 'order_id' => $order->id,
             ];
+        } elseif ($paymentStatus === 'pending' || $paymentStatus === 'unknown') {
+            Log::info('Webhook: Payment pending', [
+                'order_id' => $order->id,
+                'reference' => $reference,
+                'status' => $paymentStatus,
+            ]);
+            return [
+                'success' => true,
+                'message' => 'Payment pending',
+                'order_id' => $order->id,
+            ];
         } else {
             $order->update([
                 'payment_status' => 'failed',
                 'status' => 'Failed',
             ]);
+			$this->markOrderTransactionsFailed($order);
             Log::info('Webhook: Payment failed', [
                 'order_id' => $order->id,
                 'reference' => $reference,
@@ -419,14 +404,7 @@ class PaymentService
      */
     public function checkPaymentStatus(string $reference): array
     {
-        if (!$this->paymentGateway) {
-            return [
-                'success' => false,
-                'message' => 'No active payment gateway configured.',
-            ];
-        }
-        
-        return $this->paymentGateway->verifyPayment($reference);
+        return $this->gatewayManager->verifyCollection($reference);
     }
 
     /**
@@ -434,14 +412,17 @@ class PaymentService
      */
     public function getBalance(): array
     {
-        if (!$this->payoutService) {
+        // Balance is not standardized across payout providers in this codebase.
+        $payoutService = $this->gatewayManager->getPayoutService();
+
+        if (!$payoutService || !method_exists($payoutService, 'getBalance')) {
             return [
                 'success' => false,
                 'message' => 'No active payout gateway configured.',
             ];
         }
-        
-        $balance = $this->payoutService->getBalance();
+
+        $balance = $payoutService->getBalance();
         return [
             'success' => $balance !== null,
             'balance' => $balance ?? 0,
@@ -480,6 +461,82 @@ class PaymentService
         }
 
         return $transaction;
+    }
+
+    private function ensurePendingTransactions(Order $order): void
+    {
+        // If pending/completed transactions already exist, don't create duplicates.
+        $existingCount = Transaction::where('order_id', $order->id)->count();
+        if ($existingCount > 0) {
+            return;
+        }
+
+        if ($order->is_reseller_order && $order->reseller_product_id) {
+            $resellerProduct = ResellerProduct::find($order->reseller_product_id);
+            if (!$resellerProduct) {
+                return;
+            }
+
+            Transaction::create([
+                'order_id' => $order->id,
+                'vendor_id' => $resellerProduct->owner_vendor_id,
+                'recipient_phone' => $order->recipient_phone_number,
+                'amount' => (float) $resellerProduct->base_price,
+                'commission_amount' => 0,
+                'vendor_earning' => 0,
+                'payment_status' => 'pending',
+            ]);
+
+            Transaction::create([
+                'order_id' => $order->id,
+                'vendor_id' => $resellerProduct->reseller_vendor_id,
+                'recipient_phone' => $order->recipient_phone_number,
+                'amount' => (float) $resellerProduct->markup_price,
+                'commission_amount' => 0,
+                'vendor_earning' => 0,
+                'payment_status' => 'pending',
+            ]);
+
+            return;
+        }
+
+        Transaction::create([
+            'order_id' => $order->id,
+            'vendor_id' => $order->vendor_id,
+            'recipient_phone' => $order->recipient_phone_number,
+            'amount' => (float) $order->amount_paid,
+            'commission_amount' => 0,
+            'vendor_earning' => 0,
+            'payment_status' => 'pending',
+        ]);
+    }
+
+    private function upsertOrderTransaction(Order $order, int $vendorId, array $attributes): void
+    {
+        $transaction = Transaction::where('order_id', $order->id)
+            ->where('vendor_id', $vendorId)
+            ->latest('id')
+            ->first();
+
+        if ($transaction) {
+            if (in_array($transaction->payment_status, ['completed', 'successful'], true)) {
+                return;
+            }
+            $transaction->update($attributes);
+            return;
+        }
+
+        Transaction::create(array_merge([
+            'order_id' => $order->id,
+            'vendor_id' => $vendorId,
+        ], $attributes));
+    }
+
+    private function markOrderTransactionsFailed(Order $order): void
+    {
+        Transaction::where('order_id', $order->id)
+            ->whereNotIn('payment_status', ['completed', 'successful'])
+            ->update(['payment_status' => 'failed']);
     }
 
     /**
