@@ -17,11 +17,11 @@ class AdminController extends Controller
         $activeVendors = Vendor::where('is_approved', true)->count();
         $pendingVendors = Vendor::where('is_approved', false)->latest()->take(5)->get();
         // Platform revenue = total commissions from completed transactions
-        $totalRevenue = Transaction::where('payment_status', 'completed')->sum('commission_amount');
+        $totalRevenue = Transaction::whereIn('payment_status', ['completed', 'successful'])->sum('commission_amount');
         $transactionsToday = Transaction::whereDate('created_at', now()->toDateString())->count();
         $ordersToday = Order::whereDate('created_at', now()->toDateString())->count();
 
-        $pendingWithdrawals = VendorWithdrawal::where('status', VendorWithdrawal::STATUS_PENDING)->count();
+        $pendingWithdrawals = VendorWithdrawal::where('status', VendorWithdrawal::STATUS_PROCESSING)->count();
 
         return view('admin.dashboard', [
             'activeVendors' => $activeVendors,
@@ -79,7 +79,7 @@ class AdminController extends Controller
     // View commissions
     public function commissions()
     {
-        $commissions = Transaction::where('payment_status', 'completed')->sum('commission_amount');
+        $commissions = Transaction::whereIn('payment_status', ['completed', 'successful'])->sum('commission_amount');
         return view('admin.commissions', compact('commissions'));
     }
 
