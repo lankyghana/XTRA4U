@@ -11,7 +11,6 @@ use App\Models\VendorNotification;
 use App\Models\VendorWithdrawal;
 use App\Models\AdminNotification;
 use App\Models\AfaRegistration;
-use App\Services\MomoPayoutService;
 use App\Services\SmsService;
 use App\Services\TransactionService;
 use Illuminate\Http\Request;
@@ -35,7 +34,7 @@ class VendorDashboardController extends Controller
 		$transactions = $this->transactionService->getVendorTransactions($vendorId);
 		
 		// Only count completed transactions for sales/earnings (all time for withdrawable balance)
-		$completedTransactions = $transactions->where('payment_status', 'completed');
+		$completedTransactions = $transactions->whereIn('payment_status', ['completed', 'successful']);
 		$transactionAllTimeEarnings = (float) $completedTransactions->sum('vendor_earning');
 		$afaAllTimeStats = $this->getAfaFilteredStats($vendorId, 'all_time');
 		$allTimeEarnings = $transactionAllTimeEarnings + $afaAllTimeStats['earnings'];
@@ -48,9 +47,17 @@ class VendorDashboardController extends Controller
 		$totalEarnings = $filteredStats['earnings'] + $afaFilteredStats['earnings'];
 		$commissions = $filteredStats['commissions'];
 		
-		// Get orders (both direct and as owner of affiliate orders)
-		$orders = Order::where('vendor_id', $vendorId)
-			->orWhere('owner_vendor_id', $vendorId)
+		// Vendors must only see successfully-paid orders.
+		$orders = Order::query()
+			->where(function ($q) use ($vendorId) {
+				$q->where('vendor_id', $vendorId)
+					->orWhere('owner_vendor_id', $vendorId);
+			})
+			->whereIn('payment_status', ['paid', 'completed'])
+			->whereIn('status', ['Processing', 'Completed'])
+			->whereHas('transactions', function ($q) {
+				$q->whereIn('payment_status', ['successful', 'completed']);
+			})
 			->latest()
 			->get();
 		$products = Product::where('vendor_id', $vendorId)->orderBy('name')->get();
@@ -81,7 +88,7 @@ class VendorDashboardController extends Controller
 		$vendor = $this->resolveVendor();
 		$vendorId = $vendor->id;
 		$transactions = $this->transactionService->getVendorTransactions($vendorId);
-		$completedTransactions = $transactions->where('payment_status', 'completed');
+		$completedTransactions = $transactions->whereIn('payment_status', ['completed', 'successful']);
 		
 		$filter = request('filter', 'today');
 		$stats = $this->getFilteredStats($completedTransactions, $filter);
@@ -180,7 +187,11 @@ class VendorDashboardController extends Controller
 	public function orders()
 	{
 		$vendor = $this->resolveVendor();
-		$orders = Order::where('vendor_id', $vendor->id)
+		$orders = Order::query()
+			->where('vendor_id', $vendor->id)
+			->whereIn('payment_status', ['paid', 'completed'])
+			->whereIn('status', ['Processing', 'Completed'])
+			->whereHas('transactions', fn ($q) => $q->whereIn('payment_status', ['successful', 'completed']))
 			->latest()
 			->paginate(20);
 
@@ -196,8 +207,12 @@ class VendorDashboardController extends Controller
 		$vendor = $this->resolveVendor();
 		
 		// Get orders where this vendor is the owner (their products sold by resellers)
-		$orders = Order::where('owner_vendor_id', $vendor->id)
+		$orders = Order::query()
+			->where('owner_vendor_id', $vendor->id)
 			->where('is_reseller_order', true)
+			->whereIn('payment_status', ['paid', 'completed'])
+			->whereIn('status', ['Processing', 'Completed'])
+			->whereHas('transactions', fn ($q) => $q->whereIn('payment_status', ['successful', 'completed']))
 			->with('resellerVendor')
 			->latest()
 			->paginate(20);
@@ -262,8 +277,14 @@ class VendorDashboardController extends Controller
 		$vendorId = $vendor->id;
 
 		// Get all orders where this vendor is involved (as primary vendor OR as product owner in affiliate orders)
-		$allVendorOrders = Order::where('vendor_id', $vendorId)
-			->orWhere('owner_vendor_id', $vendorId)
+		$allVendorOrders = Order::query()
+			->where(function ($q) use ($vendorId) {
+				$q->where('vendor_id', $vendorId)
+					->orWhere('owner_vendor_id', $vendorId);
+			})
+			->whereIn('payment_status', ['paid', 'completed'])
+			->whereIn('status', ['Processing', 'Completed'])
+			->whereHas('transactions', fn ($q) => $q->whereIn('payment_status', ['successful', 'completed']))
 			->get();
 
 		// Total orders for this vendor
@@ -275,7 +296,7 @@ class VendorDashboardController extends Controller
 		// Use Transactions for accurate earnings (this correctly tracks both owner and reseller earnings)
 		$transactions = Transaction::where('vendor_id', $vendorId)->get();
 		$completedTransactions = $transactions->filter(function ($t) {
-			return $t->payment_status === 'completed';
+			return in_array($t->payment_status, ['completed', 'successful'], true);
 		});
 
 		// Average earning per transaction (more accurate than order amount for vendors with mixed roles)
@@ -461,9 +482,7 @@ class VendorDashboardController extends Controller
 	{
 		$vendor = $this->resolveVendor();
 		$vendorId = $vendor->id;
-		$totalEarnings = (float) $this->transactionService->getVendorEarnings($vendorId)
-			+ $this->getAfaFilteredStats($vendorId, 'all_time')['earnings'];
-		$withdrawableBalance = $this->calculateWithdrawableBalance($vendorId, $totalEarnings);
+		$withdrawableBalance = (float) $vendor->wallet_balance;
 
 		$data = $request->validate([
 			'withdraw_amount' => ['required', 'numeric', 'min:1'],
@@ -481,20 +500,42 @@ class VendorDashboardController extends Controller
 			])->withInput();
 		}
 
-		$withdrawal = VendorWithdrawal::create([
-			'vendor_id' => $vendorId,
-			'amount' => $data['withdraw_amount'],
-			'momo_number' => $data['momo_number'],
-			'momo_network' => $data['momo_network'],
-			'status' => 'pending',
-			'reference' => Str::upper(Str::random(10)),
-			'notes' => $data['notes'] ?? null,
-		]);
+		$withdrawal = \Illuminate\Support\Facades\DB::transaction(function () use ($vendorId, $data) {
+			$lockedVendor = Vendor::whereKey($vendorId)->lockForUpdate()->firstOrFail();
+			$amount = (float) $data['withdraw_amount'];
 
-		// Notify admin about new withdrawal request
-		AdminNotification::notifyWithdrawalRequest($withdrawal);
+			$gatewayManager = app(\App\Services\GatewayManager::class);
+			$gateway = $gatewayManager->getDefaultConfig(\App\Models\PaymentGatewayConfig::TYPE_PAYOUT);
 
-		return back()->with('status', 'Withdrawal request submitted. Our team will review it shortly.');
+			if (!$gateway || !$gateway->is_active || !$gateway->supports_payout || !$gateway->isConfigured()) {
+				throw \Illuminate\Validation\ValidationException::withMessages([
+					'withdraw_amount' => 'Withdrawals are temporarily unavailable: no active payout gateway is configured.',
+				]);
+			}
+
+			if ((float) $lockedVendor->wallet_balance < $amount) {
+				throw \Illuminate\Validation\ValidationException::withMessages([
+					'withdraw_amount' => 'Requested amount exceeds your withdrawable balance.',
+				]);
+			}
+
+			$lockedVendor->decrement('wallet_balance', $amount);
+
+			return VendorWithdrawal::create([
+				'vendor_id' => $vendorId,
+				'amount' => $amount,
+				'momo_number' => $data['momo_number'],
+				'momo_network' => $data['momo_network'],
+				'payout_gateway' => $gateway?->gateway_name,
+				'status' => VendorWithdrawal::STATUS_PROCESSING,
+				'reference' => 'WD-' . Str::upper(Str::random(12)),
+				'notes' => $data['notes'] ?? null,
+			]);
+		});
+
+		\App\Jobs\ProcessVendorWithdrawalPayout::dispatch($withdrawal->id)->afterCommit();
+
+		return back()->with('status', 'Withdrawal request received. Your payout is being processed automatically.');
 	}
 
 
@@ -503,14 +544,12 @@ class VendorDashboardController extends Controller
 	{
 		$vendor = $this->resolveVendor();
 		$vendorId = $vendor->id;
-		$totalEarnings = (float) $this->transactionService->getVendorEarnings($vendorId)
-			+ $this->getAfaFilteredStats($vendorId, 'all_time')['earnings'];
-		$withdrawableBalance = $this->calculateWithdrawableBalance($vendorId, $totalEarnings);
+		$withdrawableBalance = (float) $vendor->wallet_balance;
 		$withdrawals = VendorWithdrawal::where('vendor_id', $vendorId)
 			->latest()
 			->paginate(10);
 		$pendingTotal = VendorWithdrawal::where('vendor_id', $vendorId)
-			->where('status', VendorWithdrawal::STATUS_PENDING)
+			->where('status', VendorWithdrawal::STATUS_PROCESSING)
 			->sum('amount');
 		$approvedTotal = VendorWithdrawal::where('vendor_id', $vendorId)
 			->where('status', VendorWithdrawal::STATUS_APPROVED)
@@ -669,18 +708,8 @@ class VendorDashboardController extends Controller
 
 	private function calculateWithdrawableBalance(int $vendorId, ?float $totalEarnings = null): float
 	{
-		$totalEarnings ??= $this->transactionService->getVendorEarnings($vendorId);
-		
-		// Subtract all withdrawals that are not rejected (pending, processing, or approved/paid)
-		$withdrawnAmount = VendorWithdrawal::where('vendor_id', $vendorId)
-			->whereIn('status', [
-				VendorWithdrawal::STATUS_PENDING,
-				VendorWithdrawal::STATUS_APPROVED,
-				VendorWithdrawal::STATUS_PROCESSING,
-			])
-			->sum('amount');
-
-		return max($totalEarnings - $withdrawnAmount, 0);
+		$vendor = Vendor::findOrFail($vendorId);
+		return (float) $vendor->wallet_balance;
 	}
 
 	// ==================== NOTIFICATIONS ====================
