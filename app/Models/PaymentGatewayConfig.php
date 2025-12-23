@@ -19,6 +19,7 @@ class PaymentGatewayConfig extends Model
     public const GATEWAY_BULKCLIX = 'bulkclix';
     public const GATEWAY_HUBTEL = 'hubtel';
     public const GATEWAY_MOMO = 'momo';
+    public const GATEWAY_MOOLRE = 'moolre';
 
     public const ENV_SANDBOX = 'sandbox';
     public const ENV_LIVE = 'live';
@@ -26,6 +27,11 @@ class PaymentGatewayConfig extends Model
     protected $fillable = [
         'gateway_name',
         'gateway_type',
+        'supports_collection',
+        'supports_generic',
+        'supports_payout',
+        'supports_sms',
+        'supports_webhook',
         'is_active',
         'is_default',
         'config_data',
@@ -36,9 +42,81 @@ class PaymentGatewayConfig extends Model
     protected $casts = [
         'is_active' => 'boolean',
         'is_default' => 'boolean',
+        'supports_collection' => 'boolean',
+        'supports_generic' => 'boolean',
+        'supports_payout' => 'boolean',
+        'supports_sms' => 'boolean',
+        'supports_webhook' => 'boolean',
         'config_data' => 'array',
         'supported_features' => 'array',
     ];
+
+    /**
+     * Capability map is gateway-level (not type-level): the same provider can support multiple flows.
+     * These flags are enforced at runtime by GatewayManager and used by the admin UI.
+     */
+    public static function capabilityMap(): array
+    {
+        return [
+            self::GATEWAY_PAYSTACK => [
+                'supports_collection' => true,
+                'supports_generic' => true,
+                'supports_payout' => true,
+                'supports_sms' => false,
+            ],
+            self::GATEWAY_FLUTTERWAVE => [
+                'supports_collection' => true,
+                'supports_generic' => true,
+                'supports_payout' => true,
+                'supports_sms' => false,
+            ],
+            self::GATEWAY_BULKCLIX => [
+                'supports_collection' => false,
+                'supports_generic' => false,
+                'supports_payout' => true,
+                'supports_sms' => true,
+            ],
+            self::GATEWAY_HUBTEL => [
+                // Safety enforcement: Hubtel collection + generic are not wired into our CollectsPayments flow.
+                // Hubtel SMS is not wired into SmsService.
+                'supports_collection' => false,
+                'supports_generic' => false,
+                'supports_payout' => true,
+                'supports_sms' => false,
+                'supports_webhook' => false,
+            ],
+            self::GATEWAY_MOOLRE => [
+                'supports_collection' => true,
+                'supports_generic' => true,
+                'supports_payout' => true,
+                'supports_sms' => false,
+                'supports_webhook' => true,
+            ],
+        ];
+    }
+
+    public static function defaultCapabilitiesFor(string $gatewayName): array
+    {
+        return static::capabilityMap()[$gatewayName] ?? [
+            'supports_collection' => false,
+            'supports_generic' => false,
+            'supports_payout' => false,
+            'supports_sms' => false,
+            'supports_webhook' => false,
+        ];
+    }
+
+    public function supports(string $flow): bool
+    {
+        return match ($flow) {
+            self::TYPE_PAYMENT_COLLECTION => (bool) $this->supports_collection,
+            'generic' => (bool) $this->supports_generic,
+            self::TYPE_PAYOUT => (bool) $this->supports_payout,
+            self::TYPE_SMS => (bool) $this->supports_sms,
+            'webhook' => (bool) $this->supports_webhook,
+            default => false,
+        };
+    }
 
     /**
      * Automatically encrypt config_data when saving
@@ -121,6 +199,7 @@ class PaymentGatewayConfig extends Model
             self::GATEWAY_PAYSTACK => [
                 'name' => 'Paystack',
                 'types' => [self::TYPE_PAYMENT_COLLECTION, self::TYPE_PAYOUT],
+                'capabilities' => self::defaultCapabilitiesFor(self::GATEWAY_PAYSTACK),
                 'config_fields' => [
                     'public_key' => 'Public Key',
                     'secret_key' => 'Secret Key',
@@ -140,6 +219,7 @@ class PaymentGatewayConfig extends Model
             self::GATEWAY_FLUTTERWAVE => [
                 'name' => 'Flutterwave',
                 'types' => [self::TYPE_PAYMENT_COLLECTION, self::TYPE_PAYOUT],
+                'capabilities' => self::defaultCapabilitiesFor(self::GATEWAY_FLUTTERWAVE),
                 'config_fields' => [
                     'public_key' => 'Public Key',
                     'secret_key' => 'Secret Key',
@@ -159,6 +239,7 @@ class PaymentGatewayConfig extends Model
             self::GATEWAY_BULKCLIX => [
                 'name' => 'BulkClix',
                 'types' => [self::TYPE_PAYOUT, self::TYPE_SMS],
+                'capabilities' => self::defaultCapabilitiesFor(self::GATEWAY_BULKCLIX),
                 'config_fields' => [
                     'api_key' => 'API Key',
                     'sender_id' => 'Sender ID',
@@ -172,6 +253,7 @@ class PaymentGatewayConfig extends Model
             self::GATEWAY_HUBTEL => [
                 'name' => 'Hubtel',
                 'types' => [self::TYPE_PAYMENT_COLLECTION, self::TYPE_PAYOUT, self::TYPE_SMS],
+                'capabilities' => self::defaultCapabilitiesFor(self::GATEWAY_HUBTEL),
                 'config_fields' => [
                     'client_id' => 'Client ID',
                     'client_secret' => 'Client Secret',
@@ -191,6 +273,43 @@ class PaymentGatewayConfig extends Model
                     'sms' => true,
                     'bulk_sms' => true,
                 ]
+            ],
+
+            self::GATEWAY_MOOLRE => [
+                'name' => 'Moolre',
+                'types' => [self::TYPE_PAYMENT_COLLECTION, self::TYPE_PAYOUT],
+                'capabilities' => self::defaultCapabilitiesFor(self::GATEWAY_MOOLRE),
+                // Moolre has distinct credentials for collections vs transfers.
+                // We model required fields by type to keep payout-only configs usable.
+                'config_fields_by_type' => [
+                    self::TYPE_PAYMENT_COLLECTION => [
+                        'api_user' => 'API Username',
+                        'public_key' => 'Public API Key',
+                        'account_number' => 'Account Number',
+                        'business_email' => 'Business Email',
+                        'webhook_secret' => 'Webhook Secret (optional)',
+                        'currency' => 'Currency',
+                        'base_url' => 'Base URL',
+                    ],
+                    self::TYPE_PAYOUT => [
+                        'api_user' => 'API Username',
+                        'api_key' => 'API Key',
+                        'account_number' => 'Account Number',
+                        'currency' => 'Currency',
+                        'base_url' => 'Base URL',
+                    ],
+                ],
+                'default_config' => [
+                    'base_url' => 'https://api.moolre.com',
+                    'currency' => 'GHS',
+                ],
+                'supported_features' => [
+                    'mobile_money' => true,
+                    'mtn_momo' => true,
+                    'telecel_momo' => true,
+                    'airteltigo_momo' => true,
+                    'webhook' => true,
+                ],
             ],
         ];
     }
@@ -216,9 +335,25 @@ class PaymentGatewayConfig extends Model
             return false;
         }
 
-        $requiredFields = array_keys($gateways[$this->gateway_name]['config_fields']);
+        $gatewayInfo = $gateways[$this->gateway_name];
+
+        $requiredFields = [];
+        if (isset($gatewayInfo['config_fields_by_type'][$this->gateway_type])) {
+            $requiredFields = array_keys($gatewayInfo['config_fields_by_type'][$this->gateway_type]);
+        } elseif (isset($gatewayInfo['config_fields'])) {
+            $requiredFields = array_keys($gatewayInfo['config_fields']);
+        }
         
         foreach ($requiredFields as $field) {
+            // Webhook secret is optional for Moolre collections.
+            // We verify payment via Moolre's status API (server-to-server) instead of trusting the webhook payload.
+            if ($this->gateway_name === self::GATEWAY_MOOLRE
+                && $this->gateway_type === self::TYPE_PAYMENT_COLLECTION
+                && $field === 'webhook_secret'
+            ) {
+                continue;
+            }
+
             if (empty($config[$field])) {
                 return false;
             }
