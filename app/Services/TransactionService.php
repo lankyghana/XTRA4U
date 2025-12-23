@@ -19,7 +19,7 @@ class TransactionService
     public function getVendorCommissions($vendorId)
     {
         return Transaction::where('vendor_id', $vendorId)
-            ->where('payment_status', 'completed')
+            ->whereIn('payment_status', ['completed', 'successful'])
             ->sum('commission_amount');
     }
 
@@ -29,7 +29,7 @@ class TransactionService
     public function getVendorEarnings($vendorId)
     {
         return Transaction::where('vendor_id', $vendorId)
-            ->where('payment_status', 'completed')
+            ->whereIn('payment_status', ['completed', 'successful'])
             ->sum('vendor_earning');
     }
 }
