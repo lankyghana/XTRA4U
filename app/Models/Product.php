@@ -33,4 +33,18 @@ class Product extends Model
     {
         return $this->hasMany(ResellerProduct::class);
     }
+
+    public function getDecodedDescriptionAttribute(): array
+    {
+        $value = $this->description;
+        if (! $value) {
+            return [];
+        }
+
+        $decoded = json_decode($value, true);
+
+        return json_last_error() === JSON_ERROR_NONE && is_array($decoded)
+            ? $decoded
+            : [];
+    }
 }
