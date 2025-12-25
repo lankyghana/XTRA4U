@@ -14,7 +14,7 @@ return [
     |
     */
 
-    'default' => env('MAIL_MAILER', 'log'),
+    'default' => config('services.mail_fallback.mailer', 'log'),
 
     /*
     |--------------------------------------------------------------------------
@@ -39,14 +39,15 @@ return [
 
         'smtp' => [
             'transport' => 'smtp',
-            'scheme' => env('MAIL_SCHEME'),
-            'url' => env('MAIL_URL'),
-            'host' => env('MAIL_HOST', '127.0.0.1'),
-            'port' => env('MAIL_PORT', 2525),
-            'username' => env('MAIL_USERNAME'),
-            'password' => env('MAIL_PASSWORD'),
+                        'scheme' => config('services.mail_fallback.scheme'),
+                        'url' => config('services.mail_fallback.url'),
+                        'host' => config('services.mail_fallback.host', '127.0.0.1'),
+                        'port' => config('services.mail_fallback.port', 2525),
+                        'username' => config('services.mail_fallback.username'),
+                        'password' => config('services.mail_fallback.password'),
             'timeout' => null,
-            'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
+                        'local_domain' => config('services.mail_fallback.ehlo_domain')
+				?? parse_url((string) config('app.url', 'http://localhost'), PHP_URL_HOST),
         ],
 
         'ses' => [
@@ -67,12 +68,12 @@ return [
 
         'sendmail' => [
             'transport' => 'sendmail',
-            'path' => env('MAIL_SENDMAIL_PATH', '/usr/sbin/sendmail -bs -i'),
+            'path' => config('services.mail_fallback.sendmail_path', '/usr/sbin/sendmail -bs -i'),
         ],
 
         'log' => [
             'transport' => 'log',
-            'channel' => env('MAIL_LOG_CHANNEL'),
+            'channel' => config('services.mail_fallback.log_channel'),
         ],
 
         'array' => [
@@ -111,8 +112,8 @@ return [
     */
 
     'from' => [
-        'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
-        'name' => env('MAIL_FROM_NAME', 'Example'),
+        'address' => config('services.mail_fallback.from.address', 'hello@example.com'),
+        'name' => config('services.mail_fallback.from.name', 'Example'),
     ],
 
 ];
