@@ -13,7 +13,7 @@
                 <tr class="hover:bg-gray-50">
                     <td class="px-6 py-4 text-sm font-medium text-gray-900">#{{ $order->id }}</td>
                     <td class="px-6 py-4 text-sm text-gray-900">{{ $order->vendor->name ?? 'N/A' }}</td>
-                    <td class="px-6 py-4 text-sm text-gray-700">{{ $order->service_purchased }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-700">{{ $order->display_service_name }}</td>
                     <td class="px-6 py-4 text-sm font-semibold text-gray-900">₵{{ number_format($order->amount_paid, 2) }}</td>
                     <td class="px-6 py-4 text-sm text-gray-900">
                         @if($order->status === 'Completed')
