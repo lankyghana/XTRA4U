@@ -8,7 +8,7 @@ class AdminOrderController extends Controller
 {
 	public function index()
 	{
-		$orders = Order::with('vendor')
+		$orders = Order::with(['vendor', 'service'])
 			->latest()
 			->paginate(20);
 
