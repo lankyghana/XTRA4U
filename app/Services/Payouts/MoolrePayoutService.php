@@ -34,17 +34,17 @@ class MoolrePayoutService implements HandlesPayouts
 
     protected function apiUser(): string
     {
-        return (string) $this->config->getConfig('api_user', '');
+        return trim((string) $this->config->getConfig('api_user', ''));
     }
 
     protected function apiKey(): string
     {
-        return (string) $this->config->getConfig('api_key', '');
+        return trim((string) $this->config->getConfig('api_key', ''));
     }
 
     protected function accountNumber(): string
     {
-        return (string) $this->config->getConfig('account_number', '');
+        return trim((string) $this->config->getConfig('account_number', ''));
     }
 
     protected function currency(): string
@@ -111,9 +111,14 @@ class MoolrePayoutService implements HandlesPayouts
             $validateData = $validateResponse->json();
 
             if (!$validateResponse->successful() || (int) ($validateData['status'] ?? 0) !== 1) {
+                $apiKey = $this->apiKey();
                 Log::warning('Moolre validate-name failed', [
                     'withdrawal_id' => $withdrawal->id,
                     'payload' => $validatePayload,
+                    'base_url' => $this->baseUrl(),
+                    'api_user' => $this->apiUser(),
+                    'api_key_len' => strlen($apiKey),
+                    'api_key_last4' => $apiKey !== '' ? substr($apiKey, -4) : null,
                     'http_status' => $validateResponse->status(),
                     'response' => $validateData,
                 ]);
@@ -176,15 +181,14 @@ class MoolrePayoutService implements HandlesPayouts
             }
 
             if ($txStatus === 0 || $txStatus === 3) {
-                // Pending/Unknown: do not fail the withdrawal; allow retry job to poll status.
-                return [
-                    'success' => null,
-                    'pending' => true,
-                    'message' => 'Payout pending confirmation via Moolre',
-                    'reference' => $externalRef,
-                    'transaction_id' => $transactionId,
-                    'status' => 'pending',
-                ];
+                // Pending/Unknown: do not assume failure. Per docs, confirm using transfer status.
+                $statusResult = $this->checkTransferStatus($externalRef);
+                if (!empty($transactionId) && empty($statusResult['transaction_id'] ?? null)) {
+                    $statusResult['transaction_id'] = $transactionId;
+                }
+                // Ensure we persist/use the same external reference.
+                $statusResult['reference'] = $externalRef;
+                return $statusResult;
             }
 
             return [
@@ -228,6 +232,18 @@ class MoolrePayoutService implements HandlesPayouts
             $data = $response->json();
 
             if (!$response->successful() || (int) ($data['status'] ?? 0) !== 1) {
+                $apiKey = $this->apiKey();
+                Log::warning('Moolre transfer status check failed', [
+                    'reference' => $externalRef,
+                    'payload' => $payload,
+                    'base_url' => $this->baseUrl(),
+                    'api_user' => $this->apiUser(),
+                    'api_key_len' => strlen($apiKey),
+                    'api_key_last4' => $apiKey !== '' ? substr($apiKey, -4) : null,
+                    'http_status' => $response->status(),
+                    'response' => $data,
+                ]);
+
                 return [
                     'success' => null,
                     'pending' => true,
