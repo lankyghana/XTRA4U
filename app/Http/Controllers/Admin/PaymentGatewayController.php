@@ -172,7 +172,17 @@ class PaymentGatewayController extends Controller
         if (is_array($fieldsForType)) {
             foreach (array_keys($fieldsForType) as $field) {
                 $value = $request->input("config.{$field}");
-                if ($value !== null) {
+                // For secret/key-like fields, treat empty string as "no change".
+                if (
+                    $value !== null
+                    && !(
+                        $value === ''
+                        && (
+                            str_contains($field, 'secret')
+                            || str_contains($field, 'key')
+                        )
+                    )
+                ) {
                     $configData[$field] = $value;
                 }
             }
@@ -387,6 +397,26 @@ class PaymentGatewayController extends Controller
                     }
                     if (isset($configData['payment_url'])) {
                         $envContent = $this->setEnvValue($envContent, 'PAYSTACK_PAYMENT_URL', $configData['payment_url']);
+                    }
+                    break;
+
+                case 'moolre':
+                case 'moole':
+                    if (isset($configData['api_user']) && $configData['api_user'] !== '') {
+                        $envContent = $this->setEnvValue($envContent, 'MOOLRE_API_USER', $configData['api_user']);
+                    }
+                    // Collections typically use a "public_key" (JWT) while payouts use "api_key".
+                    if (isset($configData['public_key']) && $configData['public_key'] !== '') {
+                        $envContent = $this->setEnvValue($envContent, 'MOOLRE_API_PUBKEY', $configData['public_key']);
+                    }
+                    if (isset($configData['api_key']) && $configData['api_key'] !== '') {
+                        $envContent = $this->setEnvValue($envContent, 'MOOLRE_API_KEY', $configData['api_key']);
+                    }
+                    if (isset($configData['account_number']) && $configData['account_number'] !== '') {
+                        $envContent = $this->setEnvValue($envContent, 'MOOLRE_ACCOUNT_NUMBER', $configData['account_number']);
+                    }
+                    if (isset($configData['base_url']) && $configData['base_url'] !== '') {
+                        $envContent = $this->setEnvValue($envContent, 'MOOLRE_BASE_URL', $configData['base_url']);
                     }
                     break;
 
