@@ -102,6 +102,9 @@ class PaymentService
         $commission = round($amountPaid * 0.02, 2);
         $vendorEarnings = round($amountPaid - $commission, 2);
 
+		// Prefer resolved product name over legacy/raw identifiers.
+		$resolvedServiceName = $order->service?->name;
+
 		// Update or create transaction (lifecycle: pending -> completed)
 		$this->upsertOrderTransaction($order, $order->vendor_id, [
 			'recipient_phone' => $order->recipient_phone_number,
@@ -116,6 +119,8 @@ class PaymentService
             'status' => 'Processing',
             'payment_status' => 'paid',
             'payment_completed_at' => now(),
+			// Normalize display name whenever possible.
+			...($resolvedServiceName ? ['service_purchased' => $resolvedServiceName] : []),
         ]);
 
         // Update vendor wallet balance
@@ -191,8 +196,10 @@ class PaymentService
         $ownerEarning = round($basePrice - $ownerCommission, 2);
         $resellerEarning = round($markupPrice - $resellerCommission, 2);
 
-        // Update order with earnings info
-        $order->update([
+		$resolvedServiceName = $resellerProduct->product?->name ?? $order->service?->name;
+
+		// Update order with earnings info
+		$order->update([
 			'status' => 'Processing',
             'payment_status' => 'paid',
             'payment_completed_at' => now(),
@@ -201,6 +208,12 @@ class PaymentService
             'owner_earning' => $ownerEarning,
             'reseller_earning' => $resellerEarning,
             'platform_commission' => $totalPlatformCommission,
+			// Persist affiliate mapping on the order for consistent UI and reporting.
+			'owner_vendor_id' => $resellerProduct->owner_vendor_id,
+			'reseller_vendor_id' => $resellerProduct->reseller_vendor_id,
+			'is_reseller_order' => true,
+			...($resellerProduct->product?->id ? ['vendor_service_id' => $resellerProduct->product->id] : []),
+			...($resolvedServiceName ? ['service_purchased' => $resolvedServiceName] : []),
         ]);
 
 		// Update or create transactions (lifecycle: pending -> completed)
@@ -511,6 +524,10 @@ class PaymentService
         ]);
     }
 
+    /**
+     * Update or create transaction for an order (legacy support)
+     * Use upsertTransaction() for new code.
+     */
     private function upsertOrderTransaction(Order $order, int $vendorId, array $attributes): void
     {
         $transaction = Transaction::where('order_id', $order->id)
@@ -529,6 +546,41 @@ class PaymentService
         Transaction::create(array_merge([
             'order_id' => $order->id,
             'vendor_id' => $vendorId,
+            'transactionable_type' => 'App\\Models\\Order',
+            'transactionable_id' => $order->id,
+            'payment_type' => 'order',
+        ], $attributes));
+    }
+
+    /**
+     * Create or update a polymorphic transaction record.
+     * Use this for all new payment types (AFA, etc.)
+     */
+    private function upsertTransaction(
+        \Illuminate\Database\Eloquent\Model $payable,
+        string $paymentType,
+        int $vendorId,
+        array $attributes
+    ): void {
+        $transaction = Transaction::where('transactionable_type', get_class($payable))
+            ->where('transactionable_id', $payable->id)
+            ->where('vendor_id', $vendorId)
+            ->latest('id')
+            ->first();
+
+        if ($transaction) {
+            if (in_array($transaction->payment_status, ['completed', 'successful'], true)) {
+                return;
+            }
+            $transaction->update($attributes);
+            return;
+        }
+
+        Transaction::create(array_merge([
+            'transactionable_type' => get_class($payable),
+            'transactionable_id' => $payable->id,
+            'vendor_id' => $vendorId,
+            'payment_type' => $paymentType,
         ], $attributes));
     }
 
