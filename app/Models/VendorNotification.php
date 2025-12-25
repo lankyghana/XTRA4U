@@ -28,6 +28,7 @@ class VendorNotification extends Model
     const TYPE_ORDER_COMPLETED = 'order_completed';
     const TYPE_WITHDRAWAL_APPROVED = 'withdrawal_approved';
     const TYPE_WITHDRAWAL_REJECTED = 'withdrawal_rejected';
+    const TYPE_AFA_REGISTRATION = 'afa_registration';
 
     public function vendor(): BelongsTo
     {
