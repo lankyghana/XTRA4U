@@ -60,12 +60,11 @@
                     </td>
                     <td class="px-6 py-4">
                         <div class="flex items-center gap-2">
-                            @if($withdrawal->momo_network === 'MTN')
-                                <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-yellow-400 text-yellow-900 text-xs font-bold">MTN</span>
-                            @elseif($withdrawal->momo_network === 'TELECEL')
-                                <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-500 text-white text-xs font-bold">TEL</span>
-                            @elseif($withdrawal->momo_network === 'AirtelTigo')
-                                <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-r from-red-500 to-blue-500 text-white text-xs font-bold">AT</span>
+                            @php
+                                $network = config('momo.withdrawal_networks.' . ($withdrawal->momo_network ?? ''), null);
+                            @endphp
+                            @if ($network)
+                                <span class="inline-flex items-center justify-center w-8 h-8 rounded-full {{ $network['admin']['badge_class'] ?? 'bg-gray-200 text-gray-600' }} text-xs font-bold">{{ $network['admin']['badge_label'] ?? '?' }}</span>
                             @else
                                 <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gray-200 text-gray-600 text-xs font-bold">?</span>
                             @endif
