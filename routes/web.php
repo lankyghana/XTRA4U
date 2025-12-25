@@ -209,6 +209,7 @@ Route::middleware(['vendor.approved'])
 Route::get('/checkout', [CheckoutController::class, 'show'])->name('checkout.show');
 Route::post('/checkout', [CheckoutController::class, 'process'])->name('checkout.process');
 Route::get('/checkout/success/{order}', [CheckoutController::class, 'success'])->name('checkout.success');
+Route::get('/checkout/receipt/{order}', [CheckoutController::class, 'receipt'])->name('checkout.receipt');
 Route::middleware('prune.purchase.tokens')->group(function () {
     Route::post('/purchase', [\App\Http\Controllers\PurchaseController::class, 'store'])->name('purchase');
     Route::get('/purchase/callback/{token}', [\App\Http\Controllers\PurchaseController::class, 'paymentCallback'])->name('purchase.callback');
