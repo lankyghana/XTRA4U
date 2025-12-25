@@ -131,9 +131,9 @@
                             class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                         >
                             <option value="">Select Provider</option>
-                            <option value="mtn" {{ $vendor->momo_provider === 'mtn' ? 'selected' : '' }}>MTN Mobile Money</option>
-                            <option value="vodafone" {{ $vendor->momo_provider === 'vodafone' ? 'selected' : '' }}>Vodafone Cash</option>
-                            <option value="airteltigo" {{ $vendor->momo_provider === 'airteltigo' ? 'selected' : '' }}>AirtelTigo Money</option>
+                            @foreach (config('momo.providers', []) as $providerValue => $providerLabel)
+                                <option value="{{ $providerValue }}" {{ $vendor->momo_provider === $providerValue ? 'selected' : '' }}>{{ $providerLabel }}</option>
+                            @endforeach
                         </select>
                         @error('momo_provider')
                             <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
