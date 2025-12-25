@@ -8,6 +8,7 @@ use App\Models\ResellerProduct;
 use App\Models\NetworkService;
 use App\Services\PaymentService;
 use Illuminate\Http\Request;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class CheckoutController extends Controller
 {
@@ -124,15 +125,31 @@ class CheckoutController extends Controller
 
     public function success($orderId)
     {
-        $order = Order::findOrFail($orderId);
+        $order = Order::with(['service', 'vendor', 'ownerVendor', 'resellerVendor'])->findOrFail($orderId);
         return view('checkout.success', compact('order'));
-    }	public function process(Request $request)
+	}
+
+	public function receipt(Order $order)
+	{
+		$order->loadMissing(['service', 'vendor', 'ownerVendor', 'resellerVendor']);
+
+		$pdf = Pdf::loadView('checkout.receipt', [
+			'order' => $order,
+		])->setPaper('a4');
+
+		return $pdf->stream('receipt-order-' . $order->id . '.pdf');
+	}
+
+	public function process(Request $request)
 	{
 		$validated = $request->validate([
 			'vendor_id' => 'required|exists:vendors,id',
 			'category_id' => 'nullable|string',
 			'service_id' => 'required|string',
+			'service_name' => 'nullable|string|max:255',
 			'package_id' => 'required',
+			'package_name' => 'nullable|string|max:255',
+			'service_purchased' => 'nullable|string|max:255',
 			'amount' => 'required|numeric|min:0.1',
 			'recipient_phone' => 'required|string',
 			'payer_phone' => 'required|string',
@@ -141,17 +158,49 @@ class CheckoutController extends Controller
 			'original_product_id' => 'nullable',
 		]);
 
+		$isResellerOrder = $request->boolean('is_reseller_product', false);
+		$originalProductId = $validated['original_product_id'] ?? null;
+		$product = null;
+		if (is_numeric($originalProductId)) {
+			$product = Product::find((int) $originalProductId);
+		}
+
+		$resellerProduct = null;
+		if ($isResellerOrder && ! empty($validated['reseller_product_id'])) {
+			$resellerProduct = ResellerProduct::with(['product'])
+				->where('id', (int) $validated['reseller_product_id'])
+				->where('reseller_vendor_id', (int) $validated['vendor_id'])
+				->first();
+
+			if (! $resellerProduct) {
+				return response()->json([
+					'success' => false,
+					'message' => 'The selected reseller product is unavailable.',
+					'errors' => ['reseller_product_id' => ['The selected reseller product is unavailable.']],
+				], 422);
+			}
+		}
+
+		$resolvedServiceName = $product?->name
+			?? $resellerProduct?->product?->name
+			?? ($validated['service_purchased'] ?? null)
+			?? ($validated['package_name'] ?? null)
+			?? ($validated['service_name'] ?? null)
+			?? 'Unknown Service';
+
 		$order = Order::create([
 			'recipient_phone_number' => $validated['recipient_phone'],
 			'mobile_money_number' => $validated['payer_phone'],
-			'service_purchased' => $validated['service_id'],
+			'service_purchased' => $resolvedServiceName,
 			'amount_paid' => $validated['amount'],
 			'vendor_id' => $validated['vendor_id'],
-			'vendor_service_id' => $validated['original_product_id'] ?? $validated['package_id'],
-			'reseller_product_id' => $validated['reseller_product_id'] ?? null,
-			'owner_vendor_id' => $request->owner_vendor_id ?? null,
-			'reseller_vendor_id' => $request->reseller_vendor_id ?? null,
-			'is_reseller_order' => $request->boolean('is_reseller_product', false),
+			'vendor_service_id' => $product?->id,
+			'reseller_product_id' => $resellerProduct?->id,
+			'owner_vendor_id' => $isResellerOrder
+				? ($resellerProduct?->owner_vendor_id ?? $product?->vendor_id)
+				: null,
+			'reseller_vendor_id' => $isResellerOrder ? (int) $validated['vendor_id'] : null,
+			'is_reseller_order' => $isResellerOrder,
 			'status' => 'Pending',
 			'payment_status' => 'unpaid',
 			'payment_gateway' => 'paystack',
