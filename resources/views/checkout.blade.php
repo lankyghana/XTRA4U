@@ -7,6 +7,7 @@
 <div
     class="min-h-screen bg-gradient-to-br from-slate-50 via-white to-purple-50 py-6 lg:py-10"
     x-data="{
+        networkGradients: @json(collect(config('momo.product_networks', []))->mapWithKeys(fn ($n, $k) => [$k => ($n['gradient'] ?? null)])->filter()->all()),
         allProducts: [],
         selectedProduct: null,
         searchQuery: '',
@@ -167,10 +168,9 @@
                         class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
                     >
                         <option value="">All Networks</option>
-                        <option value="MTN">MTN</option>
-                        <option value="Vodafone">Vodafone</option>
-                        <option value="TELECEL">TELECEL</option>
-                        <option value="AirtelTigo">AirtelTigo</option>
+                        @foreach (config('momo.product_networks', []) as $networkValue => $network)
+                            <option value="{{ $networkValue }}">{{ $network['label'] ?? $networkValue }}</option>
+                        @endforeach
                     </select>
                 </div>
 
@@ -223,12 +223,7 @@
                 >
                     <!-- Network Banner -->
                     <div class="h-2 bg-gradient-to-r"
-                         :class="{
-                            'from-yellow-400 to-yellow-500': product.network === 'MTN',
-                            'from-red-500 to-red-600': product.network === 'Vodafone' || product.network === 'TELECEL',
-                            'from-blue-500 to-blue-600': product.network === 'AirtelTigo',
-                            'from-purple-500 to-indigo-500': !product.network
-                         }">
+                        :class="(product.network && networkGradients[product.network]) ? networkGradients[product.network] : 'from-purple-500 to-indigo-500'">
                     </div>
                     
                     <div class="p-4">
