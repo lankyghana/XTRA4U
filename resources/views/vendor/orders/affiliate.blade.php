@@ -3,7 +3,7 @@
 @section('title', 'Affiliate Orders - XTRA4U')
 
 @section('content')
-<x-vendor-layout :vendor="$vendor" title="Affiliate Orders" subtitle="Orders for your products sold by resellers" active="orders">
+<x-vendor-layout :vendor="$vendor" title="Affiliate Orders" subtitle="Affiliate sales you must fulfill" active="orders">
     <div class="space-y-6">
         @if(session('success'))
             <div class="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg shadow-md">
@@ -35,7 +35,7 @@
                 </svg>
                 <div>
                     <h3 class="text-sm font-semibold text-purple-900">Affiliate Orders</h3>
-                    <p class="text-sm text-purple-700 mt-1">These are orders for your products that were sold by your resellers. You are responsible for fulfilling these orders and updating their status.</p>
+                    <p class="text-sm text-purple-700 mt-1">These are affiliate sales you made (selling another vendor's product). You are responsible for fulfilling these orders and updating their status.</p>
                 </div>
             </div>
         </div>
@@ -55,7 +55,7 @@
                 <div class="flex items-center justify-between mb-6">
                     <div>
                         <h1 class="text-xl font-bold text-gray-900">Affiliate Orders</h1>
-                        <p class="text-sm text-gray-600">Orders for your products sold by resellers. Update status to fulfill orders.</p>
+                        <p class="text-sm text-gray-600">Orders you sold as an affiliate. Update status to fulfill orders.</p>
                     </div>
                     <p class="text-sm text-gray-500">Showing <span class="font-semibold text-purple-600">{{ $orders->count() }}</span> of <span class="font-semibold text-purple-600">{{ $orders->total() }}</span> orders</p>
                 </div>
@@ -68,7 +68,7 @@
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Order ID</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Recipient</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Product</th>
-                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Reseller</th>
+                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Owner Vendor</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Your Earning</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Status</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Placed</th>
@@ -80,13 +80,17 @@
                                     <tr class="hover:bg-gradient-to-r hover:from-purple-50 hover:to-indigo-50 transition-all duration-200">
                                         <td class="px-6 py-4 text-sm font-semibold text-gray-900">#{{ $order->id }}</td>
                                         <td class="px-6 py-4 text-sm text-gray-900">{{ $order->recipient_phone_number }}</td>
-                                        <td class="px-6 py-4 text-sm text-gray-900">{{ $order->service_purchased }}</td>
+                                        <td class="px-6 py-4 text-sm text-gray-900">{{ $order->display_product_label }}</td>
                                         <td class="px-6 py-4 text-sm">
                                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                                                {{ $order->resellerVendor?->name ?? 'Unknown' }}
+                                                {{ $order->ownerVendor?->business_name
+                                                    ?? $order->ownerVendor?->name
+                                                    ?? $order->resellerProduct?->ownerVendor?->business_name
+                                                    ?? $order->resellerProduct?->ownerVendor?->name
+                                                    ?? 'Unknown' }}
                                             </span>
                                         </td>
-                                        <td class="px-6 py-4 text-sm font-semibold text-green-600">GHS {{ number_format($order->owner_earning ?? 0, 2) }}</td>
+                                        <td class="px-6 py-4 text-sm font-semibold text-green-600">GHS {{ number_format($order->reseller_earning ?? 0, 2) }}</td>
                                         <td class="px-6 py-4 text-sm">
                                             @if($order->status === 'Completed')
                                                 <x-badge variant="completed">Completed</x-badge>
