@@ -4,6 +4,34 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Mail (Fallback)
+    |--------------------------------------------------------------------------
+    |
+    | These values are the safe fallback defaults (typically sourced from .env)
+    | used when database-driven email settings are not configured.
+    |
+    | NOTE: config/mail.php must not rely on env('MAIL_*') directly.
+    */
+
+    'mail_fallback' => [
+        'mailer' => env('MAIL_MAILER', 'log'),
+        'url' => env('MAIL_URL'),
+        'scheme' => env('MAIL_SCHEME'),
+        'host' => env('MAIL_HOST', '127.0.0.1'),
+        'port' => env('MAIL_PORT', 2525),
+        'username' => env('MAIL_USERNAME'),
+        'password' => env('MAIL_PASSWORD'),
+        'ehlo_domain' => env('MAIL_EHLO_DOMAIN'),
+        'sendmail_path' => env('MAIL_SENDMAIL_PATH', '/usr/sbin/sendmail -bs -i'),
+        'log_channel' => env('MAIL_LOG_CHANNEL'),
+        'from' => [
+            'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
+            'name' => env('MAIL_FROM_NAME', 'Example'),
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Third Party Services
     |--------------------------------------------------------------------------
     |
