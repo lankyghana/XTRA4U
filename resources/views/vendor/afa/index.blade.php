@@ -92,12 +92,42 @@
                                 @forelse ($registrations as $reg)
                                     <tr class="hover:bg-gradient-to-r hover:from-green-50 hover:to-blue-50 transition-all duration-200">
                                         <td class="px-4 py-4 text-sm">
-                                            <span class="font-mono font-semibold text-gray-900">{{ $reg->reference }}</span>
-                                            @if($reg->reseller_vendor_id)
-                                                <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
-                                                    Affiliate
-                                                </span>
-                                            @endif
+                                            <div class="flex flex-col gap-1">
+                                                <span class="font-mono font-semibold text-gray-900">{{ $reg->reference }}</span>
+                                                <div class="flex items-center gap-1">
+                                                    @if($reg->reseller_vendor_id)
+                                                        {{-- Registration sold through reseller --}}
+                                                        @if($reg->reseller_vendor_id == $vendor->id)
+                                                            {{-- Current vendor is the reseller --}}
+                                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                                                                <svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+                                                                </svg>
+                                                                Reseller
+                                                            </span>
+                                                        @else
+                                                            {{-- Current vendor is the provider --}}
+                                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                                                <svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+                                                                </svg>
+                                                                Provider
+                                                            </span>
+                                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-50 text-purple-600">
+                                                                via Reseller
+                                                            </span>
+                                                        @endif
+                                                    @else
+                                                        {{-- Direct registration (no reseller) --}}
+                                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                                            <svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                                                            </svg>
+                                                            Direct Sale
+                                                        </span>
+                                                    @endif
+                                                </div>
+                                            </div>
                                         </td>
                                         <td class="px-4 py-4 text-sm">
                                             <div class="font-medium text-gray-900">{{ $reg->full_name }}</div>
@@ -127,25 +157,40 @@
                                                    class="text-blue-600 hover:text-blue-800 font-medium">
                                                     View
                                                 </a>
+                                                @php
+                                                    // Check if current vendor can manage this registration
+                                                    $canManage = (
+                                                        ((int) $reg->vendor_id === (int) $vendor->id && is_null($reg->reseller_vendor_id))
+                                                        || ((int) $reg->reseller_vendor_id === (int) $vendor->id)
+                                                    );
+                                                @endphp
                                                 @if(!in_array($reg->status, ['completed', 'cancelled']))
-                                                    <form method="POST" action="{{ route('vendor.afa.update-status', $reg) }}" class="inline-block">
-                                                        @csrf
-                                                        @method('PATCH')
-                                                        <select name="status" 
-                                                                onchange="this.form.submit()" 
-                                                                class="text-xs border-gray-300 rounded-lg focus:ring-brand-bright-blue focus:border-brand-bright-blue px-2 py-1 font-medium shadow-sm">
-                                                            <option value="">Change</option>
-                                                            @if($reg->status === 'pending')
-                                                                <option value="processing">Processing</option>
-                                                                <option value="rejected">Reject</option>
-                                                            @elseif($reg->status === 'processing')
-                                                                <option value="approved">Approve</option>
-                                                                <option value="rejected">Reject</option>
-                                                            @elseif($reg->status === 'approved')
-                                                                <option value="completed">Complete</option>
-                                                            @endif
-                                                        </select>
-                                                    </form>
+                                                    @if($canManage)
+                                                        <form method="POST" action="{{ route('vendor.afa.update-status', $reg) }}" class="inline-block">
+                                                            @csrf
+                                                            @method('PATCH')
+                                                            <select name="status" 
+                                                                    onchange="this.form.submit()" 
+                                                                    class="text-xs border-gray-300 rounded-lg focus:ring-brand-bright-blue focus:border-brand-bright-blue px-2 py-1 font-medium shadow-sm">
+                                                                <option value="">Change</option>
+                                                                @if($reg->status === 'pending')
+                                                                    <option value="processing">Processing</option>
+                                                                    <option value="rejected">Reject</option>
+                                                                @elseif($reg->status === 'processing')
+                                                                    <option value="approved">Approve</option>
+                                                                    <option value="rejected">Reject</option>
+                                                                @elseif($reg->status === 'approved')
+                                                                    <option value="completed">Complete</option>
+                                                                @endif
+                                                            </select>
+                                                        </form>
+                                                    @else
+                                                        <span class="text-xs text-gray-400" title="Only the reseller can manage this registration">
+                                                            <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                                                            </svg>
+                                                        </span>
+                                                    @endif
                                                 @else
                                                     <span class="text-xs text-gray-400">—</span>
                                                 @endif
