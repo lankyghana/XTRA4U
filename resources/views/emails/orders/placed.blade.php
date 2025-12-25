@@ -45,7 +45,7 @@ The reseller added a markup of **GHS {{ number_format($order->markup_price, 2) }
 
 You sold this product at **GHS {{ number_format($order->amount_paid, 2) }}** (Base: GHS {{ number_format($order->base_price, 2) }} + Your Markup: GHS {{ number_format($order->markup_price, 2) }}).
 
-*The product owner (Vendor A) will fulfill this order.*
+*The product owner (Vendor B) will fulfill this order.*
 </x-mail::panel>
 @endif
 
@@ -64,7 +64,7 @@ View Order Details
 Thanks for being part of XTRA4U!
 
 Best regards,<br>
-**{{ config('app.name') }} Team**
+**{{ config('mail.from.name', config('app.name')) }} Team**
 
 <x-mail::subcopy>
 If you have any questions about this order, please contact our support team.
