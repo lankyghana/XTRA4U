@@ -11,12 +11,15 @@ use App\Models\VendorNotification;
 use App\Models\VendorWithdrawal;
 use App\Models\AdminNotification;
 use App\Models\AfaRegistration;
+use App\Mail\VendorWithdrawalMail;
 use App\Services\SmsService;
 use App\Services\TransactionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class VendorDashboardController extends Controller
 {
@@ -51,7 +54,12 @@ class VendorDashboardController extends Controller
 		$orders = Order::query()
 			->where(function ($q) use ($vendorId) {
 				$q->where('vendor_id', $vendorId)
-					->orWhere('owner_vendor_id', $vendorId);
+					->orWhere('owner_vendor_id', $vendorId)
+					// Backward-compatible fallback: some legacy rows may not have owner_vendor_id,
+					// but reseller_product_id still points to the owning vendor.
+					->orWhereHas('resellerProduct', function ($q2) use ($vendorId) {
+						$q2->where('owner_vendor_id', $vendorId);
+					});
 			})
 			->whereIn('payment_status', ['paid', 'completed'])
 			->whereIn('status', ['Processing', 'Completed'])
@@ -188,10 +196,27 @@ class VendorDashboardController extends Controller
 	{
 		$vendor = $this->resolveVendor();
 		$orders = Order::query()
-			->where('vendor_id', $vendor->id)
+			->where(function ($q) use ($vendor) {
+				// Selling vendor always sees their orders.
+				$q->where('vendor_id', $vendor->id)
+					// Owner vendor can also see affiliate orders for their products,
+					// but must not be able to update fulfillment status.
+					->orWhere(function ($q2) use ($vendor) {
+						$q2->where('owner_vendor_id', $vendor->id)
+							->where('is_reseller_order', true);
+					})
+					// Backward-compatible fallback: derive owner via reseller product mapping.
+					->orWhere(function ($q2) use ($vendor) {
+						$q2->where('is_reseller_order', true)
+							->whereHas('resellerProduct', function ($q3) use ($vendor) {
+								$q3->where('owner_vendor_id', $vendor->id);
+							});
+					});
+			})
 			->whereIn('payment_status', ['paid', 'completed'])
 			->whereIn('status', ['Processing', 'Completed'])
 			->whereHas('transactions', fn ($q) => $q->whereIn('payment_status', ['successful', 'completed']))
+			->with(['service'])
 			->latest()
 			->paginate(20);
 
@@ -205,15 +230,16 @@ class VendorDashboardController extends Controller
 	public function affiliateOrders()
 	{
 		$vendor = $this->resolveVendor();
-		
-		// Get orders where this vendor is the owner (their products sold by resellers)
+
+		// Affiliate Orders tab is for the selling vendor (reseller) to track
+		// affiliate sales they must fulfill.
 		$orders = Order::query()
-			->where('owner_vendor_id', $vendor->id)
+			->where('vendor_id', $vendor->id)
 			->where('is_reseller_order', true)
 			->whereIn('payment_status', ['paid', 'completed'])
 			->whereIn('status', ['Processing', 'Completed'])
 			->whereHas('transactions', fn ($q) => $q->whereIn('payment_status', ['successful', 'completed']))
-			->with('resellerVendor')
+			->with(['ownerVendor', 'service', 'resellerProduct.ownerVendor'])
 			->latest()
 			->paginate(20);
 
@@ -422,13 +448,34 @@ class VendorDashboardController extends Controller
 		$vendor = $this->resolveVendor();
 		
 		// Check authorization:
-		// - Regular orders: vendor_id must match
-		// - Affiliate orders: owner_vendor_id must match (owner manages fulfillment)
-		$isOwnerOfAffiliateOrder = $order->is_reseller_order && $order->owner_vendor_id === $vendor->id;
-		$isRegularOrder = !$order->is_reseller_order && $order->vendor_id === $vendor->id;
-		
-		if (!$isOwnerOfAffiliateOrder && !$isRegularOrder) {
-			abort(403, 'Unauthorized action.');
+		// - Regular orders: selling vendor (vendor_id) fulfills
+		// - Affiliate orders: selling vendor (vendor_id) fulfills; owner is read-only
+		$isSellingVendor = $order->vendor_id === $vendor->id;
+		$isAffiliateOrder = (bool) $order->is_reseller_order;
+
+		if (! $isSellingVendor) {
+			if ($request->expectsJson()) {
+				return response()->json([
+					'message' => 'You can\'t update this order. Only the selling vendor can change the status.',
+				], 403);
+			}
+
+			return redirect()
+				->route('vendor.orders.index')
+				->with('error', 'You can\'t update this order. Only the selling vendor can change the status.');
+		}
+
+		// Defensive: still ensure status updates only come from the selling vendor.
+		if ($isAffiliateOrder !== true && $order->vendor_id !== $vendor->id) {
+			if ($request->expectsJson()) {
+				return response()->json([
+					'message' => 'You can\'t update this order.',
+				], 403);
+			}
+
+			return redirect()
+				->route('vendor.orders.index')
+				->with('error', 'You can\'t update this order.');
 		}
 
 		$request->validate([
@@ -484,14 +531,20 @@ class VendorDashboardController extends Controller
 		$vendorId = $vendor->id;
 		$withdrawableBalance = (float) $vendor->wallet_balance;
 
+		$withdrawalNetworks = array_keys((array) config('momo.withdrawal_networks', []));
+		$withdrawalNetworkLabels = collect((array) config('momo.withdrawal_networks', []))
+			->map(fn ($network, $key) => $network['label'] ?? $key)
+			->values()
+			->implode(', ');
+
 		$data = $request->validate([
 			'withdraw_amount' => ['required', 'numeric', 'min:1'],
 			'momo_number' => ['required', 'string', 'regex:/^0[235][0-9]{8}$/'],
-			'momo_network' => ['required', 'string', 'in:MTN,TELECEL,AirtelTigo'],
+			'momo_network' => ['required', 'string', Rule::in($withdrawalNetworks)],
 			'notes' => ['nullable', 'string', 'max:255'],
 		], [
 			'momo_number.regex' => 'Please enter a valid Ghana mobile number (e.g., 0241234567).',
-			'momo_network.in' => 'Please select a valid network (MTN, TELECEL, or AirtelTigo).',
+			'momo_network.in' => 'Please select a valid network (' . $withdrawalNetworkLabels . ').',
 		]);
 
 		if ($data['withdraw_amount'] > $withdrawableBalance) {
@@ -534,6 +587,21 @@ class VendorDashboardController extends Controller
 		});
 
 		\App\Jobs\ProcessVendorWithdrawalPayout::dispatch($withdrawal->id)->afterCommit();
+
+		try {
+			if (!empty($vendor->email)) {
+				Mail::to($vendor->email)->send(new VendorWithdrawalMail(
+					$withdrawal,
+					$vendor,
+					'requested'
+				));
+			}
+		} catch (\Throwable $e) {
+			Log::warning('Failed to send withdrawal request email', [
+				'withdrawal_id' => $withdrawal->id,
+				'error' => $e->getMessage(),
+			]);
+		}
 
 		return back()->with('status', 'Withdrawal request received. Your payout is being processed automatically.');
 	}
@@ -785,11 +853,13 @@ class VendorDashboardController extends Controller
 	{
 		$vendor = $this->resolveVendor();
 
+		$providers = array_keys((array) config('momo.providers', []));
+
 		$validated = $request->validate([
 			'name' => ['required', 'string', 'max:255'],
 			'phone_number' => ['required', 'string', 'max:20'],
 			'momo_number' => ['nullable', 'string', 'max:20'],
-			'momo_provider' => ['nullable', 'string', 'in:mtn,vodafone,airteltigo'],
+			'momo_provider' => ['nullable', 'string', Rule::in($providers)],
 		]);
 
 		$vendor->update($validated);
