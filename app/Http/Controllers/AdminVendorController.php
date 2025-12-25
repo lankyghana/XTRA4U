@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\VendorApprovedMail;
 use App\Models\Vendor;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Support\Facades\Mail;
 
 class AdminVendorController extends Controller
 {
@@ -51,8 +53,17 @@ class AdminVendorController extends Controller
 
 	public function approve(Vendor $vendor): RedirectResponse
 	{
-		if (! $vendor->is_approved) {
+		$wasApproved = (bool) $vendor->is_approved;
+		if (! $wasApproved) {
 			$vendor->forceFill(['is_approved' => true])->save();
+
+			if ($vendor->email) {
+				try {
+					Mail::to($vendor->email)->queue(new VendorApprovedMail($vendor));
+				} catch (\Throwable $e) {
+					// Approval should still succeed even if email fails.
+				}
+			}
 		}
 
 		return back()->with('status', 'Vendor approved successfully.');
