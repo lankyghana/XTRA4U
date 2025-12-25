@@ -42,7 +42,7 @@
         <!-- Registration Form -->
         <div class="bg-white rounded-2xl shadow-xl overflow-hidden">
             <div class="p-6 sm:p-8">
-                <form action="{{ route('afa.store', $vendor->vendor_code) }}" method="POST" class="space-y-6">
+                <form action="/afa/store/{{ $vendor->vendor_code }}" method="POST" class="space-y-6">
                     @csrf
 
                     <!-- Full Name -->
