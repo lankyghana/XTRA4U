@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class AfaRegistration extends Model
 {
@@ -81,6 +82,14 @@ class AfaRegistration extends Model
     public function resellerVendor(): BelongsTo
     {
         return $this->belongsTo(Vendor::class, 'reseller_vendor_id');
+    }
+
+    /**
+     * Polymorphic relationship: transactions for this AFA registration
+     */
+    public function transactions(): MorphMany
+    {
+        return $this->morphMany(Transaction::class, 'transactionable');
     }
 
     /**
