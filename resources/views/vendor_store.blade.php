@@ -247,7 +247,7 @@
                     <div>Network:</div><div class="font-medium" x-text="selectedService?.name"></div>
                 </div>
                 <div class="flex justify-between text-sm text-gray-600 mt-2">
-                    <div>Package:</div><div class="font-medium" x-text="selectedPackage?.title"></div>
+                    <div>Package:</div><div class="font-medium" x-text="selectedPackage?.size || selectedPackage?.name || selectedPackage?.title"></div>
                 </div>
                 <div class="flex justify-between text-lg text-purple-700 font-bold mt-4">
                     <div>Price:</div><div x-text="formatCurrency(selectedPackage?.price)"></div>
