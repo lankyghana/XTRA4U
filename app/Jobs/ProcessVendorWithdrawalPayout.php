@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Vendor;
 use App\Models\VendorNotification;
 use App\Models\VendorWithdrawal;
+use App\Mail\VendorWithdrawalMail;
 use App\Services\GatewayManager;
 use App\Services\SmsService;
 use Illuminate\Bus\Queueable;
@@ -15,6 +16,7 @@ use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class ProcessVendorWithdrawalPayout implements ShouldQueue
 {
@@ -222,6 +224,19 @@ class ProcessVendorWithdrawalPayout implements ShouldQueue
         } catch (\Exception $e) {
             Log::warning('Failed to send withdrawal approved SMS', ['error' => $e->getMessage()]);
         }
+
+        try {
+            $vendor = $withdrawal->vendor;
+            if ($vendor && $vendor->email) {
+                Mail::to($vendor->email)->send(new VendorWithdrawalMail(
+                    $withdrawal,
+                    $vendor,
+                    'paid'
+                ));
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Failed to send withdrawal approved email', ['error' => $e->getMessage()]);
+        }
     }
 
     private function notifyVendorFailed(VendorWithdrawal $withdrawal, string $errorMessage): void
@@ -251,6 +266,20 @@ class ProcessVendorWithdrawalPayout implements ShouldQueue
             }
         } catch (\Exception $e) {
             Log::warning('Failed to send withdrawal failed SMS', ['error' => $e->getMessage()]);
+        }
+
+        try {
+            $vendor = $withdrawal->vendor;
+            if ($vendor && $vendor->email) {
+                Mail::to($vendor->email)->send(new VendorWithdrawalMail(
+                    $withdrawal,
+                    $vendor,
+                    'failed',
+                    $errorMessage
+                ));
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Failed to send withdrawal failed email', ['error' => $e->getMessage()]);
         }
     }
 }
