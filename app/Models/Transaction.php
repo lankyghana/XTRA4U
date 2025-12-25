@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 class Transaction extends Model
 {
@@ -16,8 +17,22 @@ class Transaction extends Model
         'vendor_earning',
         'payment_status',
         'timestamp',
+        'transactionable_type',
+        'transactionable_id',
+        'payment_type',
     ];
 
+    /**
+     * Polymorphic relationship: Transaction can belong to Order or AfaRegistration
+     */
+    public function transactionable(): MorphTo
+    {
+        return $this->morphTo();
+    }
+
+    /**
+     * Legacy relationship for backward compatibility
+     */
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);
@@ -26,5 +41,29 @@ class Transaction extends Model
     public function vendor(): BelongsTo
     {
         return $this->belongsTo(Vendor::class);
+    }
+
+    /**
+     * Scope to get transactions for a specific payment type
+     */
+    public function scopeOfType($query, string $type)
+    {
+        return $query->where('payment_type', $type);
+    }
+
+    /**
+     * Scope to get order transactions
+     */
+    public function scopeOrders($query)
+    {
+        return $query->where('payment_type', 'order');
+    }
+
+    /**
+     * Scope to get AFA registration transactions
+     */
+    public function scopeAfaRegistrations($query)
+    {
+        return $query->where('payment_type', 'afa_registration');
     }
 }
