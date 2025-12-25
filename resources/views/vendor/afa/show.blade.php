@@ -31,7 +31,35 @@
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-xl font-bold text-white">{{ $registration->full_name }}</h2>
-                            <p class="text-green-100">{{ $registration->reference }}</p>
+                            <div class="flex items-center gap-2 mt-1">
+                                <p class="text-green-100 font-mono">{{ $registration->reference }}</p>
+                                @if($registration->reseller_vendor_id)
+                                    @if($registration->reseller_vendor_id == $vendor->id)
+                                        {{-- Current vendor is the reseller --}}
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-white/30 text-white">
+                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+                                            </svg>
+                                            Your Reseller Sale
+                                        </span>
+                                    @else
+                                        {{-- Current vendor is the provider --}}
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-white/30 text-white">
+                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+                                            </svg>
+                                            Sold by Reseller
+                                        </span>
+                                    @endif
+                                @else
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-white/30 text-white">
+                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                                        </svg>
+                                        Direct Sale
+                                    </span>
+                                @endif
+                            </div>
                         </div>
                         <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-white/20 text-white backdrop-blur-sm">
                             {{ $registration->status_label }}
@@ -121,28 +149,50 @@
                             </span>
                         </div>
 
+                        @php
+                            // Check if current vendor can manage this registration
+                            $canManage = (
+                                ((int) $registration->vendor_id === (int) $vendor->id && is_null($registration->reseller_vendor_id))
+                                || ((int) $registration->reseller_vendor_id === (int) $vendor->id)
+                            );
+                        @endphp
+
                         @if(!in_array($registration->status, ['completed', 'cancelled']))
-                            <form method="POST" action="{{ route('vendor.afa.update-status', $registration) }}" class="space-y-3">
-                                @csrf
-                                @method('PATCH')
-                                
-                                <select name="status" class="w-full border-gray-300 rounded-lg focus:ring-brand-bright-blue focus:border-brand-bright-blue">
-                                    <option value="">Change Status</option>
-                                    @if($registration->status === 'pending')
-                                        <option value="processing">Mark as Processing</option>
-                                        <option value="rejected">Reject Registration</option>
-                                    @elseif($registration->status === 'processing')
-                                        <option value="approved">Approve Registration</option>
-                                        <option value="rejected">Reject Registration</option>
-                                    @elseif($registration->status === 'approved')
-                                        <option value="completed">Mark as Completed</option>
-                                    @endif
-                                </select>
-                                
-                                <button type="submit" class="w-full px-4 py-2 bg-brand-deep-blue text-white font-medium rounded-lg hover:bg-brand-bright-blue transition-colors">
-                                    Update Status
-                                </button>
-                            </form>
+                            @if($canManage)
+                                <form method="POST" action="{{ route('vendor.afa.update-status', $registration) }}" class="space-y-3">
+                                    @csrf
+                                    @method('PATCH')
+                                    
+                                    <select name="status" class="w-full border-gray-300 rounded-lg focus:ring-brand-bright-blue focus:border-brand-bright-blue">
+                                        <option value="">Change Status</option>
+                                        @if($registration->status === 'pending')
+                                            <option value="processing">Mark as Processing</option>
+                                            <option value="rejected">Reject Registration</option>
+                                        @elseif($registration->status === 'processing')
+                                            <option value="approved">Approve Registration</option>
+                                            <option value="rejected">Reject Registration</option>
+                                        @elseif($registration->status === 'approved')
+                                            <option value="completed">Mark as Completed</option>
+                                        @endif
+                                    </select>
+                                    
+                                    <button type="submit" class="w-full px-4 py-2 bg-brand-deep-blue text-white font-medium rounded-lg hover:bg-brand-bright-blue transition-colors">
+                                        Update Status
+                                    </button>
+                                </form>
+                            @else
+                                <div class="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-lg p-4">
+                                    <div class="flex items-start">
+                                        <svg class="w-5 h-5 text-amber-600 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                                        </svg>
+                                        <div>
+                                            <p class="text-sm font-medium text-amber-900">Status Management Restricted</p>
+                                            <p class="text-xs text-amber-700 mt-1">This registration was sold by a reseller. Only the reseller can manage its fulfillment status.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            @endif
                         @else
                             <p class="text-sm text-gray-500">This registration is {{ $registration->status }}. No further actions available.</p>
                         @endif
