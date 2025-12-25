@@ -26,37 +26,48 @@ class MoolrePaymentService implements CollectsPayments, HandlesGenericPayments
 
     protected function apiUser(): string
     {
-        return (string) $this->config->getConfig('api_user', '');
+        return trim((string) $this->config->getConfig('api_user', ''));
     }
 
     protected function publicKey(): string
     {
-        return (string) $this->config->getConfig('public_key', '');
+        return trim((string) $this->config->getConfig('public_key', ''));
     }
 
     protected function accountNumber(): string
     {
-        return (string) $this->config->getConfig('account_number', '');
+        return trim((string) $this->config->getConfig('account_number', ''));
     }
 
     protected function currency(): string
     {
-        return (string) $this->config->getConfig('currency', 'GHS');
+        return trim((string) $this->config->getConfig('currency', 'GHS'));
     }
 
     protected function businessEmail(): string
     {
-        return (string) $this->config->getConfig('business_email', '');
+        return trim((string) $this->config->getConfig('business_email', ''));
     }
 
     protected function http(array $headers): PendingRequest
     {
         $client = Http::withHeaders($headers)
+            // DNS + TCP connect can be slow/unreliable on some dev networks; give it room.
+            ->connectTimeout(30)
             ->timeout(30)
             ->retry(2, 100);
 
         if (app()->environment('local', 'development', 'testing')) {
-            $client = $client->withOptions(['verify' => false]);
+            // Prefer IPv4 in dev to avoid occasional IPv6 resolution stalls (common on some networks).
+            $curlOptions = [];
+            if (defined('CURLOPT_IPRESOLVE') && defined('CURL_IPRESOLVE_V4')) {
+                $curlOptions[CURLOPT_IPRESOLVE] = CURL_IPRESOLVE_V4;
+            }
+
+            $client = $client->withOptions([
+                'verify' => false,
+                ...(empty($curlOptions) ? [] : ['curl' => $curlOptions]),
+            ]);
         }
 
         return $client;
@@ -146,7 +157,9 @@ class MoolrePaymentService implements CollectsPayments, HandlesGenericPayments
 
             return [
                 'success' => false,
-                'message' => 'Error initializing payment.',
+                'message' => app()->environment('local', 'development', 'testing')
+                    ? ('Error initializing payment: ' . $e->getMessage())
+                    : 'Error initializing payment.',
                 'reference' => $externalRef,
             ];
         }
@@ -215,7 +228,9 @@ class MoolrePaymentService implements CollectsPayments, HandlesGenericPayments
 
             return [
                 'success' => false,
-                'message' => 'Error initializing payment.',
+                'message' => app()->environment('local', 'development', 'testing')
+                    ? ('Error initializing payment: ' . $e->getMessage())
+                    : 'Error initializing payment.',
                 'reference' => $externalRef,
             ];
         }
@@ -248,6 +263,18 @@ class MoolrePaymentService implements CollectsPayments, HandlesGenericPayments
             $data = $response->json();
 
             if (!$response->successful() || (int) ($data['status'] ?? 0) !== 1) {
+                $pubKey = $this->publicKey();
+                Log::warning('Moolre verify failed', [
+                    'reference' => $reference,
+                    'payload' => $payload,
+                    'base_url' => $this->baseUrl(),
+                    'api_user' => $this->apiUser(),
+                    'public_key_len' => strlen($pubKey),
+                    'public_key_last4' => $pubKey !== '' ? substr($pubKey, -4) : null,
+                    'http_status' => $response->status(),
+                    'response' => $data,
+                ]);
+
                 return [
                     'success' => false,
                     'message' => $data['message'] ?? 'Failed to verify payment.',
