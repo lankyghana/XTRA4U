@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class Order extends Model
 {
@@ -67,8 +68,47 @@ class Order extends Model
         return $this->belongsTo(Vendor::class, 'reseller_vendor_id');
     }
 
+    /**
+     * Legacy relationship: transactions linked via order_id
+     */
     public function transactions(): HasMany
     {
         return $this->hasMany(Transaction::class);
+    }
+
+    /**
+     * Polymorphic relationship: transactions linked via transactionable
+     */
+    public function transactionRecords(): MorphMany
+    {
+        return $this->morphMany(Transaction::class, 'transactionable');
+    }
+
+    public function getDisplayServiceNameAttribute(): string
+    {
+        $serviceName = $this->service?->name;
+        if (is_string($serviceName) && $serviceName !== '') {
+            return $serviceName;
+        }
+
+        $fallback = (string) $this->service_purchased;
+
+        if ($fallback === '' || preg_match('/^[a-f0-9]{32}$/i', $fallback)) {
+            return __('Unknown Service');
+        }
+
+        return $fallback;
+    }
+
+    public function getDisplayProductLabelAttribute(): string
+    {
+        $serviceName = $this->display_service_name;
+        $packageSize = data_get($this->service, 'decoded_description.size');
+
+        if (is_string($packageSize) && trim($packageSize) !== '') {
+            return $serviceName . ' - ' . trim($packageSize);
+        }
+
+        return $serviceName;
     }
 }
