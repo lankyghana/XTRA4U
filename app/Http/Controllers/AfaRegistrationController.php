@@ -2,21 +2,26 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\AfaOrderPlacedMail;
 use App\Models\AfaRegistration;
 use App\Models\Vendor;
 use App\Models\PaymentGatewayConfig;
 use App\Services\PaymentService;
+use App\Services\AfaPaymentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class AfaRegistrationController extends Controller
 {
     protected PaymentService $paymentService;
+    protected AfaPaymentService $afaPaymentService;
 
-    public function __construct(PaymentService $paymentService)
+    public function __construct(PaymentService $paymentService, AfaPaymentService $afaPaymentService)
     {
         $this->paymentService = $paymentService;
+        $this->afaPaymentService = $afaPaymentService;
     }
 
     /**
@@ -233,44 +238,29 @@ class AfaRegistrationController extends Controller
             return redirect()->route('storefront.index')->with('error', 'Registration not found.');
         }
 
+        // Idempotency: if already marked paid, do not re-verify, re-credit, or re-notify.
+        if ($registration->payment_status === AfaRegistration::PAYMENT_COMPLETED) {
+            return redirect()->route('afa.success', $registration->reference);
+        }
+
         // Verify payment with the active default gateway
         $verificationResult = $this->paymentService->checkPaymentStatus($reference);
 
         if ($verificationResult['success']) {
-            $registration->update([
-                'payment_status' => AfaRegistration::PAYMENT_COMPLETED,
-                'payment_completed_at' => now(),
-                'status' => AfaRegistration::STATUS_PENDING, // Ready for vendor review
-            ]);
-
-            // Credit source vendor's wallet balance (the one who processes the registration)
-            $sourceVendor = $registration->vendor;
-            $sourceVendor->increment('wallet_balance', $registration->vendor_earning);
-            
-            // If reseller order, also credit reseller's wallet
-            if ($registration->is_reseller_order && $registration->reseller_vendor_id && $registration->reseller_earning > 0) {
-                $resellerVendor = $registration->resellerVendor;
-                if ($resellerVendor) {
-                    $resellerVendor->increment('wallet_balance', $registration->reseller_earning);
-                    
-                    Log::info('AFA Reseller order completed', [
-                        'registration_id' => $registration->id,
-                        'source_vendor_id' => $sourceVendor->id,
-                        'source_vendor_earning' => $registration->vendor_earning,
-                        'reseller_vendor_id' => $resellerVendor->id,
-                        'reseller_earning' => $registration->reseller_earning,
-                    ]);
-                }
-            }
+            // Use dedicated AFA payment service to handle completion
+            $this->afaPaymentService->completeRegistration($registration);
 
             return redirect()->route('afa.success', $registration->reference);
         }
 
         // Payment verification failed
-        $registration->update([
-            'payment_status' => AfaRegistration::PAYMENT_FAILED,
-            'status' => AfaRegistration::STATUS_CANCELLED,
-        ]);
+        // Do not overwrite a completed payment if the callback is replayed.
+        if ($registration->payment_status !== AfaRegistration::PAYMENT_COMPLETED) {
+            $registration->update([
+                'payment_status' => AfaRegistration::PAYMENT_FAILED,
+                'status' => AfaRegistration::STATUS_CANCELLED,
+            ]);
+        }
 
         return redirect()->route('storefront.vendor', $registration->vendor->vendor_code)
             ->with('error', 'Payment verification failed. Please try again.');
