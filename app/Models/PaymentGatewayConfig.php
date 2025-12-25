@@ -354,8 +354,22 @@ class PaymentGatewayConfig extends Model
                 continue;
             }
 
-            if (empty($config[$field])) {
+            $value = $config[$field] ?? null;
+            if (is_string($value)) {
+                $value = trim($value);
+            }
+
+            // Treat null/empty-string/whitespace-only as missing.
+            // Avoid empty() so values like "0" aren't incorrectly rejected.
+            if ($value === null || $value === '') {
                 return false;
+            }
+
+            // Basic URL validation for URL-shaped fields.
+            if (in_array($field, ['base_url', 'payment_url'], true) && is_string($value)) {
+                if (filter_var($value, FILTER_VALIDATE_URL) === false) {
+                    return false;
+                }
             }
         }
 
