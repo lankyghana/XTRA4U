@@ -34,7 +34,7 @@
                     @foreach($orders as $order)
                     <tr>
                         <td class="py-2 px-4 border-b">{{ $order->id }}</td>
-                        <td class="py-2 px-4 border-b">{{ $order->service_purchased }}</td>
+                        <td class="py-2 px-4 border-b">{{ $order->display_service_name }}</td>
                         <td class="py-2 px-4 border-b">₵{{ number_format($order->amount_paid, 2) }}</td>
                         <td class="py-2 px-4 border-b">{{ ucfirst($order->status) }}</td>
                         <td class="py-2 px-4 border-b">{{ $order->created_at->format('Y-m-d') }}</td>
