@@ -153,33 +153,28 @@
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-2">Network <span class="text-red-500">*</span></label>
                         <div class="grid grid-cols-3 gap-2">
-                            <label class="relative cursor-pointer">
-                                <input type="radio" name="momo_network" value="MTN" class="peer sr-only" {{ old('momo_network') === 'MTN' ? 'checked' : '' }} {{ $withdrawableBalance <= 0 ? 'disabled' : '' }} required>
-                                <div class="flex flex-col items-center justify-center p-3 rounded-lg border-2 border-gray-200 bg-white peer-checked:border-yellow-500 peer-checked:bg-yellow-50 hover:bg-gray-50 transition-all">
-                                    <div class="w-8 h-8 rounded-full bg-yellow-400 flex items-center justify-center mb-1">
-                                        <span class="text-xs font-bold text-yellow-900">MTN</span>
+                            @php
+                                $momoNetworks = config('momo.withdrawal_networks', []);
+                            @endphp
+                            @foreach ($momoNetworks as $networkValue => $network)
+                                <label class="relative cursor-pointer">
+                                    <input
+                                        type="radio"
+                                        name="momo_network"
+                                        value="{{ $networkValue }}"
+                                        class="peer sr-only"
+                                        {{ old('momo_network') === $networkValue ? 'checked' : '' }}
+                                        {{ $withdrawableBalance <= 0 ? 'disabled' : '' }}
+                                        {{ $loop->first ? 'required' : '' }}
+                                    >
+                                    <div class="flex flex-col items-center justify-center p-3 rounded-lg border-2 border-gray-200 bg-white {{ $network['radio']['peer_checked_border'] ?? '' }} {{ $network['radio']['peer_checked_bg'] ?? '' }} hover:bg-gray-50 transition-all">
+                                        <div class="w-8 h-8 rounded-full {{ $network['radio']['badge_bg'] ?? 'bg-gray-200' }} flex items-center justify-center mb-1">
+                                            <span class="text-xs font-bold {{ $network['radio']['badge_text'] ?? 'text-gray-700' }}">{{ $network['radio']['badge_label'] ?? '?' }}</span>
+                                        </div>
+                                        <span class="text-xs font-medium text-gray-700">{{ $network['label'] ?? $networkValue }}</span>
                                     </div>
-                                    <span class="text-xs font-medium text-gray-700">MTN</span>
-                                </div>
-                            </label>
-                            <label class="relative cursor-pointer">
-                                <input type="radio" name="momo_network" value="TELECEL" class="peer sr-only" {{ old('momo_network') === 'TELECEL' ? 'checked' : '' }} {{ $withdrawableBalance <= 0 ? 'disabled' : '' }}>
-                                <div class="flex flex-col items-center justify-center p-3 rounded-lg border-2 border-gray-200 bg-white peer-checked:border-red-500 peer-checked:bg-red-50 hover:bg-gray-50 transition-all">
-                                    <div class="w-8 h-8 rounded-full bg-red-500 flex items-center justify-center mb-1">
-                                        <span class="text-xs font-bold text-white">TE</span>
-                                    </div>
-                                    <span class="text-xs font-medium text-gray-700">Telecel</span>
-                                </div>
-                            </label>
-                            <label class="relative cursor-pointer">
-                                <input type="radio" name="momo_network" value="AirtelTigo" class="peer sr-only" {{ old('momo_network') === 'AirtelTigo' ? 'checked' : '' }} {{ $withdrawableBalance <= 0 ? 'disabled' : '' }}>
-                                <div class="flex flex-col items-center justify-center p-3 rounded-lg border-2 border-gray-200 bg-white peer-checked:border-blue-500 peer-checked:bg-blue-50 hover:bg-gray-50 transition-all">
-                                    <div class="w-8 h-8 rounded-full bg-gradient-to-r from-red-500 to-blue-500 flex items-center justify-center mb-1">
-                                        <span class="text-xs font-bold text-white">AT</span>
-                                    </div>
-                                    <span class="text-xs font-medium text-gray-700">AirtelTigo</span>
-                                </div>
-                            </label>
+                                </label>
+                            @endforeach
                         </div>
                         @error('momo_network')
                             <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
