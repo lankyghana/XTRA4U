@@ -54,6 +54,7 @@
                                 <tr>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Order ID</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Recipient</th>
+                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Product</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Amount</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Status</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Placed</th>
@@ -62,9 +63,21 @@
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200">
                                 @forelse ($orders as $order)
+                                    @php
+                                        $canUpdateStatus = (int) $order->vendor_id === (int) $vendor->id;
+                                        $isAffiliateForViewer = (bool) $order->is_reseller_order && ! $canUpdateStatus;
+                                    @endphp
                                     <tr class="hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 transition-all duration-200">
-                                        <td class="px-6 py-4 text-sm font-semibold text-gray-900">#{{ $order->id }}</td>
+                                        <td class="px-6 py-4 text-sm font-semibold text-gray-900">
+                                            <div class="flex items-center gap-2">
+                                                <span>#{{ $order->id }}</span>
+                                                @if($isAffiliateForViewer)
+                                                    <x-badge variant="processing" size="sm">Affiliate</x-badge>
+                                                @endif
+                                            </div>
+                                        </td>
                                         <td class="px-6 py-4 text-sm text-gray-900">{{ $order->recipient_phone_number }}</td>
+                                        <td class="px-6 py-4 text-sm text-gray-900">{{ $order->display_product_label }}</td>
                                         <td class="px-6 py-4 text-sm font-semibold text-gray-900">GHS {{ number_format($order->amount_paid, 2) }}</td>
                                         <td class="px-6 py-4 text-sm">
                                             @if($order->status === 'Completed')
@@ -85,7 +98,7 @@
                                                 <select name="status" 
                                                         onchange="this.form.submit()" 
                                                         class="text-sm border-gray-300 rounded-lg focus:ring-brand-bright-blue focus:border-brand-bright-blue px-3 py-2 font-medium shadow-sm"
-                                                        {{ $order->status === 'Completed' || $order->status === 'Cancelled' ? 'disabled' : '' }}>
+												{{ !$canUpdateStatus || $order->status === 'Completed' || $order->status === 'Cancelled' ? 'disabled' : '' }}>
                                                     <option value="Pending" {{ $order->status === 'Pending' ? 'selected' : '' }}>Pending</option>
                                                     <option value="Processing" {{ $order->status === 'Processing' ? 'selected' : '' }}>Processing</option>
                                                     <option value="Completed" {{ $order->status === 'Completed' ? 'selected' : '' }}>Completed</option>
@@ -96,7 +109,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="6" class="px-6 py-8 text-center">
+                                        <td colspan="7" class="px-6 py-8 text-center">
                                             <div class="flex flex-col items-center justify-center">
                                                 <svg class="w-12 h-12 text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
