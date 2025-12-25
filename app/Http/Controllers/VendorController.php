@@ -104,6 +104,7 @@ class VendorController extends Controller
         $orders = $vendor->orders()
             ->whereIn('payment_status', ['paid', 'completed'])
             ->whereIn('status', ['Processing', 'Completed'])
+            ->with('service')
             ->latest()
             ->get();
 
