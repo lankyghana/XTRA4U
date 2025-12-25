@@ -32,7 +32,7 @@
                         <div class="space-y-3">
                             <div class="flex justify-between">
                                 <span class="text-gray-600">Service:</span>
-                                <span class="font-medium">{{ $order->service_purchased }}</span>
+                                <span class="font-medium">{{ $order->display_product_label }}</span>
                             </div>
                             <div class="flex justify-between">
                                 <span class="text-gray-600">Recipient:</span>
@@ -166,10 +166,10 @@
         
         <!-- Action Buttons -->
         <div class="flex flex-col sm:flex-row gap-4 justify-center">
-            <x-button href="{{ route('storefront.index') }}" variant="primary" size="lg" class="w-full sm:w-auto">
+            <x-button href="{{ route('storefront.vendor', $order->vendor) }}" variant="primary" size="lg" class="w-full sm:w-auto">
                 Continue Shopping
             </x-button>
-            <x-button href="#" variant="outline" size="lg" class="w-full sm:w-auto" onclick="window.print()">
+            <x-button href="{{ route('checkout.receipt', $order) }}" variant="outline" size="lg" class="w-full sm:w-auto" target="_blank" rel="noopener">
                 Print Receipt
             </x-button>
         </div>
