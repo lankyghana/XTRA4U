@@ -24,18 +24,14 @@ class VendorAfaController extends Controller
     {
         $vendor = $this->vendor();
 
-        // Fulfillment rule:
-        // - Direct AFA registrations are fulfilled by the vendor who owns them (vendor_id = me, reseller_vendor_id IS NULL)
-        // - Reseller AFA registrations are fulfilled by the reseller who sold them (reseller_vendor_id = me)
+        // Show registrations where vendor is either:
+        // - Provider (vendor_id = me): Main vendor who provides the AFA service
+        // - Reseller (reseller_vendor_id = me): Reseller who sold the service
         $baseQuery = AfaRegistration::query()
             ->where('payment_status', AfaRegistration::PAYMENT_COMPLETED)
             ->where(function ($q) use ($vendor) {
-                $q->where(function ($direct) use ($vendor) {
-                    $direct->where('vendor_id', $vendor->id)
-                        ->whereNull('reseller_vendor_id');
-                })->orWhere(function ($reseller) use ($vendor) {
-                    $reseller->where('reseller_vendor_id', $vendor->id);
-                });
+                $q->where('vendor_id', $vendor->id)
+                  ->orWhere('reseller_vendor_id', $vendor->id);
             });
 
         $query = clone $baseQuery;
@@ -83,13 +79,13 @@ class VendorAfaController extends Controller
     {
         $vendor = $this->vendor();
 
-        // Authorization: vendor can manage direct registrations they own, OR reseller registrations they sold.
-        $canManage = (
-            ((int) $registration->vendor_id === (int) $vendor->id && is_null($registration->reseller_vendor_id))
+        // Authorization: vendor can view if they are provider OR reseller
+        $canView = (
+            ((int) $registration->vendor_id === (int) $vendor->id)
             || ((int) $registration->reseller_vendor_id === (int) $vendor->id)
         );
 
-        if (!$canManage) {
+        if (!$canView) {
             abort(403, 'Unauthorized');
         }
 
@@ -106,13 +102,21 @@ class VendorAfaController extends Controller
     {
         $vendor = $this->vendor();
 
+        // Authorization: Only the vendor responsible for fulfillment can update status
+        // - Direct registrations: vendor_id = me AND reseller_vendor_id IS NULL
+        // - Reseller registrations: reseller_vendor_id = me (reseller fulfills their own sales)
         $canManage = (
             ((int) $registration->vendor_id === (int) $vendor->id && is_null($registration->reseller_vendor_id))
             || ((int) $registration->reseller_vendor_id === (int) $vendor->id)
         );
 
         if (!$canManage) {
-            abort(403, 'Unauthorized');
+            // Friendly message instead of harsh 403 error
+            $errorMessage = $registration->reseller_vendor_id 
+                ? 'This registration was sold by a reseller. Only the reseller can manage its fulfillment status.'
+                : 'You do not have permission to manage this registration.';
+            
+            return back()->with('error', $errorMessage);
         }
 
         $request->validate([
