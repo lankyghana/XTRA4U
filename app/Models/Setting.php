@@ -48,6 +48,19 @@ class Setting extends Model
     }
 
     /**
+     * Get all settings for a group without cache.
+     *
+     * This is useful for long-running processes (queue workers) where stale
+     * cached settings can cause emails to be sent with old SMTP credentials.
+     */
+    public static function getGroupFresh(string $group): array
+    {
+        return self::where('group', $group)
+            ->pluck('value', 'key')
+            ->toArray();
+    }
+
+    /**
      * Clear all settings cache
      */
     public static function clearCache(): void
