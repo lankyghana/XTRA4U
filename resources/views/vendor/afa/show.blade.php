@@ -152,8 +152,7 @@
                         @php
                             // Check if current vendor can manage this registration
                             $canManage = (
-                                ((int) $registration->vendor_id === (int) $vendor->id && is_null($registration->reseller_vendor_id))
-                                || ((int) $registration->reseller_vendor_id === (int) $vendor->id)
+                                ((int) $registration->vendor_id === (int) $vendor->id)
                             );
                         @endphp
 
@@ -188,7 +187,7 @@
                                         </svg>
                                         <div>
                                             <p class="text-sm font-medium text-amber-900">Status Management Restricted</p>
-                                            <p class="text-xs text-amber-700 mt-1">This registration was sold by a reseller. Only the reseller can manage its fulfillment status.</p>
+                                            <p class="text-xs text-amber-700 mt-1">Only the provider can manage this registration's fulfillment status.</p>
                                         </div>
                                     </div>
                                 </div>
