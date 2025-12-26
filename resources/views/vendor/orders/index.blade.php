@@ -64,8 +64,10 @@
                             <tbody class="bg-white divide-y divide-gray-200">
                                 @forelse ($orders as $order)
                                     @php
-                                        $canUpdateStatus = (int) $order->vendor_id === (int) $vendor->id;
-                                        $isAffiliateForViewer = (bool) $order->is_reseller_order && ! $canUpdateStatus;
+                                        $canUpdateStatus = (bool) $order->is_reseller_order
+                                            ? ((int) $order->owner_vendor_id === (int) $vendor->id)
+                                            : ((int) $order->vendor_id === (int) $vendor->id);
+                                        $isAffiliateForViewer = (bool) $order->is_reseller_order;
                                     @endphp
                                     <tr class="hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 transition-all duration-200">
                                         <td class="px-6 py-4 text-sm font-semibold text-gray-900">
@@ -92,19 +94,25 @@
                                         </td>
                                         <td class="px-6 py-4 text-sm text-gray-500">{{ $order->created_at?->format('M d, Y') }}</td>
                                         <td class="px-6 py-4 text-sm">
+                                        @if($canUpdateStatus)
                                             <form method="POST" action="{{ route('vendor.orders.update-status', $order) }}" class="inline-block">
                                                 @csrf
                                                 @method('PATCH')
                                                 <select name="status" 
-                                                        onchange="this.form.submit()" 
-                                                        class="text-sm border-gray-300 rounded-lg focus:ring-brand-bright-blue focus:border-brand-bright-blue px-3 py-2 font-medium shadow-sm"
-												{{ !$canUpdateStatus || $order->status === 'Completed' || $order->status === 'Cancelled' ? 'disabled' : '' }}>
+                                                    onchange="this.form.submit()" 
+                                                    class="text-sm border-gray-300 rounded-lg focus:ring-brand-bright-blue focus:border-brand-bright-blue px-3 py-2 font-medium shadow-sm"
+                                                    {{ $order->status === 'Completed' || $order->status === 'Cancelled' ? 'disabled' : '' }}>
                                                     <option value="Pending" {{ $order->status === 'Pending' ? 'selected' : '' }}>Pending</option>
                                                     <option value="Processing" {{ $order->status === 'Processing' ? 'selected' : '' }}>Processing</option>
                                                     <option value="Completed" {{ $order->status === 'Completed' ? 'selected' : '' }}>Completed</option>
                                                     <option value="Cancelled" {{ $order->status === 'Cancelled' ? 'selected' : '' }}>Cancelled</option>
                                                 </select>
                                             </form>
+                                        @else
+                                            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                                View only
+                                            </span>
+                                        @endif
                                         </td>
                                     </tr>
                                 @empty
