@@ -234,7 +234,7 @@
             <div class="px-6 py-6">
                 <h3 class="text-lg leading-6 font-bold text-gray-900 mb-4">Recent Orders</h3>
                 <div class="overflow-hidden rounded-lg border border-gray-200">
-                    <x-table :headers="['Order ID', 'Recipient', 'Amount', 'Status']">
+                    <x-table :headers="['Order ID', 'Recipient', 'Amount', 'Status', 'Placed']">
                         @forelse ($orders->take(5) as $order)
                             <tr class="hover:bg-gray-50 transition-colors duration-150">
                                 <td class="px-6 py-4 text-sm font-medium text-gray-900">#{{ $order->id }}</td>
@@ -243,10 +243,11 @@
                                 <td class="px-6 py-4 text-sm">
                                     <x-badge :variant="$order->status === 'Completed' ? 'completed' : 'pending'">{{ $order->status }}</x-badge>
                                 </td>
+                                <td class="px-6 py-4 text-sm text-gray-700">{{ $order->created_at?->format('M d, Y g:i A') }}</td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">No orders yet.</td>
+                                <td colspan="5" class="px-6 py-4 text-center text-sm text-gray-500">No orders yet.</td>
                             </tr>
                         @endforelse
                     </x-table>
