@@ -1,6 +1,10 @@
 <?php
 
 return [
+    // When enabled, GET /checkout renders a Coming Soon page instead of the marketplace.
+    // Toggle via .env: CHECKOUT_COMING_SOON=true
+    'checkout_coming_soon' => (bool) env('CHECKOUT_COMING_SOON', false),
+
     'default_category' => 'data',
     'categories' => [
         'data' => [
