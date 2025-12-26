@@ -102,18 +102,15 @@ class VendorAfaController extends Controller
     {
         $vendor = $this->vendor();
 
-        // Authorization: Only the vendor responsible for fulfillment can update status
-        // - Direct registrations: vendor_id = me AND reseller_vendor_id IS NULL
-        // - Reseller registrations: reseller_vendor_id = me (reseller fulfills their own sales)
-        $canManage = (
-            ((int) $registration->vendor_id === (int) $vendor->id && is_null($registration->reseller_vendor_id))
-            || ((int) $registration->reseller_vendor_id === (int) $vendor->id)
-        );
+        // Fulfillment ownership rule (reversed):
+        // - Provider fulfills ALL registrations, including those sold by a reseller.
+        // - Resellers are view-only and cannot update fulfillment status.
+        $canManage = ((int) $registration->vendor_id === (int) $vendor->id);
 
         if (!$canManage) {
             // Friendly message instead of harsh 403 error
-            $errorMessage = $registration->reseller_vendor_id 
-                ? 'This registration was sold by a reseller. Only the reseller can manage its fulfillment status.'
+            $errorMessage = $registration->reseller_vendor_id
+                ? 'This registration was sold by a reseller. Only the provider can manage its fulfillment status.'
                 : 'You do not have permission to manage this registration.';
             
             return back()->with('error', $errorMessage);
@@ -164,16 +161,10 @@ class VendorAfaController extends Controller
             'status' => ['required', 'in:processing,approved,completed'],
         ]);
 
+        // Fulfillment ownership rule (reversed): only the provider (vendor_id) can bulk-update statuses.
         $updated = AfaRegistration::query()
             ->whereIn('id', $request->registration_ids)
-            ->where(function ($q) use ($vendor) {
-                $q->where(function ($direct) use ($vendor) {
-                    $direct->where('vendor_id', $vendor->id)
-                        ->whereNull('reseller_vendor_id');
-                })->orWhere(function ($reseller) use ($vendor) {
-                    $reseller->where('reseller_vendor_id', $vendor->id);
-                });
-            })
+            ->where('vendor_id', $vendor->id)
             ->update(['status' => $request->status]);
 
         return back()->with('success', "{$updated} registration(s) updated successfully.");
