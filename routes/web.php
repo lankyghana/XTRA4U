@@ -102,9 +102,14 @@ Route::get('/storage-link/{secret}', function ($secret) {
 })->name('storage.link');
 
 // CSRF Token refresh endpoint (prevents 419 errors after idle time)
+// Public + web middleware only (no auth/vendor/admin/custom groups)
 Route::get('/csrf-token', function () {
-    return response()->json(['token' => csrf_token()]);
-})->name('csrf.token');
+    return response()
+        ->json(['csrfToken' => csrf_token()])
+        ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+})
+    ->middleware('web')
+    ->name('csrf.token');
 
 // Order Status Checker Routes
 Route::get('/order-status', [OrderStatusController::class, 'index'])->name('order.status');
