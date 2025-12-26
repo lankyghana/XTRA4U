@@ -107,7 +107,7 @@
                                                 <x-badge variant="pending">Pending</x-badge>
                                             @endif
                                         </td>
-                                        <td class="px-6 py-4 text-sm text-gray-500">{{ $order->created_at?->format('M d, Y') }}</td>
+                                        <td class="px-6 py-4 text-sm text-gray-500">{{ $order->created_at?->format('M d, Y g:i A') }}</td>
                                         <td class="px-6 py-4 text-sm">
                                         @if($canUpdateStatus)
                                             <form method="POST" action="{{ route('vendor.orders.update-status', $order) }}" class="inline-block">
