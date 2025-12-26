@@ -23,7 +23,6 @@ class ContentSecurityPolicy
             // Build CSP directives
             $localDevHosts = $this->getLocalDevHosts();
             $gatewayUrls = $this->getActiveGatewayUrls();
-            $formAction = $this->getFormActionDirective();
 
             $csp = implode('; ', array_filter([
                 // Default: only allow same-origin resources
@@ -52,9 +51,6 @@ class ContentSecurityPolicy
                 
                 // Base URI: only self
                 "base-uri 'self'",
-                
-                // Form actions: disabled in dev to avoid CSP issues, strict in production
-                $formAction,
                 
                 // Frame ancestors: none (prevent clickjacking)
                 "frame-ancestors 'none'",
@@ -173,19 +169,4 @@ class ContentSecurityPolicy
         return $urls ? ' ' . implode(' ', array_unique($urls)) : '';
     }
 
-    /**
-     * Get form-action directive
-     * In development, omit it entirely to avoid CSP issues
-     * In production, restrict to self only
-     */
-    private function getFormActionDirective(): string
-    {
-        if (app()->environment('local', 'development', 'testing')) {
-            // Omit form-action in dev - it causes too many false positives
-            return '';
-        }
-
-        // In production, only allow forms to submit to same origin
-        return "form-action 'self'";
-    }
 }
