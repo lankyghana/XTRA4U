@@ -224,8 +224,15 @@ class AfaRegistrationController extends Controller
      */
     public function paymentCallback(Request $request)
     {
-        // Paystack returns `reference`, Flutterwave returns `tx_ref`
-        $reference = $request->get('reference') ?? $request->get('trxref') ?? $request->get('tx_ref');
+        // Payment gateways use different parameter names.
+        // - Paystack: reference or trxref
+        // - Flutterwave: tx_ref
+        // - Moolre: externalref (and sometimes externalRef)
+        $reference = $request->get('reference')
+            ?? $request->get('trxref')
+            ?? $request->get('tx_ref')
+            ?? $request->get('externalref')
+            ?? $request->get('externalRef');
 
         if (!$reference) {
             return redirect()->route('storefront.index')->with('error', 'Invalid payment reference.');
