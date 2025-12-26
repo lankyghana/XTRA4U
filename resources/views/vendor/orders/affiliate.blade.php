@@ -35,7 +35,7 @@
                 </svg>
                 <div>
                     <h3 class="text-sm font-semibold text-purple-900">Affiliate Orders</h3>
-                    <p class="text-sm text-purple-700 mt-1">These are affiliate sales you made (selling another vendor's product). You are responsible for fulfilling these orders and updating their status.</p>
+                    <p class="text-sm text-purple-700 mt-1">These are affiliate sales you made (selling another vendor's product). The product owner is responsible for fulfilling these orders and updating their status.</p>
                 </div>
             </div>
         </div>
@@ -77,6 +77,11 @@
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200">
                                 @forelse ($orders as $order)
+                                    @php
+                                        $canUpdateStatus = (bool) $order->is_reseller_order
+                                            ? ((int) $order->owner_vendor_id === (int) $vendor->id)
+                                            : ((int) $order->vendor_id === (int) $vendor->id);
+                                    @endphp
                                     <tr class="hover:bg-gradient-to-r hover:from-purple-50 hover:to-indigo-50 transition-all duration-200">
                                         <td class="px-6 py-4 text-sm font-semibold text-gray-900">#{{ $order->id }}</td>
                                         <td class="px-6 py-4 text-sm text-gray-900">{{ $order->recipient_phone_number }}</td>
@@ -104,19 +109,25 @@
                                         </td>
                                         <td class="px-6 py-4 text-sm text-gray-500">{{ $order->created_at?->format('M d, Y') }}</td>
                                         <td class="px-6 py-4 text-sm">
+                                        @if($canUpdateStatus)
                                             <form method="POST" action="{{ route('vendor.orders.update-status', $order) }}" class="inline-block">
                                                 @csrf
                                                 @method('PATCH')
                                                 <select name="status" 
-                                                        onchange="this.form.submit()" 
-                                                        class="text-sm border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500 px-3 py-2 font-medium shadow-sm"
-                                                        {{ $order->status === 'Completed' || $order->status === 'Cancelled' ? 'disabled' : '' }}>
+                                                    onchange="this.form.submit()" 
+                                                    class="text-sm border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500 px-3 py-2 font-medium shadow-sm"
+                                                    {{ $order->status === 'Completed' || $order->status === 'Cancelled' ? 'disabled' : '' }}>
                                                     <option value="Pending" {{ $order->status === 'Pending' ? 'selected' : '' }}>Pending</option>
                                                     <option value="Processing" {{ $order->status === 'Processing' ? 'selected' : '' }}>Processing</option>
                                                     <option value="Completed" {{ $order->status === 'Completed' ? 'selected' : '' }}>Completed</option>
                                                     <option value="Cancelled" {{ $order->status === 'Cancelled' ? 'selected' : '' }}>Cancelled</option>
                                                 </select>
                                             </form>
+                                        @else
+                                            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                                View only
+                                            </span>
+                                        @endif
                                         </td>
                                     </tr>
                                 @empty
