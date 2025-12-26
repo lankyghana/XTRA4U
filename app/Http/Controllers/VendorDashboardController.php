@@ -449,33 +449,24 @@ class VendorDashboardController extends Controller
 		
 		// Check authorization:
 		// - Regular orders: selling vendor (vendor_id) fulfills
-		// - Affiliate orders: selling vendor (vendor_id) fulfills; owner is read-only
-		$isSellingVendor = $order->vendor_id === $vendor->id;
-		$isAffiliateOrder = (bool) $order->is_reseller_order;
+		// - Reseller orders: product owner/vendor (owner_vendor_id) fulfills; reseller is read-only
+		$isResellerOrder = (bool) $order->is_reseller_order;
+		$canUpdateStatus = $isResellerOrder
+			? ((int) $order->owner_vendor_id === (int) $vendor->id)
+			: ((int) $order->vendor_id === (int) $vendor->id);
 
-		if (! $isSellingVendor) {
+		if (! $canUpdateStatus) {
+			$message = $isResellerOrder
+				? 'You can\'t update this affiliate order. Only the product owner can change the status.'
+				: 'You can\'t update this order. Only the selling vendor can change the status.';
+
 			if ($request->expectsJson()) {
 				return response()->json([
-					'message' => 'You can\'t update this order. Only the selling vendor can change the status.',
+					'message' => $message,
 				], 403);
 			}
 
-			return redirect()
-				->route('vendor.orders.index')
-				->with('error', 'You can\'t update this order. Only the selling vendor can change the status.');
-		}
-
-		// Defensive: still ensure status updates only come from the selling vendor.
-		if ($isAffiliateOrder !== true && $order->vendor_id !== $vendor->id) {
-			if ($request->expectsJson()) {
-				return response()->json([
-					'message' => 'You can\'t update this order.',
-				], 403);
-			}
-
-			return redirect()
-				->route('vendor.orders.index')
-				->with('error', 'You can\'t update this order.');
+			return back()->with('error', $message);
 		}
 
 		$request->validate([
