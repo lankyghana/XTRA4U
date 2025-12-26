@@ -105,8 +105,15 @@ Route::get('/storage-link/{secret}', function ($secret) {
 // Public + web middleware only (no auth/vendor/admin/custom groups)
 Route::get('/csrf-token', function () {
     return response()
-        ->json(['csrfToken' => csrf_token()])
-        ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+        ->json([
+            // Preferred key (new)
+            'csrfToken' => csrf_token(),
+            // Backward-compatible key (legacy frontend code)
+            'token' => csrf_token(),
+        ])
+        ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+        ->header('Pragma', 'no-cache')
+        ->header('Vary', 'Cookie');
 })
     ->middleware('web')
     ->name('csrf.token');

@@ -241,18 +241,26 @@
                 fetch('/csrf-token', {
                     method: 'GET',
                     credentials: 'same-origin',
+                    cache: 'no-store',
                     headers: { 'Accept': 'application/json' }
                 })
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('CSRF token refresh failed');
+                    }
+                    return response.json();
+                })
                 .then(data => {
-                    if (data.token) {
+                    const token = data.csrfToken || data.token;
+
+                    if (token) {
                         // Update meta tag
                         const meta = document.querySelector('meta[name="csrf-token"]');
-                        if (meta) meta.setAttribute('content', data.token);
+                        if (meta) meta.setAttribute('content', token);
                         
                         // Update all hidden CSRF inputs in forms
                         document.querySelectorAll('input[name="_token"]').forEach(input => {
-                            input.value = data.token;
+                            input.value = token;
                         });
                     }
                 })
