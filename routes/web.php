@@ -122,6 +122,10 @@ Route::get('/', [StorefrontController::class, 'index'])->name('storefront.index'
 Route::get('/about', fn() => view('pages.about'))->name('about');
 Route::get('/privacy', fn() => view('pages.privacy'))->name('privacy');
 Route::get('/terms', fn() => view('pages.terms'))->name('terms');
+
+// Public Marketplace alias (matches common capitalized URL)
+Route::get('/Marketplace', fn () => redirect()->route('checkout.show'));
+
 Route::get('/store/{vendor:vendor_code}', [StorefrontController::class, 'showVendorStore'])->name('storefront.vendor');
 Route::get('/vendor/request', [VendorController::class, 'showRequestForm'])->name('vendor.request.form');
 Route::get('/vendor/request/create', [VendorRequestController::class, 'create'])->name('vendor.request.create');
