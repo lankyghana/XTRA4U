@@ -21,6 +21,17 @@ class CheckoutController extends Controller
 
 	public function show()
 	{
+		if (config('storefront.checkout_coming_soon')) {
+			return view('pages.coming-soon', [
+				'title' => 'Marketplace',
+				'subtitle' => 'We\'re working on something great.',
+				'primaryCta' => [
+					'label' => 'Back to Home',
+					'href' => route('storefront.index'),
+				],
+			]);
+		}
+
 		// Fetch network services for image lookup
 		$networkServices = NetworkService::active()
 			->whereNotNull('image_path')
