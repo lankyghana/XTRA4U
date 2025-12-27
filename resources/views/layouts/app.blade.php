@@ -53,7 +53,26 @@
                 },
 
                 get availablePackages() {
-                    return this.selectedService?.packages || [];
+
+                    const raw = this.selectedService?.packages;
+                    if (!raw) return [];
+
+                    let pkgs = raw;
+
+                    // Some payloads may arrive as an object (associative array) instead of an array.
+                    if (!Array.isArray(pkgs) && typeof pkgs === 'object') {
+                        pkgs = Object.values(pkgs);
+                    }
+
+                    if (!Array.isArray(pkgs)) return [];
+
+                    return pkgs
+                        .filter((p) => p && typeof p === 'object')
+                        .map((p, idx) => {
+                            const hasId = typeof p.id !== 'undefined' && p.id !== null && String(p.id).trim() !== '';
+                            const id = hasId ? p.id : `${this.selectedService?.key || 'svc'}_${idx}`;
+                            return { ...p, id };
+                        });
                 },
 
                 // Initialization

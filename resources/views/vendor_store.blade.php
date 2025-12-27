@@ -197,7 +197,7 @@
 
             <template x-if="!loadingPackages && availablePackages.length">
                 <div class="space-y-4">
-                    <template x-for="pkg in availablePackages" :key="pkg.id">
+                    <template x-for="(pkg, idx) in availablePackages" :key="String(pkg.id) + '_' + idx">
                         <div class="p-4 rounded-xl border shadow-sm hover:shadow-md transition cursor-pointer"
                             :class="selectedPackage && selectedPackage.id === pkg.id ? 'border-purple-400 bg-purple-50' : 'border-gray-100 bg-white'"
                             @click="selectPackage(pkg)">

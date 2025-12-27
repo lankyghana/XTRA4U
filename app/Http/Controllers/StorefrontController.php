@@ -161,15 +161,23 @@ class StorefrontController extends Controller
 			$serviceName = $product->display_service;
 			$serviceKey = md5($category . '::' . $serviceName);
 
+			// Alpine uses `pkg.id` as the x-for key.
+			// Guarantee it's always non-empty and unique across owned vs reseller products.
+			$rawId = $product->id;
+			$isResellerProduct = (bool) ($product->is_reseller_product ?? false);
+			$packageId = $isResellerProduct
+				? (string) $rawId
+				: ('product_' . (string) $rawId);
+
 			$package = [
-				'id' => $product->id,
+				'id' => $packageId,
 				'name' => $product->name,
 				'price' => (float) ($product->display_price ?? $product->price),
 				'size' => $meta['size'] ?? null,
 				'validity' => $meta['validity'] ?? null,
 				'tag' => $meta['tag'] ?? $meta['promo'] ?? null,
 				'notes' => $meta['notes'] ?? $product->description,
-				'is_reseller_product' => $product->is_reseller_product ?? false,
+				'is_reseller_product' => $isResellerProduct,
 				'reseller_product_id' => $product->reseller_product_id ?? null,
 				'original_product_id' => $product->original_product_id ?? $product->id,
 			];
