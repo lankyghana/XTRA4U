@@ -292,20 +292,19 @@
         </div>
 
     </div>
-</div>
-
-{{-- Sticky mobile CTA: appears after package selection --}}
-<div class="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur"
-     x-show="selectedPackage"
-     x-cloak>
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3">
-        <button type="button"
-            class="w-full bg-purple-600 hover:bg-purple-700 text-white rounded-xl py-3 font-semibold disabled:opacity-60"
-            @click="scrollToCheckout()"
-            :disabled="!selectedPackage">
-            <span x-text="selectedPackage ? ('Proceed to Checkout — ' + formatCurrency(selectedPackage.price)) : 'Proceed to Checkout'"></span>
-        </button>
-    </div>
+        {{-- Sticky mobile CTA: appears after package selection --}}
+        <div class="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur"
+             x-show="selectedPackage"
+             x-cloak>
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3">
+                <button type="button"
+                    class="w-full bg-purple-600 hover:bg-purple-700 text-white rounded-xl py-3 font-semibold disabled:opacity-60"
+                    @click="scrollToCheckout()"
+                    :disabled="!selectedPackage">
+                    <span x-text="selectedPackage ? ('Proceed to Checkout — ' + formatCurrency(selectedPackage.price)) : 'Proceed to Checkout'"></span>
+                </button>
+            </div>
+        </div>
 </div>
 
 
