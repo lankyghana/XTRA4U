@@ -191,6 +191,21 @@ class StorefrontController extends Controller
 			$grouped[$serviceKey]['packages'][] = $package;
 		}
 
+		// Sort packages within each service by price (ascending)
+		foreach ($grouped as &$service) {
+			usort($service['packages'], function ($a, $b) {
+				$ap = (float) ($a['price'] ?? 0);
+				$bp = (float) ($b['price'] ?? 0);
+
+				if ($ap === $bp) {
+					return strcmp((string) ($a['name'] ?? ''), (string) ($b['name'] ?? ''));
+				}
+
+				return $ap <=> $bp;
+			});
+		}
+		unset($service);
+
 		return collect($grouped)->values();
 	}
 
