@@ -132,8 +132,8 @@
         <p>Explore network bundles, electricity tokens, online vouchers, and more.</p>
     </div>
 
-    {{-- CATEGORY SELECTOR: full width card (visible immediately) --}}
-    <div class="bg-white rounded-xl shadow-md p-6 mb-6">
+    {{-- CATEGORY SELECTOR: full width card (hidden after package selection) --}}
+    <div class="bg-white rounded-xl shadow-md p-6 mb-6" x-show="!isCheckoutOnlyMode" x-cloak>
         <h3 class="text-xs tracking-wider text-gray-400 uppercase">CATEGORY SELECTOR</h3>
         <h2 class="text-2xl font-semibold mt-2">Choose a category</h2>
 
@@ -156,8 +156,8 @@
     {{-- 3-column area (columns revealed progressively) --}}
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 
-        {{-- 1) CHOOSE SERVICE (reveal after category) --}}
-        <div x-show="step >= 2" x-cloak x-transition class="bg-white rounded-xl shadow-md p-6">
+        {{-- 1) CHOOSE SERVICE (hidden after package selection) --}}
+        <div x-show="step >= 2 && !isCheckoutOnlyMode" x-cloak x-transition class="bg-white rounded-xl shadow-md p-6">
             <h3 class="text-xl font-semibold mb-4">Choose Service</h3>
 
             <template x-if="loadingServices">
@@ -187,20 +187,22 @@
             </template>
         </div>
 
-        {{-- 2) SELECT PACKAGE (reveal after service) --}}
+        {{-- 2) SELECT PACKAGE / SELECTED PACKAGE (list hidden after selection) --}}
         <div id="package-section" x-ref="packageSection" x-show="step >= 3" x-cloak x-transition class="bg-white rounded-xl shadow-md p-6">
-            <h3 class="text-xl font-semibold mb-4">Select Package</h3>
+            <template x-if="!isCheckoutOnlyMode">
+                <div>
+                    <h3 class="text-xl font-semibold mb-4">Select Package</h3>
 
-            <template x-if="loadingPackages">
-                <div class="text-gray-500">Loading packages…</div>
-            </template>
+                    <template x-if="loadingPackages">
+                        <div class="text-gray-500">Loading packages…</div>
+                    </template>
 
-            <template x-if="!loadingPackages && packagesToShow.length">
-                <div class="space-y-4">
-                    <template x-for="(pkg, idx) in packagesToShow" :key="String(pkg.id) + '_' + idx">
-                        <div class="p-4 rounded-xl border shadow-sm hover:shadow-md transition cursor-pointer"
-                            :class="selectedPackage && selectedPackage.id === pkg.id ? 'border-purple-400 bg-purple-50' : 'border-gray-100 bg-white'"
-                            @click="selectPackage(pkg)">
+                    <template x-if="!loadingPackages && availablePackages.length">
+                        <div class="space-y-4">
+                            <template x-for="(pkg, idx) in availablePackages" :key="String(pkg.id) + '_' + idx">
+                                <div class="p-4 rounded-xl border shadow-sm hover:shadow-md transition cursor-pointer"
+                                    :class="selectedPackage && selectedPackage.id === pkg.id ? 'border-purple-400 bg-purple-50' : 'border-gray-100 bg-white'"
+                                    @click="selectPackage(pkg)">
 
                             <div class="flex items-start gap-4">
                                 <!-- Service Logo -->
@@ -225,13 +227,51 @@
                                 </div>
                             </div>
 
+                                </div>
+                            </template>
                         </div>
+                    </template>
+
+                    <template x-if="!loadingPackages && !availablePackages.length">
+                        <div class="text-sm text-gray-500">No packages available for this service.</div>
                     </template>
                 </div>
             </template>
 
-            <template x-if="!loadingPackages && !packagesToShow.length">
-                <div class="text-sm text-gray-500">No packages available for this service.</div>
+            <template x-if="isCheckoutOnlyMode">
+                <div>
+                    <div class="flex items-center justify-between gap-3 mb-4">
+                        <h3 class="text-xl font-semibold">Selected Package</h3>
+                        <button type="button"
+                            class="text-sm font-medium text-purple-700 hover:text-purple-800"
+                            @click="expandPackages()">
+                            Change package
+                        </button>
+                    </div>
+
+                    <div class="p-4 rounded-xl border border-purple-400 bg-purple-50 shadow-sm">
+                        <div class="flex items-start gap-4">
+                            <img :src="selectedService?.logo || '/images/default-provider.png'"
+                                 alt=""
+                                 class="w-12 h-12 rounded-md object-cover flex-shrink-0">
+
+                            <div class="flex-1 flex justify-between items-start">
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <div class="font-semibold" x-text="selectedPackage?.name"></div>
+                                        <span x-show="selectedPackage?.tag" x-text="selectedPackage?.tag" class="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded-full"></span>
+                                    </div>
+                                    <div class="text-sm text-gray-500 mt-1" x-text="selectedPackage?.size || ''"></div>
+                                </div>
+
+                                <div class="text-right ml-4">
+                                    <div class="text-lg font-bold text-purple-600" x-text="formatCurrency(selectedPackage?.price)"></div>
+                                    <div class="text-sm text-green-600 mt-1" x-text="selectedPackage?.validity || ''"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </template>
         </div>
 

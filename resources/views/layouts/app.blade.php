@@ -85,6 +85,10 @@
                     return pkgs.filter((p) => p && typeof p.id !== 'undefined' && String(p.id) === selectedId);
                 },
 
+                get isCheckoutOnlyMode() {
+                    return !!(this.selectedPackage && this.step >= 4 && this.showAllPackages === false);
+                },
+
                 // Initialization
                 init() {
                     this.selectedCategory = null;
@@ -148,6 +152,19 @@
 
                     // Bring checkout into view immediately after selection
                     this.scrollToCheckout();
+                },
+
+                expandPackages() {
+                    // Show full package list again and return to package-selection step.
+                    this.showAllPackages = true;
+                    this.step = 3;
+
+                    this.$nextTick(() => {
+                        const el = this.$refs?.packageSection || document.getElementById('package-section');
+                        if (el && typeof el.scrollIntoView === 'function') {
+                            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                    });
                 },
 
                 scrollToCheckout() {
