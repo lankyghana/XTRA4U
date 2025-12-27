@@ -13,9 +13,11 @@ class EnsureVendorApproved
         $vendorGuardUser = Auth::guard('vendor')->user();
         $user = Auth::user();
 
+        // IMPORTANT: Do not fall back to `$user->vendor`.
+        // That relationship assumes a `vendors.user_id` column which may not exist.
         $vendor = $vendorGuardUser instanceof Vendor
             ? $vendorGuardUser
-            : ($user instanceof Vendor ? $user : ($user->vendor ?? null));
+            : ($user instanceof Vendor ? $user : null);
 
         if (!$vendor || ! $vendor->is_approved) {
             return redirect()->route('vendor.request.form')->withErrors(['access' => 'Vendor not approved.']);

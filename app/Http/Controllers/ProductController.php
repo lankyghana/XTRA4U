@@ -127,8 +127,10 @@ class ProductController extends Controller
     {
         $vendorGuardUser = Auth::guard('vendor')->user();
         $user = Auth::user();
-        $vendor = $vendorGuardUser
-            ?: ($user instanceof \App\Models\Vendor ? $user : ($user->vendor ?? null));
+
+        $vendor = $vendorGuardUser instanceof \App\Models\Vendor
+            ? $vendorGuardUser
+            : ($user instanceof \App\Models\Vendor ? $user : null);
 
         abort_unless($vendor, 403, 'Vendor account required.');
 

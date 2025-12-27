@@ -627,9 +627,12 @@ class VendorDashboardController extends Controller
 	{
 		$vendorGuardUser = Auth::guard('vendor')->user();
 		$user = Auth::user();
+
+		// Do not use `$user->vendor` here.
+		// That relationship expects a `vendors.user_id` column which may not exist.
 		$vendor = $vendorGuardUser instanceof Vendor
 			? $vendorGuardUser
-			: ($user instanceof Vendor ? $user : ($user->vendor ?? null));
+			: ($user instanceof Vendor ? $user : null);
 
 		abort_unless($vendor, 403, 'Vendor account required.');
 
