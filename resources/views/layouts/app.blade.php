@@ -26,6 +26,7 @@
                 selectedCategory: null,
                 selectedService: null,
                 selectedPackage: null,
+                showAllPackages: true,
                 step: 1,
                 submitting: false,
                 orderMessage: '',
@@ -75,6 +76,15 @@
                         });
                 },
 
+                get packagesToShow() {
+                    const pkgs = this.availablePackages || [];
+                    if (this.showAllPackages) return pkgs;
+                    if (!this.selectedPackage) return pkgs;
+
+                    const selectedId = String(this.selectedPackage.id);
+                    return pkgs.filter((p) => p && typeof p.id !== 'undefined' && String(p.id) === selectedId);
+                },
+
                 // Initialization
                 init() {
                     this.selectedCategory = null;
@@ -104,6 +114,7 @@
                     this.selectedCategory = cat;
                     this.selectedService = null;
                     this.selectedPackage = null;
+                    this.showAllPackages = true;
                     this.step = 2;
                 },
 
@@ -118,6 +129,7 @@
                     
                     this.selectedService = svc;
                     this.selectedPackage = null;
+                    this.showAllPackages = true;
                     this.step = 3;
                 },
 
@@ -131,7 +143,24 @@
                     }
                     
                     this.selectedPackage = pkg;
+                    this.showAllPackages = false;
                     this.step = 4;
+
+                    // Bring checkout into view immediately after selection
+                    this.scrollToCheckout();
+                },
+
+                expandPackages() {
+                    // Show full package list again and return to package-selection step.
+                    this.showAllPackages = true;
+                    this.step = 3;
+
+                    this.$nextTick(() => {
+                        const el = this.$refs?.packageSection || document.getElementById('package-section');
+                        if (el && typeof el.scrollIntoView === 'function') {
+                            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                    });
                 },
 
                 scrollToCheckout() {

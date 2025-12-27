@@ -188,16 +188,25 @@
         </div>
 
         {{-- 2) SELECT PACKAGE (reveal after service) --}}
-        <div x-show="step >= 3" x-cloak x-transition class="bg-white rounded-xl shadow-md p-6">
-            <h3 class="text-xl font-semibold mb-4">Select Package</h3>
+        <div id="package-section" x-ref="packageSection" x-show="step >= 3" x-cloak x-transition class="bg-white rounded-xl shadow-md p-6">
+            <div class="flex items-center justify-between gap-3 mb-4">
+                <h3 class="text-xl font-semibold">Select Package</h3>
+                <button type="button"
+                    class="text-sm font-medium text-purple-700 hover:text-purple-800"
+                    x-show="selectedPackage && !showAllPackages"
+                    x-cloak
+                    @click="expandPackages()">
+                    Change package
+                </button>
+            </div>
 
             <template x-if="loadingPackages">
                 <div class="text-gray-500">Loading packages…</div>
             </template>
 
-            <template x-if="!loadingPackages && availablePackages.length">
+            <template x-if="!loadingPackages && packagesToShow.length">
                 <div class="space-y-4">
-                    <template x-for="(pkg, idx) in availablePackages" :key="String(pkg.id) + '_' + idx">
+                    <template x-for="(pkg, idx) in packagesToShow" :key="String(pkg.id) + '_' + idx">
                         <div class="p-4 rounded-xl border shadow-sm hover:shadow-md transition cursor-pointer"
                             :class="selectedPackage && selectedPackage.id === pkg.id ? 'border-purple-400 bg-purple-50' : 'border-gray-100 bg-white'"
                             @click="selectPackage(pkg)">
@@ -230,14 +239,23 @@
                 </div>
             </template>
 
-            <template x-if="!loadingPackages && !availablePackages.length">
+            <template x-if="!loadingPackages && !packagesToShow.length">
                 <div class="text-sm text-gray-500">No packages available for this service.</div>
             </template>
         </div>
 
         {{-- 3) CHECKOUT (reveal after package) --}}
         <div id="checkout-section" x-ref="checkoutSection" x-show="step >= 4" x-cloak x-transition class="bg-white rounded-xl shadow-md p-6 md:sticky md:top-20 self-start">
-            <h3 class="text-xl font-semibold mb-4">Checkout</h3>
+            <div class="flex items-center justify-between gap-3 mb-4">
+                <h3 class="text-xl font-semibold">Checkout</h3>
+                <button type="button"
+                    class="text-sm font-medium text-purple-700 hover:text-purple-800"
+                    x-show="selectedPackage"
+                    x-cloak
+                    @click="expandPackages()">
+                    Change package
+                </button>
+            </div>
 
             <div class="bg-gray-50 p-4 rounded-lg mb-4">
                 <div class="flex justify-between text-sm text-gray-600">
@@ -292,19 +310,6 @@
         </div>
 
     </div>
-        {{-- Sticky mobile CTA: appears after package selection --}}
-        <div class="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur"
-             x-show="selectedPackage"
-             x-cloak>
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3">
-                <button type="button"
-                    class="w-full bg-purple-600 hover:bg-purple-700 text-white rounded-xl py-3 font-semibold disabled:opacity-60"
-                    @click="scrollToCheckout()"
-                    :disabled="!selectedPackage">
-                    <span x-text="selectedPackage ? ('Proceed to Checkout — ' + formatCurrency(selectedPackage.price)) : 'Proceed to Checkout'"></span>
-                </button>
-            </div>
-        </div>
 </div>
 
 
