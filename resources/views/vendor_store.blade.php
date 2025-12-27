@@ -189,16 +189,7 @@
 
         {{-- 2) SELECT PACKAGE (reveal after service) --}}
         <div id="package-section" x-ref="packageSection" x-show="step >= 3" x-cloak x-transition class="bg-white rounded-xl shadow-md p-6">
-            <div class="flex items-center justify-between gap-3 mb-4">
-                <h3 class="text-xl font-semibold">Select Package</h3>
-                <button type="button"
-                    class="text-sm font-medium text-purple-700 hover:text-purple-800"
-                    x-show="selectedPackage && !showAllPackages"
-                    x-cloak
-                    @click="expandPackages()">
-                    Change package
-                </button>
-            </div>
+            <h3 class="text-xl font-semibold mb-4">Select Package</h3>
 
             <template x-if="loadingPackages">
                 <div class="text-gray-500">Loading packages…</div>
@@ -246,16 +237,7 @@
 
         {{-- 3) CHECKOUT (reveal after package) --}}
         <div id="checkout-section" x-ref="checkoutSection" x-show="step >= 4" x-cloak x-transition class="bg-white rounded-xl shadow-md p-6 md:sticky md:top-20 self-start">
-            <div class="flex items-center justify-between gap-3 mb-4">
-                <h3 class="text-xl font-semibold">Checkout</h3>
-                <button type="button"
-                    class="text-sm font-medium text-purple-700 hover:text-purple-800"
-                    x-show="selectedPackage"
-                    x-cloak
-                    @click="expandPackages()">
-                    Change package
-                </button>
-            </div>
+            <h3 class="text-xl font-semibold mb-4">Checkout</h3>
 
             <div class="bg-gray-50 p-4 rounded-lg mb-4">
                 <div class="flex justify-between text-sm text-gray-600">

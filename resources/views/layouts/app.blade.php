@@ -150,19 +150,6 @@
                     this.scrollToCheckout();
                 },
 
-                expandPackages() {
-                    // Show full package list again and return to package-selection step.
-                    this.showAllPackages = true;
-                    this.step = 3;
-
-                    this.$nextTick(() => {
-                        const el = this.$refs?.packageSection || document.getElementById('package-section');
-                        if (el && typeof el.scrollIntoView === 'function') {
-                            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }
-                    });
-                },
-
                 scrollToCheckout() {
                     // Smooth scroll to checkout section (used by sticky mobile CTA)
                     this.$nextTick(() => {
