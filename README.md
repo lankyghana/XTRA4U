@@ -37,7 +37,7 @@
 
 ## 🎯 Project Overview
 
-**XTRA4U** is a comprehensive multi-vendor digital services marketplace designed specifically for the Ghanaian market. The platform enables seamless purchasing of digital services including mobile data bundles, airtime top-ups, utility payments, and specialized services like the innovative **AFA (Academic Final Assessment) Registration System**.
+**XTRA4U** is a comprehensive multi-vendor digital services marketplace designed specifically for the Ghanaian market. The platform enables seamless purchasing of digital services including mobile data bundles, airtime top-ups, utility payments, and specialized services like the innovative **AFA Registration System**.
 
 ### What Makes XTRA4U Unique
 
@@ -552,6 +552,8 @@ PAYSTACK_SECRET_KEY=sk_test_xxxxxxxxxxxxx
 PAYSTACK_PAYMENT_URL=https://api.paystack.co
 ```
 
+**Paystack callback:** Ensure `APP_URL` is set to a public HTTPS URL Paystack can reach. For local development, use an HTTPS tunnel (e.g. ngrok). If you hit cURL error 60 on Windows, point PHP to a CA bundle by setting `curl.cainfo` and `openssl.cafile` in `php.ini`.
+
 #### Flutterwave
 
 ```env
@@ -688,173 +690,6 @@ No code deployment required for gateway switching!
 
 ## 📁 Folder Structure
 
-```
-XTRA4U/
-├── app/
-│   ├── Console/
-│   │   └── Commands/                 # Artisan commands
-│   ├── Contracts/
-│   │   └── Gateways/                 # Gateway interfaces
-│   ├── Events/                       # Laravel events
-│   ├── Exceptions/
-│   │   └── Handler.php               # Global exception handling
-│   ├── Http/
-│   │   ├── Controllers/
-│   │   │   ├── Admin/                # Admin controllers
-│   │   │   ├── Webhooks/             # Payment webhooks
-│   │   │   ├── AfaRegistrationController.php
-│   │   │   ├── CheckoutController.php
-│   │   │   ├── StorefrontController.php
-│   │   │   ├── VendorDashboardController.php
-│   │   │   └── ...
-│   │   ├── Middleware/
-│   │   │   ├── ContentSecurityPolicy.php  # Dynamic CSP
-│   │   │   └── ...
-│   │   └── Kernel.php
-│   ├── Jobs/
-│   │   └── ProcessVendorWithdrawalPayout.php
-│   ├── Listeners/                    # Event listeners
-│   ├── Mail/                         # Email templates
-│   ├── Models/
-│   │   ├── Admin.php
-│   │   ├── AfaRegistration.php
-│   │   ├── Order.php
-│   │   ├── Product.php
-│   │   ├── Transaction.php
-│   │   ├── Vendor.php
-│   │   ├── VendorWithdrawal.php
-│   │   └── ...
-│   ├── Policies/
-│   │   └── VendorPolicy.php
-│   ├── Providers/
-│   │   ├── AppServiceProvider.php
-│   │   └── DynamicMailServiceProvider.php
-│   ├── Services/
-│   │   ├── AfaPaymentService.php
-│   │   ├── GatewayManager.php        # Core gateway logic
-│   │   ├── PaymentService.php
-│   │   ├── MoolrePaymentService.php
-│   │   ├── SmsService.php
-│   │   └── ...
-│   └── Support/
-│       └── Mail/                     # Mail utilities
-├── bootstrap/
-│   └── app.php                       # Application bootstrap
-├── config/
-│   ├── app.php                       # App configuration
-│   ├── auth.php                      # Authentication config
-│   ├── database.php
-│   ├── mail.php
-│   ├── queue.php
-│   ├── services.php                  # Third-party services
-│   └── momo.php                      # Mobile money config
-├── database/
-│   ├── factories/                    # Model factories
-│   ├── migrations/                   # Database migrations
-│   │   ├── *_create_vendors_table.php
-│   │   ├── *_create_orders_table.php
-│   │   ├── *_create_afa_registrations_table.php
-│   │   └── ...
-│   └── seeders/                      # Database seeders
-├── public/
-│   ├── build/                        # Compiled assets (Vite)
-│   ├── images/                       # Public images
-│   ├── storage/                      # Symlink to storage/app/public
-│   └── index.php                     # Entry point
-├── resources/
-│   ├── css/
-│   │   └── app.css                   # Main CSS file
-│   ├── js/
-│   │   └── app.js                    # Main JS file
-│   └── views/
-│       ├── admin/                    # Admin views
-│       ├── vendor/                   # Vendor dashboard views
-│       ├── storefront/               # Customer-facing views
-│       ├── layouts/                  # Layout templates
-│       └── components/               # Blade components
-├── routes/
-│   ├── web.php                       # Web routes
-│   └── console.php                   # Artisan commands
-├── storage/
-│   ├── app/
-│   │   └── public/                   # Publicly accessible files
-│   ├── framework/                    # Framework cache
-│   └── logs/                         # Application logs
-├── tests/
-│   ├── Feature/                      # Feature tests
-│   └── Unit/                         # Unit tests
-├── vendor/                           # Composer dependencies
-├── .env.example                      # Environment template
-├── composer.json                     # PHP dependencies
-├── package.json                      # Node dependencies
-├── vite.config.js                    # Vite configuration
-├── phpunit.xml                       # PHPUnit configuration
-├── tailwind.config.js                # Tailwind CSS configuration
-└── README.md                         # This file
-```
-
----
-
-## 👨‍💻 Development Guidelines
-
-### Code Style
-
-- Follow PSR-12 coding standards for PHP
-- Use Laravel Pint for automatic code formatting: `./vendor/bin/pint`
-- Use meaningful variable and function names
-- Add PHPDoc blocks to all public methods
-
-### Git Workflow
-
-1. Create feature branch from `main`
-2. Make changes with clear, descriptive commits
-3. Write tests for new features
-4. Ensure all tests pass: `php artisan test`
-5. Submit pull request for review
-
-### Testing
-
-```bash
-# Run all tests
-php artisan test
-
-# Run specific test file
-php artisan test tests/Feature/VendorDashboardTest.php
-
-# Run with coverage
-php artisan test --coverage
-```
-
-### Database Changes
-
-- Always create migrations for schema changes
-- Never edit existing migrations in production
-- Use factories for test data
-- Write seeders for reference data
-
-### Debugging
-
-```bash
-# Enable query logging
-php artisan debugbar:publish
-
-# View logs in real-time
-php artisan pail
-
-# Clear all caches
-php artisan optimize:clear
-```
-
----
-
-## 📄 License & Ownership
-
-**© 2025 Richprime Services. All Rights Reserved.**
-
-This software is proprietary and confidential. Unauthorized copying, distribution, modification, or use of this software, via any medium, is strictly prohibited without explicit written permission from Richprime Services.
-
-**Registration Details:**
-- **Company:** Richprime Services
 - **Registration Number:** BN582881225
 - **Jurisdiction:** Ghana (Registrar General's Department)
 
@@ -891,7 +726,7 @@ For technical issues or questions:
 ### Business Inquiries
 
 For business partnerships, vendor onboarding, or general inquiries:
-- **Email:** business@xtra4u.com
+- **Email:** officialfocus344@gmail.com
 - **Website:** https://xtra4u.com
 
 ---
