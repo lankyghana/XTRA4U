@@ -16,7 +16,7 @@
         orderRoute: '{{ route('checkout.process') }}'
     };
 </script>
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-24 md:pb-0"
      x-data="typeof vendorStore === 'function' ? vendorStore(window.vendorStoreData) : {}"
      x-init="typeof init === 'function' && init()">
 
@@ -236,7 +236,7 @@
         </div>
 
         {{-- 3) CHECKOUT (reveal after package) --}}
-        <div x-show="step >= 4" x-cloak x-transition class="bg-white rounded-xl shadow-md p-6">
+        <div id="checkout-section" x-ref="checkoutSection" x-show="step >= 4" x-cloak x-transition class="bg-white rounded-xl shadow-md p-6 md:sticky md:top-20 self-start">
             <h3 class="text-xl font-semibold mb-4">Checkout</h3>
 
             <div class="bg-gray-50 p-4 rounded-lg mb-4">
@@ -270,6 +270,7 @@
                 <div class="mb-3">
                     <label class="block text-sm text-gray-600 mb-1">Recipient phone</label>
                     <input type="tel" name="recipient_phone" x-model="recipientPhone" required
+                        x-ref="recipientPhoneInput"
                         class="w-full border border-gray-200 rounded-lg p-3 focus:ring-2 focus:ring-purple-300">
                 </div>
 
@@ -290,6 +291,20 @@
             <div class="mt-4 text-sm text-gray-500" x-show="orderMessage" x-text="orderMessage"></div>
         </div>
 
+    </div>
+</div>
+
+{{-- Sticky mobile CTA: appears after package selection --}}
+<div class="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur"
+     x-show="selectedPackage"
+     x-cloak>
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3">
+        <button type="button"
+            class="w-full bg-purple-600 hover:bg-purple-700 text-white rounded-xl py-3 font-semibold disabled:opacity-60"
+            @click="scrollToCheckout()"
+            :disabled="!selectedPackage">
+            <span x-text="selectedPackage ? ('Proceed to Checkout — ' + formatCurrency(selectedPackage.price)) : 'Proceed to Checkout'"></span>
+        </button>
     </div>
 </div>
 

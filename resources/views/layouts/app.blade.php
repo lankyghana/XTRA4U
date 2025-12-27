@@ -134,6 +134,24 @@
                     this.step = 4;
                 },
 
+                scrollToCheckout() {
+                    // Smooth scroll to checkout section (used by sticky mobile CTA)
+                    this.$nextTick(() => {
+                        const el = this.$refs?.checkoutSection || document.getElementById('checkout-section');
+                        if (el && typeof el.scrollIntoView === 'function') {
+                            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+
+                        // Focus the first field to make the next step obvious
+                        this.$nextTick(() => {
+                            const input = this.$refs?.recipientPhoneInput;
+                            if (input && typeof input.focus === 'function') {
+                                input.focus();
+                            }
+                        });
+                    });
+                },
+
                 formatCurrency(v) {
                     if (v === null || typeof v === 'undefined') return '';
                     try {
