@@ -2,6 +2,7 @@
 namespace App\Services;
 
 use App\Events\OrderCompleted;
+use App\Jobs\SendOrderPlacedCommunications;
 use App\Mail\OrderPlacedMail;
 use App\Models\AdminNotification;
 use App\Models\Order;
@@ -12,7 +13,6 @@ use App\Models\Vendor;
 use App\Models\VendorNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 class PaymentService
 {
@@ -78,25 +78,41 @@ class PaymentService
      */
     public function completeOrder(Order $order): bool
     {
-		// Idempotency: avoid double-crediting wallets / duplicate transactions.
+        // Fast-path idempotency check.
+        // Concurrency safety is enforced by lockForUpdate() inside the transaction below.
         if (in_array($order->payment_status, ['paid', 'completed'], true)) {
-			return true;
-		}
+            return true;
+        }
 
-        return DB::transaction(function () use ($order) {
-            // Check if order is a reseller order
-            if ($order->is_reseller_order && $order->reseller_product_id) {
-                return $this->completeResellerOrder($order);
-            } else {
-                return $this->completeRegularOrder($order);
+        $postCommit = [];
+
+        $didComplete = DB::transaction(function () use ($order, &$postCommit) {
+            /** @var Order $locked */
+            $locked = Order::whereKey($order->id)->lockForUpdate()->firstOrFail();
+
+            // Idempotency: avoid double-crediting wallets / duplicate transactions.
+            if (in_array($locked->payment_status, ['paid', 'completed'], true)) {
+                return true;
             }
+
+            if ($locked->is_reseller_order && $locked->reseller_product_id) {
+                return $this->completeResellerOrder($locked, $postCommit);
+            }
+
+            return $this->completeRegularOrder($locked, $postCommit);
         });
+
+        if ($didComplete && !empty($postCommit)) {
+            $this->dispatchPostCommitActions($postCommit);
+        }
+
+        return $didComplete;
     }
 
     /**
      * Complete a regular (non-reseller) order
      */
-    protected function completeRegularOrder(Order $order): bool
+    protected function completeRegularOrder(Order $order, array &$postCommit = []): bool
     {
         $amountPaid = (float) $order->amount_paid;
         $commission = round($amountPaid * 0.02, 2);
@@ -142,24 +158,25 @@ class PaymentService
                 ],
             ]);
 
-            // Send email to vendor
-            if ($vendor->email) {
-                try {
-                    Mail::to($vendor->email)->send(new OrderPlacedMail($order, $vendor, 'owner', $vendorEarnings));
-                } catch (\Exception $e) {
-                    Log::warning('Failed to send order email to vendor', ['error' => $e->getMessage()]);
-                }
-            }
-
-            // Send SMS to vendor
-            $this->sendVendorSms($vendor, $order, $vendorEarnings);
+			// External side-effects must not run inside DB transactions.
+			$postCommit[] = [
+				'type' => 'communications',
+				'order_id' => $order->id,
+				'vendor_id' => $vendor->id,
+				'role' => 'owner',
+				'earning' => $vendorEarnings,
+				'sms_type' => 'order',
+			];
         }
 
         // Send admin notification
         AdminNotification::notifyNewOrder($order);
 
-        // Dispatch order completed event
-        event(new OrderCompleted($order));
+        // Dispatch event after commit (listener is queued).
+        $postCommit[] = [
+            'type' => 'event',
+            'order_id' => $order->id,
+        ];
 
         Log::info('Regular order completed', [
             'order_id' => $order->id,
@@ -174,7 +191,7 @@ class PaymentService
     /**
      * Complete a reseller order with split payment
      */
-    protected function completeResellerOrder(Order $order): bool
+    protected function completeResellerOrder(Order $order, array &$postCommit = []): bool
     {
         $resellerProduct = ResellerProduct::with(['ownerVendor', 'resellerVendor', 'product'])
             ->find($order->reseller_product_id);
@@ -255,17 +272,14 @@ class PaymentService
                 ],
             ]);
 
-            // Email owner vendor
-            if ($ownerVendor->email) {
-                try {
-                    Mail::to($ownerVendor->email)->send(new OrderPlacedMail($order, $ownerVendor, 'owner', $ownerEarning));
-                } catch (\Exception $e) {
-                    Log::warning('Failed to send order email to owner vendor', ['error' => $e->getMessage()]);
-                }
-            }
-
-            // SMS to owner vendor
-            $this->sendVendorSms($ownerVendor, $order, $ownerEarning, 'affiliate');
+			$postCommit[] = [
+				'type' => 'communications',
+				'order_id' => $order->id,
+				'vendor_id' => $ownerVendor->id,
+				'role' => 'owner',
+				'earning' => $ownerEarning,
+				'sms_type' => 'affiliate',
+			];
         }
 
         if ($resellerVendor) {
@@ -285,24 +299,24 @@ class PaymentService
                 ],
             ]);
 
-            // Email reseller vendor
-            if ($resellerVendor->email) {
-                try {
-                    Mail::to($resellerVendor->email)->send(new OrderPlacedMail($order, $resellerVendor, 'reseller', $resellerEarning));
-                } catch (\Exception $e) {
-                    Log::warning('Failed to send order email to reseller vendor', ['error' => $e->getMessage()]);
-                }
-            }
-
-            // SMS to reseller vendor
-            $this->sendVendorSms($resellerVendor, $order, $resellerEarning);
+			$postCommit[] = [
+				'type' => 'communications',
+				'order_id' => $order->id,
+				'vendor_id' => $resellerVendor->id,
+				'role' => 'reseller',
+				'earning' => $resellerEarning,
+				'sms_type' => 'order',
+			];
         }
 
         // Admin notification
         AdminNotification::notifyNewOrder($order);
 
-        // Dispatch order completed event
-        event(new OrderCompleted($order));
+        // Dispatch event after commit (listener is queued).
+        $postCommit[] = [
+            'type' => 'event',
+            'order_id' => $order->id,
+        ];
 
         Log::info('Reseller order completed with split payment', [
             'order_id' => $order->id,
@@ -316,6 +330,37 @@ class PaymentService
         ]);
 
         return true;
+    }
+
+    private function dispatchPostCommitActions(array $actions): void
+    {
+        foreach ($actions as $action) {
+            $type = (string) ($action['type'] ?? '');
+
+            if ($type === 'communications') {
+                // Backward-compatible default: execute immediately (no queue worker required),
+                // but still outside the DB transaction.
+                // This job is queueable so the system can be switched to async later.
+                SendOrderPlacedCommunications::dispatchSync(
+                    (int) $action['order_id'],
+                    (int) $action['vendor_id'],
+                    (string) $action['role'],
+                    (float) $action['earning'],
+                    (string) ($action['sms_type'] ?? 'order')
+                );
+                continue;
+            }
+
+            if ($type === 'event') {
+                $orderId = (int) ($action['order_id'] ?? 0);
+                if ($orderId > 0) {
+                    $order = Order::find($orderId);
+                    if ($order) {
+                        event(new OrderCompleted($order));
+                    }
+                }
+            }
+        }
     }
 
     /**

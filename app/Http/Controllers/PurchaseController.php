@@ -202,7 +202,9 @@ class PurchaseController extends Controller
             $status = 'Failed';
         }
 
-        $order = DB::transaction(function () use ($validated, $product, $amountPaid, $status, $isResellerOrder, $resellerProduct) {
+        $postCommitEmails = [];
+
+        $order = DB::transaction(function () use ($validated, $product, $amountPaid, $status, $isResellerOrder, $resellerProduct, &$postCommitEmails) {
             if ($isResellerOrder && $resellerProduct) {
                 // **RESELLER ORDER - Split Payment**
                 $basePrice = $resellerProduct->base_price;
@@ -303,16 +305,18 @@ class PurchaseController extends Controller
                 AdminNotification::notifyNewOrder($order);
 
                 // Send EMAIL to OWNER vendor (product owner)
-                $ownerVendor = Vendor::find($resellerProduct->owner_vendor_id);
-                if ($ownerVendor && $ownerVendor->email) {
-                    Mail::to($ownerVendor->email)->send(new OrderPlacedMail($order, $ownerVendor, 'owner', $ownerEarning));
-                }
+                $postCommitEmails[] = [
+                    'vendor_id' => (int) $resellerProduct->owner_vendor_id,
+                    'role' => 'owner',
+                    'earning' => (float) $ownerEarning,
+                ];
 
                 // Send EMAIL to RESELLER vendor
-                $resellerVendor = Vendor::find($resellerProduct->reseller_vendor_id);
-                if ($resellerVendor && $resellerVendor->email) {
-                    Mail::to($resellerVendor->email)->send(new OrderPlacedMail($order, $resellerVendor, 'reseller', $resellerEarning));
-                }
+                $postCommitEmails[] = [
+                    'vendor_id' => (int) $resellerProduct->reseller_vendor_id,
+                    'role' => 'reseller',
+                    'earning' => (float) $resellerEarning,
+                ];
             } else {
                 // **REGULAR ORDER - Standard 2% commission**
                 $commission = round($amountPaid * 0.02, 2);
@@ -339,6 +343,12 @@ class PurchaseController extends Controller
                     'payment_status' => strtolower($status),
                 ]);
 
+                $postCommitEmails[] = [
+                    'vendor_id' => (int) $product->vendor_id,
+                    'role' => 'direct',
+                    'earning' => (float) $vendorEarnings,
+                ];
+
                 Log::info('Regular order created', [
                     'order_id' => $order->id,
                     'commission' => $commission,
@@ -362,15 +372,33 @@ class PurchaseController extends Controller
                 // Send notification to ADMIN
                 AdminNotification::notifyNewOrder($order);
 
-                // Send EMAIL to vendor
-                $vendor = Vendor::find($product->vendor_id);
-                if ($vendor && $vendor->email) {
-                    Mail::to($vendor->email)->send(new OrderPlacedMail($order, $vendor, 'direct', $vendorEarnings));
-                }
+                // Email is sent after commit (outside the DB transaction).
             }
 
             return $order;
         });
+
+        // External side-effects must not run inside DB transactions.
+        // Keep synchronous delivery here to preserve legacy callback behavior.
+        foreach ($postCommitEmails as $email) {
+            try {
+                $vendor = Vendor::find((int) $email['vendor_id']);
+                if ($vendor && $vendor->email) {
+                    Mail::to($vendor->email)->send(new OrderPlacedMail(
+                        $order,
+                        $vendor,
+                        (string) $email['role'],
+                        (float) $email['earning']
+                    ));
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Failed to send legacy callback order email', [
+                    'order_id' => $order?->id,
+                    'vendor_id' => $email['vendor_id'] ?? null,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
 
         // Send SMS to mobile money number after successful order
         if ($order && $order->status !== 'Failed') {

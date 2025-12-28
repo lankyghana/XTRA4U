@@ -34,17 +34,20 @@ class VendorDashboardController extends Controller
 	{
 		$vendor = $this->resolveVendor();
 		$vendorId = $vendor->id;
-		$transactions = $this->transactionService->getVendorTransactions($vendorId);
-		
+
+		// Dashboard must not load unbounded datasets.
+		// Keep a bounded recent list for any UI components that may display transactions.
+		$transactions = $this->transactionService->getVendorTransactionsForDashboard($vendorId, 50);
+
 		// Only count completed transactions for sales/earnings (all time for withdrawable balance)
-		$completedTransactions = $transactions->whereIn('payment_status', ['completed', 'successful']);
-		$transactionAllTimeEarnings = (float) $completedTransactions->sum('vendor_earning');
+		$transactionAllTimeStats = $this->transactionService->getVendorTransactionStatsByFilter($vendorId, 'all_time');
+		$transactionAllTimeEarnings = (float) $transactionAllTimeStats['earnings'];
 		$afaAllTimeStats = $this->getAfaFilteredStats($vendorId, 'all_time');
 		$allTimeEarnings = $transactionAllTimeEarnings + $afaAllTimeStats['earnings'];
 		
 		// Default to "today" filter for display
 		$filter = request('filter', 'today');
-		$filteredStats = $this->getFilteredStats($completedTransactions, $filter);
+		$filteredStats = $this->transactionService->getVendorTransactionStatsByFilter($vendorId, $filter);
 		$afaFilteredStats = $this->getAfaFilteredStats($vendorId, $filter);
 		$totalSales = $filteredStats['sales'] + $afaFilteredStats['sales'];
 		$totalEarnings = $filteredStats['earnings'] + $afaFilteredStats['earnings'];
@@ -66,7 +69,9 @@ class VendorDashboardController extends Controller
 			->whereHas('transactions', function ($q) {
 				$q->whereIn('payment_status', ['successful', 'completed']);
 			})
+			->with(['service'])
 			->latest()
+			->limit(50)
 			->get();
 		$products = Product::where('vendor_id', $vendorId)->orderBy('name')->get();
 		$storeLink = route('storefront.vendor', ['vendor' => $vendor]);
@@ -95,11 +100,9 @@ class VendorDashboardController extends Controller
 	{
 		$vendor = $this->resolveVendor();
 		$vendorId = $vendor->id;
-		$transactions = $this->transactionService->getVendorTransactions($vendorId);
-		$completedTransactions = $transactions->whereIn('payment_status', ['completed', 'successful']);
 		
 		$filter = request('filter', 'today');
-		$stats = $this->getFilteredStats($completedTransactions, $filter);
+		$stats = $this->transactionService->getVendorTransactionStatsByFilter($vendorId, $filter);
 		$afaStats = $this->getAfaFilteredStats($vendorId, $filter);
 		
 		return response()->json([
@@ -112,10 +115,15 @@ class VendorDashboardController extends Controller
 	/**
 	 * Get stats filtered by date range
 	 */
+	/**
+	 * @deprecated Dashboard stats are computed via SQL in TransactionService.
+	 *             This method is kept only to preserve backward compatibility
+	 *             if referenced elsewhere.
+	 */
 	private function getFilteredStats($transactions, string $filter): array
 	{
 		$now = now();
-		
+
 		$filtered = match($filter) {
 			'today' => $transactions->filter(fn($t) => $t->created_at->isToday()),
 			'yesterday' => $transactions->filter(fn($t) => $t->created_at->isYesterday()),
@@ -124,7 +132,7 @@ class VendorDashboardController extends Controller
 			'all_time' => $transactions,
 			default => $transactions->filter(fn($t) => $t->created_at->isToday()),
 		};
-		
+
 		return [
 			'sales' => $filtered->sum('amount'),
 			'earnings' => $filtered->sum('vendor_earning'),
@@ -302,40 +310,40 @@ class VendorDashboardController extends Controller
 		$vendor = $this->resolveVendor();
 		$vendorId = $vendor->id;
 
-		// Get all orders where this vendor is involved (as primary vendor OR as product owner in affiliate orders)
-		$allVendorOrders = Order::query()
+		// Base query: orders where this vendor is involved (seller OR owner in affiliate orders)
+		$allVendorOrdersQuery = Order::query()
 			->where(function ($q) use ($vendorId) {
 				$q->where('vendor_id', $vendorId)
 					->orWhere('owner_vendor_id', $vendorId);
 			})
 			->whereIn('payment_status', ['paid', 'completed'])
 			->whereIn('status', ['Processing', 'Completed'])
-			->whereHas('transactions', fn ($q) => $q->whereIn('payment_status', ['successful', 'completed']))
-			->get();
+			->whereHas('transactions', fn ($q) => $q->whereIn('payment_status', ['successful', 'completed']));
 
 		// Total orders for this vendor
-		$totalOrders = $allVendorOrders->count();
-		$ordersThisMonth = $allVendorOrders->filter(function ($order) {
-			return $order->created_at->month === now()->month && $order->created_at->year === now()->year;
-		})->count();
-
-		// Use Transactions for accurate earnings (this correctly tracks both owner and reseller earnings)
-		$transactions = Transaction::where('vendor_id', $vendorId)->get();
-		$completedTransactions = $transactions->filter(function ($t) {
-			return in_array($t->payment_status, ['completed', 'successful'], true);
-		});
+		$totalOrders = (clone $allVendorOrdersQuery)->count();
+		$ordersThisMonth = (clone $allVendorOrdersQuery)
+			->whereBetween('created_at', [now()->startOfMonth(), now()->endOfMonth()])
+			->count();
 
 		// Average earning per transaction (more accurate than order amount for vendors with mixed roles)
-		$averageOrderValue = $completedTransactions->avg('vendor_earning') ?? 0;
+		$averageOrderValue = (float) Transaction::where('vendor_id', $vendorId)
+			->whereIn('payment_status', ['completed', 'successful'])
+			->avg('vendor_earning');
 
 		// Completion rate based on orders this vendor is responsible for
 		// For regular orders: vendor_id = this vendor
 		// For affiliate orders where vendor is owner: owner_vendor_id = this vendor
-		$ownOrders = Order::where('vendor_id', $vendorId)->where('is_reseller_order', false)->get();
-		$affiliateOrdersAsOwner = Order::where('owner_vendor_id', $vendorId)->where('is_reseller_order', true)->get();
-		$responsibleOrders = $ownOrders->concat($affiliateOrdersAsOwner);
-		$totalResponsibleOrders = $responsibleOrders->count();
-		$completedResponsibleOrders = $responsibleOrders->where('status', 'Completed')->count();
+		$responsibleOrdersQuery = Order::query()->where(function ($q) use ($vendorId) {
+			$q->where(function ($q2) use ($vendorId) {
+				$q2->where('vendor_id', $vendorId)->where('is_reseller_order', false);
+			})->orWhere(function ($q2) use ($vendorId) {
+				$q2->where('owner_vendor_id', $vendorId)->where('is_reseller_order', true);
+			});
+		});
+
+		$totalResponsibleOrders = (clone $responsibleOrdersQuery)->count();
+		$completedResponsibleOrders = (clone $responsibleOrdersQuery)->where('status', 'Completed')->count();
 		$completionRate = $totalResponsibleOrders > 0 ? ($completedResponsibleOrders / $totalResponsibleOrders) * 100 : 0;
 
 		// Sales trend (last 7 days) - use transactions for accurate vendor earnings
@@ -379,28 +387,35 @@ class VendorDashboardController extends Controller
 			->selectRaw('service_purchased as name, COUNT(*) as orders_count, SUM(reseller_earning) as total_sales')
 			->groupBy('service_purchased');
 
-		$topProducts = collect($ownProductSales->get())
-			->concat($affiliateProductSales->get())
-			->concat($resellerProductSales->get())
-			->groupBy('name')
-			->map(function ($items, $name) {
-				return (object) [
-					'name' => $name,
-					'orders_count' => $items->sum('orders_count'),
-					'total_sales' => $items->sum('total_sales'),
-				];
-			})
-			->sortByDesc('orders_count')
-			->take(5)
-			->values();
+		$union = $ownProductSales
+			->unionAll($affiliateProductSales)
+			->unionAll($resellerProductSales);
 
-		// Status breakdown for orders this vendor is responsible for
+		$topProducts = \Illuminate\Support\Facades\DB::query()
+			->fromSub($union, 'product_sales')
+			->selectRaw('name, SUM(orders_count) as orders_count, SUM(total_sales) as total_sales')
+			->groupBy('name')
+			->orderByDesc('orders_count')
+			->limit(5)
+			->get()
+			->map(fn ($row) => (object) [
+				'name' => $row->name,
+				'orders_count' => (int) $row->orders_count,
+				'total_sales' => (float) $row->total_sales,
+			]);
+
+		// Status breakdown for orders this vendor is responsible for (SQL-side)
+		$rawStatusCounts = (clone $responsibleOrdersQuery)
+			->selectRaw('status, COUNT(*) as cnt')
+			->groupBy('status')
+			->pluck('cnt', 'status');
+
 		$statusBreakdown = [
-			'pending' => $responsibleOrders->where('status', 'Pending')->count(),
-			'processing' => $responsibleOrders->where('status', 'Processing')->count(),
-			'completed' => $responsibleOrders->where('status', 'Completed')->count(),
-			'failed' => $responsibleOrders->where('status', 'Failed')->count(),
-			'cancelled' => $responsibleOrders->where('status', 'Cancelled')->count(),
+			'pending' => (int) ($rawStatusCounts['Pending'] ?? 0),
+			'processing' => (int) ($rawStatusCounts['Processing'] ?? 0),
+			'completed' => (int) ($rawStatusCounts['Completed'] ?? 0),
+			'failed' => (int) ($rawStatusCounts['Failed'] ?? 0),
+			'cancelled' => (int) ($rawStatusCounts['Cancelled'] ?? 0),
 		];
 
 		// Revenue summaries - use transactions for accurate vendor-specific earnings
@@ -408,17 +423,15 @@ class VendorDashboardController extends Controller
 			->whereDate('created_at', now())
 			->where('payment_status', 'completed')
 			->sum('vendor_earning');
-		$ordersToday = $allVendorOrders->filter(function ($order) {
-			return $order->created_at->isToday();
-		})->count();
+		$ordersToday = (clone $allVendorOrdersQuery)->whereDate('created_at', now())->count();
 
 		$revenueThisWeek = Transaction::where('vendor_id', $vendorId)
 			->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()])
 			->where('payment_status', 'completed')
 			->sum('vendor_earning');
-		$ordersThisWeek = $allVendorOrders->filter(function ($order) {
-			return $order->created_at->between(now()->startOfWeek(), now()->endOfWeek());
-		})->count();
+		$ordersThisWeek = (clone $allVendorOrdersQuery)
+			->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()])
+			->count();
 
 		$revenueThisMonth = Transaction::where('vendor_id', $vendorId)
 			->whereMonth('created_at', now()->month)
@@ -449,15 +462,13 @@ class VendorDashboardController extends Controller
 		
 		// Check authorization:
 		// - Regular orders: selling vendor (vendor_id) fulfills
-		// - Reseller orders: product owner/vendor (owner_vendor_id) fulfills; reseller is read-only
+		// - Reseller orders: selling reseller (vendor_id / reseller_vendor_id) fulfills; owner is read-only
 		$isResellerOrder = (bool) $order->is_reseller_order;
-		$canUpdateStatus = $isResellerOrder
-			? ((int) $order->owner_vendor_id === (int) $vendor->id)
-			: ((int) $order->vendor_id === (int) $vendor->id);
+		$canUpdateStatus = ((int) $order->vendor_id === (int) $vendor->id);
 
 		if (! $canUpdateStatus) {
 			$message = $isResellerOrder
-				? 'You can\'t update this affiliate order. Only the product owner can change the status.'
+				? 'You can\'t update this affiliate order. Only the selling reseller can change the status.'
 				: 'You can\'t update this order. Only the selling vendor can change the status.';
 
 			if ($request->expectsJson()) {
@@ -466,7 +477,7 @@ class VendorDashboardController extends Controller
 				], 403);
 			}
 
-			return back()->with('error', $message);
+			return redirect()->route('vendor.orders.index')->with('error', $message);
 		}
 
 		$request->validate([
