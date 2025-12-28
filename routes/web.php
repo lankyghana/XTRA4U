@@ -252,6 +252,11 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
     Route::resource('orders', AdminOrderController::class);
     Route::resource('transactions', AdminTransactionController::class);
     Route::get('withdrawals', [AdminWithdrawalController::class, 'index'])->name('withdrawals.index');
+
+    // High-volume recipient number audit log
+    Route::get('recipient-numbers', [\App\Http\Controllers\AdminRecipientNumberController::class, 'index'])->name('recipient-numbers.index');
+    Route::get('recipient-numbers/export', [\App\Http\Controllers\AdminRecipientNumberController::class, 'export'])->name('recipient-numbers.export');
+    Route::get('recipient-numbers/copy', [\App\Http\Controllers\AdminRecipientNumberController::class, 'copy'])->name('recipient-numbers.copy');
     // Payment Gateway Management - replaces legacy paystack-config
     
     // Payment Gateway Management

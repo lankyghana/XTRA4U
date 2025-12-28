@@ -10,7 +10,7 @@
 [![PHP](https://img.shields.io/badge/PHP-8.2+-777BB4?style=flat&logo=php)](https://php.net)
 [![License](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
 
-[Features](#-key-features) • [Architecture](#-platform-architecture) • [Installation](#-installation--setup) • [Documentation](#-documentation)
+[Features](#-key-features) • [Architecture](#-platform-architecture) • [Scalability](#-scalability--performance) • [Installation](#-installation--setup) • [Documentation](#-documentation)
 
 </div>
 
@@ -25,6 +25,7 @@
 - [User Roles](#-user-roles)
 - [Order & Transaction Flow](#-order--transaction-flow)
 - [Technology Stack](#-technology-stack)
+- [Scalability & Performance](#-scalability--performance)
 - [Installation & Setup](#-installation--setup)
 - [Environment Configuration](#-environment-configuration)
 - [Payment & Gateway Systems](#-payment--gateway-systems)
@@ -346,6 +347,47 @@
 - **dompdf/laravel-dompdf** - PDF generation
 - **Axios** - HTTP client
 - **@alpinejs/collapse** - UI animations
+
+---
+
+## 🚀 Scalability & Performance
+
+XTRA4U is designed to scale from small deployments to **tens of thousands of users/vendors** with standard Laravel scaling practices (horizontal web scaling + dedicated queue workers + caching). The core architecture is a good fit for scale because it keeps the request path mostly stateless and pushes slow work into background jobs.
+
+### What’s Already Optimized
+
+- **Dashboard/query scaling**: vendor dashboard + analytics paths use SQL-side aggregates and bounded lists (avoids unbounded `->get()` memory spikes).
+- **Idempotency & concurrency hardening**: order completion and AFA completion use row-level locking (`lockForUpdate`) + in-transaction re-checks to prevent double-processing under concurrent callbacks/webhooks.
+- **External I/O moved out of transactions**: mail/SMS are triggered post-commit so DB locks aren’t held while waiting on external providers.
+- **Index coverage for hot queries**: additive composite indexes are provided via the migration `database/migrations/2025_12_27_120000_add_scaling_indexes_to_core_tables.php`.
+- **High-volume audit logging**: recipient numbers can be logged asynchronously to a dedicated table with streamed admin exports (see “Recipient Numbers” audit log feature).
+
+### Production Scaling Recommendations
+
+- **Queue workers**: run separate workers for payouts/notifications (`php artisan queue:work`) under Supervisor/Systemd; restart workers on deploy (`php artisan queue:restart`).
+- **Cache/session/queue backends**: for higher traffic, move from database-backed drivers to Redis (or managed equivalents) to reduce DB contention.
+- **Database**: use MySQL/Postgres in production (SQLite is for local/dev), ensure slow query logging is enabled, and monitor index usage.
+- **Web tier**: scale app servers horizontally behind a load balancer; keep shared state out of local disk.
+- **Assets**: serve `public/build` via a CDN or object storage; ensure deploys ship matching built assets.
+
+### Recipient Numbers Audit Log (High-Volume)
+
+To support **tens of thousands of orders/day** and **millions of recipient numbers over time**, the platform includes an admin-only recipient numbers logging feature designed as an append-only audit log:
+
+- Table: `recipient_number_logs` (migration: `database/migrations/2025_12_28_012000_create_recipient_number_logs_table.php`)
+- Capture: runs **after commit** via events + queued jobs (never inside checkout/payment transactions)
+- Admin: paginated listing + date/service/vendor filters + **streamed** TXT/CSV export (no full-table loads)
+
+**Feature flags / ops**
+
+- `RECIPIENT_NUMBER_LOGGING_ENABLED=true|false`
+- `RECIPIENT_NUMBER_LOGGING_QUEUE=audit`
+
+Note: logging is automatically skipped when `QUEUE_CONNECTION=sync` to prevent any synchronous overhead in checkout/payment flows.
+
+### Practical Capacity Notes
+
+- The main scaling ceilings are typically **database contention** (sessions/queues on DB), **long-running external calls** in request paths, and **missing indexes**. The current codebase is structured to address these and supports incremental upgrades without changing routes or response shapes.
 
 ---
 

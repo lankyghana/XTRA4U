@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Events\AfaRegistrationCompleted;
 use App\Models\AfaRegistration;
 use App\Models\Vendor;
 use App\Models\VendorNotification;
@@ -114,6 +115,11 @@ class AfaPaymentService
     {
         foreach ($postCommit as $action) {
             if (($action['type'] ?? null) === 'communications' && isset($action['registration_id'])) {
+                try {
+                    event(new AfaRegistrationCompleted((int) $action['registration_id']));
+                } catch (\Throwable $e) {
+                    // Never fail AFA completion due to audit logging.
+                }
                 $this->sendCommunicationsAfterCommit((int) $action['registration_id']);
             }
         }

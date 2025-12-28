@@ -70,6 +70,12 @@
             'matches' => ['admin.withdrawals.*'],
         ],
         [
+            'key' => 'recipient-numbers',
+            'label' => 'Recipient Numbers',
+            'href' => route('admin.recipient-numbers.index'),
+            'matches' => ['admin.recipient-numbers.*'],
+        ],
+        [
             'key' => 'reports',
             'label' => 'Reports',
             'href' => '#',
