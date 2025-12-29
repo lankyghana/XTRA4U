@@ -462,13 +462,15 @@ class VendorDashboardController extends Controller
 		
 		// Check authorization:
 		// - Regular orders: selling vendor (vendor_id) fulfills
-		// - Reseller orders: selling reseller (vendor_id / reseller_vendor_id) fulfills; owner is read-only
+		// - Reseller orders: product owner (owner_vendor_id) fulfills; reseller is read-only
 		$isResellerOrder = (bool) $order->is_reseller_order;
-		$canUpdateStatus = ((int) $order->vendor_id === (int) $vendor->id);
+		$canUpdateStatus = $isResellerOrder
+			? ((int) $order->owner_vendor_id === (int) $vendor->id)
+			: ((int) $order->vendor_id === (int) $vendor->id);
 
 		if (! $canUpdateStatus) {
 			$message = $isResellerOrder
-				? 'You can\'t update this affiliate order. Only the selling reseller can change the status.'
+				? 'You can\'t update this affiliate order. Only the product owner can change the status.'
 				: 'You can\'t update this order. Only the selling vendor can change the status.';
 
 			if ($request->expectsJson()) {

@@ -3,7 +3,7 @@
 @section('title', 'Affiliate Orders - XTRA4U')
 
 @section('content')
-<x-vendor-layout :vendor="$vendor" title="Affiliate Orders" subtitle="Affiliate sales you must fulfill" active="orders">
+<x-vendor-layout :vendor="$vendor" title="Affiliate Orders" subtitle="Affiliate sales you sold" active="orders">
     <div class="space-y-6">
         @if(session('success'))
             <div class="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg shadow-md">
@@ -55,7 +55,7 @@
                 <div class="flex items-center justify-between mb-6">
                     <div>
                         <h1 class="text-xl font-bold text-gray-900">Affiliate Orders</h1>
-                        <p class="text-sm text-gray-600">Orders you sold as an affiliate. Update status to fulfill orders.</p>
+                        <p class="text-sm text-gray-600">Orders you sold as an affiliate. Track status and earnings.</p>
                     </div>
                     <p class="text-sm text-gray-500">Showing <span class="font-semibold text-purple-600">{{ $orders->count() }}</span> of <span class="font-semibold text-purple-600">{{ $orders->total() }}</span> orders</p>
                 </div>

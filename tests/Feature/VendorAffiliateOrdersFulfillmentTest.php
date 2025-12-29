@@ -12,7 +12,7 @@ class VendorAffiliateOrdersFulfillmentTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_owner_sees_affiliate_order_in_orders_only_and_cannot_update_status(): void
+    public function test_owner_sees_affiliate_order_in_orders_only_and_can_update_status(): void
     {
         $owner = Vendor::factory()->create([
             'is_approved' => true,
@@ -78,15 +78,21 @@ class VendorAffiliateOrdersFulfillmentTest extends TestCase
         $affiliateResponse->assertStatus(200);
         $affiliateResponse->assertDontSeeText('#' . $order->id);
 
-        // Owner must not be able to update affiliate order status.
+        // Owner can update affiliate order status.
         $updateResponse = $this->patch(route('vendor.orders.update-status', $order), [
             'status' => 'Completed',
         ]);
-		$updateResponse->assertRedirect(route('vendor.orders.index'));
-		$updateResponse->assertSessionHas('error');
+		$updateResponse->assertRedirect();
+		$updateResponse->assertSessionHas('success');
+
+        $this->assertSame('Completed', $order->fresh()->status);
+
+        Transaction::where('order_id', $order->id)->get()->each(function ($t) {
+            $this->assertSame('completed', $t->payment_status);
+        });
     }
 
-    public function test_reseller_sees_affiliate_order_in_both_lists_and_can_update_status(): void
+    public function test_reseller_sees_affiliate_order_in_both_lists_but_cannot_update_status(): void
     {
         $owner = Vendor::factory()->create([
             'is_approved' => true,
@@ -142,12 +148,9 @@ class VendorAffiliateOrdersFulfillmentTest extends TestCase
         $updateResponse = $this->patch(route('vendor.orders.update-status', $order), [
             'status' => 'Completed',
         ]);
-        $updateResponse->assertStatus(302);
+		$updateResponse->assertRedirect(route('vendor.orders.index'));
+		$updateResponse->assertSessionHas('error');
 
-        $this->assertSame('Completed', $order->fresh()->status);
-
-        Transaction::where('order_id', $order->id)->get()->each(function ($t) {
-            $this->assertSame('completed', $t->payment_status);
-        });
+		$this->assertSame('Processing', $order->fresh()->status);
     }
 }
