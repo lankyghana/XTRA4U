@@ -20,35 +20,23 @@
                        class="border-brand-deep-blue text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium hover:border-brand-green transition-colors">
                         Home
                     </a>
-                    <a href="{{ route('checkout.show') }}" 
-                       class="border-transparent text-gray-500 hover:border-brand-bright-blue hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors">
-                        Services
-                    </a>
-                    <a href="{{ route('storefront.index') }}#vendors" 
-                       class="border-transparent text-gray-500 hover:border-brand-bright-blue hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors">
-                        Vendors
-                    </a>
                     <a href="{{ route('about') }}" 
                        class="border-transparent text-gray-500 hover:border-brand-bright-blue hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors">
                         About
+                    </a>
+                    <a href="{{ route('privacy') }}" 
+                       class="border-transparent text-gray-500 hover:border-brand-bright-blue hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors">
+                        Privacy
+                    </a>
+                    <a href="{{ route('terms') }}" 
+                       class="border-transparent text-gray-500 hover:border-brand-bright-blue hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors">
+                        Terms
                     </a>
                 </div>
             </div>
             
             <!-- Right Side Actions -->
             <div class="flex items-center space-x-4">
-                <!-- Vendor Login Button -->
-                <a href="{{ route('vendor.login.form') }}" 
-                   class="hidden md:inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-brand-deep-blue bg-blue-50 hover:bg-blue-100 transition-colors">
-                    Vendor Portal
-                </a>
-                
-                <!-- Become Vendor Button -->
-                <a href="{{ route('vendor.request.form') }}" 
-                   class="hidden md:inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-xtra-green hover:bg-brand-bright-green transition-all duration-200 shadow-sm">
-                    Become Vendor
-                </a>
-                
                 <!-- Mobile menu button -->
                 <button @click="mobileMenuOpen = !mobileMenuOpen" 
                         class="md:hidden inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-deep-blue">
@@ -113,37 +101,21 @@
                class="bg-blue-50 border-brand-deep-blue text-brand-deep-blue block pl-3 pr-4 py-2 border-l-4 text-base font-medium">
                 Home
             </a>
-            <a href="{{ route('checkout.show') }}" 
-               @click="mobileMenuOpen = false"
-               class="border-transparent text-gray-600 hover:bg-gray-50 hover:border-brand-bright-blue hover:text-gray-800 block pl-3 pr-4 py-2 border-l-4 text-base font-medium transition-colors">
-                Services
-            </a>
-            <a href="{{ route('storefront.index') }}#vendors" 
-               @click="mobileMenuOpen = false"
-               class="border-transparent text-gray-600 hover:bg-gray-50 hover:border-brand-bright-blue hover:text-gray-800 block pl-3 pr-4 py-2 border-l-4 text-base font-medium transition-colors">
-                Vendors
-            </a>
             <a href="{{ route('about') }}" 
                @click="mobileMenuOpen = false"
                class="border-transparent text-gray-600 hover:bg-gray-50 hover:border-brand-bright-blue hover:text-gray-800 block pl-3 pr-4 py-2 border-l-4 text-base font-medium transition-colors">
                 About
             </a>
-        </div>
-        
-        <!-- Action Buttons -->
-        <div class="pt-4 pb-3 border-t border-gray-200">
-            <div class="px-4 space-y-3">
-                <a href="{{ route('vendor.login.form') }}" 
-                   @click="mobileMenuOpen = false"
-                   class="block w-full px-4 py-2 text-center text-base font-medium text-brand-deep-blue bg-blue-50 hover:bg-blue-100 rounded-md transition-colors">
-                    Vendor Portal
-                </a>
-                <a href="{{ route('vendor.request.form') }}" 
-                   @click="mobileMenuOpen = false"
-                   class="block w-full px-4 py-2 text-center text-base font-medium text-white bg-brand-xtra-green hover:bg-brand-bright-green rounded-md transition-all duration-200">
-                    Become Vendor
-                </a>
-            </div>
+            <a href="{{ route('privacy') }}" 
+               @click="mobileMenuOpen = false"
+               class="border-transparent text-gray-600 hover:bg-gray-50 hover:border-brand-bright-blue hover:text-gray-800 block pl-3 pr-4 py-2 border-l-4 text-base font-medium transition-colors">
+                Privacy
+            </a>
+            <a href="{{ route('terms') }}" 
+               @click="mobileMenuOpen = false"
+               class="border-transparent text-gray-600 hover:bg-gray-50 hover:border-brand-bright-blue hover:text-gray-800 block pl-3 pr-4 py-2 border-l-4 text-base font-medium transition-colors">
+                Terms
+            </a>
         </div>
     </div>
 </div>
