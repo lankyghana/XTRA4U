@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Transaction;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class AdminTransactionController extends Controller
@@ -28,5 +29,18 @@ class AdminTransactionController extends Controller
 		$transaction->load(['order', 'vendor']);
 
 		return view('admin.transaction_show', compact('transaction'));
+	}
+
+	public function update(Request $request, Transaction $transaction)
+	{
+		$data = $request->validate([
+			'payment_status' => ['required', 'in:pending,successful,completed,failed'],
+		]);
+
+		$transaction->update([
+			'payment_status' => $data['payment_status'],
+		]);
+
+		return back()->with('success', 'Transaction status updated.');
 	}
 }

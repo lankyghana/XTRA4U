@@ -33,9 +33,18 @@
                     <td class="px-6 py-4 text-sm font-semibold text-gray-900">GHS {{ number_format($transaction->amount, 2) }}</td>
                     <td class="px-6 py-4 text-sm text-gray-900">GHS {{ number_format($transaction->commission_amount, 2) }}</td>
                     <td class="px-6 py-4 text-sm">
-                        <x-badge :variant="$transaction->payment_status === 'completed' ? 'completed' : 'pending'">
-                            {{ ucfirst($transaction->payment_status) }}
-                        </x-badge>
+                        <form method="POST" action="{{ route('admin.transactions.update', $transaction) }}" class="inline-block">
+                            @csrf
+                            @method('PATCH')
+                            <select name="payment_status"
+                                    onchange="this.form.submit()"
+                                    class="text-sm border-gray-300 rounded-lg focus:ring-brand-bright-blue focus:border-brand-bright-blue px-3 py-2 font-medium shadow-sm">
+                                <option value="pending" {{ $transaction->payment_status === 'pending' ? 'selected' : '' }}>Pending</option>
+                                <option value="successful" {{ $transaction->payment_status === 'successful' ? 'selected' : '' }}>Successful</option>
+                                <option value="completed" {{ $transaction->payment_status === 'completed' ? 'selected' : '' }}>Completed</option>
+                                <option value="failed" {{ $transaction->payment_status === 'failed' ? 'selected' : '' }}>Failed</option>
+                            </select>
+                        </form>
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-500">
                         {{ $transaction->created_at?->format('M d, Y H:i') }}
