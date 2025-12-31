@@ -16,6 +16,7 @@ class Transaction extends Model
         'commission_amount',
         'vendor_earning',
         'payment_status',
+        'gateway_transaction_id',
         'timestamp',
         'transactionable_type',
         'transactionable_id',

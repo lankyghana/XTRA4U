@@ -62,6 +62,7 @@ class AdminTransactionsSearchTest extends TestCase
             'commission_amount' => 0,
             'vendor_earning' => 0,
             'payment_status' => 'pending',
+            'gateway_transaction_id' => 'GATEWAY-TX-111',
         ]);
 
         Transaction::create([
@@ -72,6 +73,7 @@ class AdminTransactionsSearchTest extends TestCase
             'commission_amount' => 0,
             'vendor_earning' => 0,
             'payment_status' => 'pending',
+            'gateway_transaction_id' => 'GATEWAY-TX-222',
         ]);
 
         $response = $this->get(route('admin.transactions.index', ['q' => 'REF-AAA']));
@@ -79,5 +81,42 @@ class AdminTransactionsSearchTest extends TestCase
         $response->assertOk();
         $response->assertSee('XTRA4U-REF-AAA');
         $response->assertDontSee('XTRA4U-REF-BBB');
+    }
+
+    public function test_admin_transactions_can_be_searched_by_gateway_transaction_id(): void
+    {
+        $this->actingAdmin();
+
+        $vendor = Vendor::factory()->create([
+            'name' => 'Acme Vendor',
+        ]);
+
+        $order = Order::create([
+            'recipient_phone_number' => '0240000000',
+            'mobile_money_number' => '0240000000',
+            'service_purchased' => 'TEST-A',
+            'amount_paid' => 10.00,
+            'vendor_id' => $vendor->id,
+            'status' => 'Pending',
+            'payment_status' => 'unpaid',
+            'payment_reference' => 'XTRA4U-REF-CCC',
+        ]);
+
+        Transaction::create([
+            'order_id' => $order->id,
+            'vendor_id' => $vendor->id,
+            'recipient_phone' => $order->recipient_phone_number,
+            'amount' => 10.00,
+            'commission_amount' => 0,
+            'vendor_earning' => 0,
+            'payment_status' => 'pending',
+            'gateway_transaction_id' => 'HUBTEL-TRX-99999',
+        ]);
+
+        $response = $this->get(route('admin.transactions.index', ['q' => 'TRX-99999']));
+
+        $response->assertOk();
+        $response->assertSee('HUBTEL-TRX-99999');
+        $response->assertSee('XTRA4U-REF-CCC');
     }
 }

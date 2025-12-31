@@ -42,7 +42,7 @@
             </div>
         </form>
 
-        <x-table :headers="['Reference', 'Gateway Ref', 'Vendor', 'Amount', 'Commission', 'Status', 'Payment', 'Created']">
+        <x-table :headers="['Reference', 'Gateway Ref', 'Gateway Tx ID', 'Vendor', 'Amount', 'Commission', 'Status', 'Payment', 'Created']">
             @forelse ($transactions as $transaction)
                 <tr class="hover:bg-gray-50">
                     <td class="px-6 py-4 text-sm text-gray-900">
@@ -51,6 +51,9 @@
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-900">
                         <span class="text-xs text-gray-500">{{ $transaction->order?->payment_reference ?? '—' }}</span>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-900">
+                        <span class="text-xs text-gray-500">{{ $transaction->gateway_transaction_id ?? '—' }}</span>
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-900">
                         {{ $transaction->vendor?->name ?? 'Unknown Vendor' }}
@@ -82,7 +85,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="8" class="px-6 py-4 text-center text-sm text-gray-500">No transactions recorded yet.</td>
+                    <td colspan="9" class="px-6 py-4 text-center text-sm text-gray-500">No transactions recorded yet.</td>
                 </tr>
             @endforelse
         </x-table>

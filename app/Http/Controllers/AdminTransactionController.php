@@ -21,6 +21,7 @@ class AdminTransactionController extends Controller
 			$transactionsQuery->where(function ($q) use ($search) {
 				$q->where('id', $search)
 					->orWhere('order_id', $search)
+					->orWhere('gateway_transaction_id', 'like', '%' . $search . '%')
 					->orWhere('recipient_phone', 'like', '%' . $search . '%')
 					->orWhereHas('order', function ($orderQuery) use ($search) {
 						$orderQuery->where('payment_reference', 'like', '%' . $search . '%');

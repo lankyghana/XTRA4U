@@ -37,6 +37,15 @@ class PaymentService
         // All collection flows go through GatewayManager.
         $result = $this->gatewayManager->collect($order, $email, $amount);
 
+        // Persist gateway transaction/tax id whenever a gateway returns one at initiation time.
+        // Not all gateways provide this at init; when missing, we'll try again at verification.
+        $gatewayTransactionId = $this->extractGatewayTransactionId($result);
+        if (is_string($gatewayTransactionId) && $gatewayTransactionId !== '') {
+            Transaction::where('order_id', $order->id)
+                ->whereNull('gateway_transaction_id')
+                ->update(['gateway_transaction_id' => $gatewayTransactionId]);
+        }
+
         // Persist reference whenever we have one (even if init failed/timeout).
         // Gateways typically generate a reference client-side before making the HTTP call,
         // so this helps manual verification when the init response is lost.
@@ -421,12 +430,27 @@ class PaymentService
 
         // Prevent duplicate processing
         if (in_array($order->payment_status, ['paid', 'completed'], true)) {
+            $gatewayTransactionId = $this->extractGatewayTransactionId($result);
+            if (is_string($gatewayTransactionId) && $gatewayTransactionId !== '') {
+                Transaction::where('order_id', $order->id)
+                    ->whereNull('gateway_transaction_id')
+                    ->update(['gateway_transaction_id' => $gatewayTransactionId]);
+            }
+
             Log::info('Webhook: Order already completed', ['order_id' => $order->id]);
             return [
                 'success' => true,
                 'message' => 'Order already processed',
                 'order_id' => $order->id,
             ];
+        }
+
+        // Backfill gateway transaction/tax id on verification if it wasn't available at initiation.
+        $gatewayTransactionId = $this->extractGatewayTransactionId($result);
+        if (is_string($gatewayTransactionId) && $gatewayTransactionId !== '') {
+            Transaction::where('order_id', $order->id)
+                ->whereNull('gateway_transaction_id')
+                ->update(['gateway_transaction_id' => $gatewayTransactionId]);
         }
 
         $paymentStatus = strtolower($result['data']['status'] ?? '');
@@ -707,5 +731,29 @@ class PaymentService
     public function isReady(): bool
     {
         return $this->paymentGateway && $this->paymentGateway->isConfigured();
+    }
+
+    private function extractGatewayTransactionId(array $payload): ?string
+    {
+        $candidates = [
+            $payload['transaction_id'] ?? null,
+            $payload['transactionid'] ?? null,
+            data_get($payload, 'data.transaction_id'),
+            data_get($payload, 'data.transactionid'),
+            data_get($payload, 'data.id'),
+            data_get($payload, 'data.data.transaction_id'),
+            data_get($payload, 'data.data.transactionid'),
+        ];
+
+        foreach ($candidates as $value) {
+            if (is_scalar($value)) {
+                $text = trim((string) $value);
+                if ($text !== '') {
+                    return $text;
+                }
+            }
+        }
+
+        return null;
     }
 }
