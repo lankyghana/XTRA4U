@@ -56,6 +56,9 @@ Schedule::command('payments:cleanup --hours=24')->everySixHours();
 // Retry any withdrawals that are stuck in processing (safe + idempotent)
 Schedule::command('withdrawals:retry-stuck --minutes=10 --limit=200')->everyFiveMinutes();
 
+// Auto-cancel withdrawals that remain processing too long (refunds wallet once)
+Schedule::command('withdrawals:cancel-stale --minutes=5 --limit=200')->everyMinute();
+
 Artisan::command('xtra4u:mail-test {to : Recipient email address}', function () {
     $to = (string) $this->argument('to');
 
