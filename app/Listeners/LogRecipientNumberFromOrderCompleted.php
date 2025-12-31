@@ -10,13 +10,19 @@ class LogRecipientNumberFromOrderCompleted
 {
     public bool $afterCommit = true;
 
-    public function handle(OrderCompleted $event, RecipientNumberLoggingService $logging): void
+    public function __construct(private RecipientNumberLoggingService $logging)
     {
-        if (!$logging->enabled()) {
+    }
+
+    public function handle(OrderCompleted $event): void
+    {
+        $logging = $this->logging;
+
+        if (! $logging->enabled()) {
             return;
         }
 
-        if (!$logging->shouldEnqueue()) {
+        if (! $logging->shouldEnqueue()) {
             $logging->warnIfSyncQueue();
             return;
         }
