@@ -1,7 +1,12 @@
 <!-- Footer Component -->
 <footer class="bg-gray-900 text-white">
     <div class="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:py-16 lg:px-8">
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+        @php
+            // Remove footer link columns only on vendor storefront pages.
+            $showFooterLinks = ! request()->routeIs('storefront.vendor');
+        @endphp
+
+        <div class="grid grid-cols-1 md:grid-cols-2 {{ $showFooterLinks ? 'lg:grid-cols-4' : 'lg:grid-cols-2' }} gap-8">
             <!-- Company Info -->
             <div class="col-span-1 lg:col-span-2">
                 <div class="flex items-center mb-4">
@@ -37,29 +42,31 @@
                 </div>
             </div>
             
-            <!-- Quick Links -->
-            <div>
-                <h3 class="text-sm font-semibold text-gray-400 tracking-wider uppercase mb-4">Quick Links</h3>
-                <ul class="space-y-3">
-                    <li><a href="{{ route('storefront.index') }}" class="text-gray-300 hover:text-white transition-colors">Home</a></li>
-                    <li><a href="{{ route('storefront.index') }}#services" class="text-gray-300 hover:text-white transition-colors">Services</a></li>
-                    <li><a href="{{ route('storefront.index') }}#vendors" class="text-gray-300 hover:text-white transition-colors">Find Vendors</a></li>
-                    <li><a href="{{ route('about') }}" class="text-gray-300 hover:text-white transition-colors">About Us</a></li>
-                    <li><a href="{{ route('storefront.index') }}#contact" class="text-gray-300 hover:text-white transition-colors">Contact</a></li>
-                </ul>
-            </div>
-            
-            <!-- For Vendors -->
-            <div>
-                <h3 class="text-sm font-semibold text-gray-400 tracking-wider uppercase mb-4">For Vendors</h3>
-                <ul class="space-y-3">
-                    <li><a href="{{ route('vendor.request.form') }}" class="text-gray-300 hover:text-white transition-colors">Become a Vendor</a></li>
-                    <li><a href="{{ route('vendor.login.form') }}" class="text-gray-300 hover:text-white transition-colors">Vendor Login</a></li>
-                    <li><a href="#vendor-dashboard" class="text-gray-300 hover:text-white transition-colors">Dashboard</a></li>
-                    <li><a href="#pricing" class="text-gray-300 hover:text-white transition-colors">Pricing</a></li>
-                    <li><a href="#support" class="text-gray-300 hover:text-white transition-colors">Support</a></li>
-                </ul>
-            </div>
+            @if ($showFooterLinks)
+                <!-- Quick Links -->
+                <div>
+                    <h3 class="text-sm font-semibold text-gray-400 tracking-wider uppercase mb-4">Quick Links</h3>
+                    <ul class="space-y-3">
+                        <li><a href="{{ route('storefront.index') }}" class="text-gray-300 hover:text-white transition-colors">Home</a></li>
+                        <li><a href="{{ route('storefront.index') }}#services" class="text-gray-300 hover:text-white transition-colors">Services</a></li>
+                        <li><a href="{{ route('storefront.index') }}#vendors" class="text-gray-300 hover:text-white transition-colors">Find Vendors</a></li>
+                        <li><a href="{{ route('about') }}" class="text-gray-300 hover:text-white transition-colors">About Us</a></li>
+                        <li><a href="{{ route('storefront.index') }}#contact" class="text-gray-300 hover:text-white transition-colors">Contact</a></li>
+                    </ul>
+                </div>
+                
+                <!-- For Vendors -->
+                <div>
+                    <h3 class="text-sm font-semibold text-gray-400 tracking-wider uppercase mb-4">For Vendors</h3>
+                    <ul class="space-y-3">
+                        <li><a href="{{ route('vendor.request.form') }}" class="text-gray-300 hover:text-white transition-colors">Become a Vendor</a></li>
+                        <li><a href="{{ route('vendor.login.form') }}" class="text-gray-300 hover:text-white transition-colors">Vendor Login</a></li>
+                        <li><a href="#vendor-dashboard" class="text-gray-300 hover:text-white transition-colors">Dashboard</a></li>
+                        <li><a href="#pricing" class="text-gray-300 hover:text-white transition-colors">Pricing</a></li>
+                        <li><a href="#support" class="text-gray-300 hover:text-white transition-colors">Support</a></li>
+                    </ul>
+                </div>
+            @endif
         </div>
         
         <div class="mt-12 pt-8 border-t border-gray-800 flex flex-col md:flex-row justify-between items-center">
