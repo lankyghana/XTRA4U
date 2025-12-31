@@ -249,8 +249,12 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
         ->parameters(['network-services' => 'network_service']);
     Route::post('vendors/{vendor}/approve', [AdminVendorController::class, 'approve'])->name('vendors.approve');
     Route::post('vendors/{vendor}/reject', [AdminVendorController::class, 'reject'])->name('vendors.reject');
-    Route::resource('orders', AdminOrderController::class)->only(['index', 'update']);
-    Route::resource('transactions', AdminTransactionController::class)->only(['index', 'update']);
+        Route::resource('orders', AdminOrderController::class)->only(['index']);
+	Route::post('orders/{order}/confirm-payment', [AdminOrderController::class, 'confirmPayment'])
+		->name('orders.confirm-payment');
+        Route::resource('transactions', AdminTransactionController::class)->only(['index']);
+    Route::post('transactions/{transaction}/confirm-payment', [AdminTransactionController::class, 'confirmPayment'])
+        ->name('transactions.confirm-payment');
     Route::get('withdrawals', [AdminWithdrawalController::class, 'index'])->name('withdrawals.index');
 
     // High-volume recipient number audit log

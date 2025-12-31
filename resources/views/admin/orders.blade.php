@@ -16,19 +16,7 @@
                     <td class="px-6 py-4 text-sm text-gray-700">{{ $order->display_service_name }}</td>
                     <td class="px-6 py-4 text-sm font-semibold text-gray-900">₵{{ number_format($order->amount_paid, 2) }}</td>
                     <td class="px-6 py-4 text-sm text-gray-900">
-                        <form method="POST" action="{{ route('admin.orders.update', $order) }}" class="inline-block">
-                            @csrf
-                            @method('PATCH')
-                            <select name="status"
-                                    onchange="this.form.submit()"
-                                    class="text-sm border-gray-300 rounded-lg focus:ring-brand-bright-blue focus:border-brand-bright-blue px-3 py-2 font-medium shadow-sm">
-                                <option value="Pending" {{ $order->status === 'Pending' ? 'selected' : '' }}>Pending</option>
-                                <option value="Processing" {{ $order->status === 'Processing' ? 'selected' : '' }}>Processing</option>
-                                <option value="Completed" {{ $order->status === 'Completed' ? 'selected' : '' }}>Completed</option>
-                                <option value="Cancelled" {{ $order->status === 'Cancelled' ? 'selected' : '' }}>Cancelled</option>
-                                <option value="Failed" {{ $order->status === 'Failed' ? 'selected' : '' }}>Failed</option>
-                            </select>
-                        </form>
+                        {{ $order->status ?? 'N/A' }}
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-500">{{ $order->created_at?->format('Y-m-d') }}</td>
                 </tr>

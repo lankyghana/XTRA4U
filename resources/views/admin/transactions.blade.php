@@ -20,7 +20,7 @@
             </div>
         </div>
 
-        <x-table :headers="['Reference', 'Vendor', 'Amount', 'Commission', 'Status', 'Created']">
+        <x-table :headers="['Reference', 'Vendor', 'Amount', 'Commission', 'Status', 'Payment', 'Created']">
             @forelse ($transactions as $transaction)
                 <tr class="hover:bg-gray-50">
                     <td class="px-6 py-4 text-sm text-gray-900">
@@ -32,19 +32,24 @@
                     </td>
                     <td class="px-6 py-4 text-sm font-semibold text-gray-900">GHS {{ number_format($transaction->amount, 2) }}</td>
                     <td class="px-6 py-4 text-sm text-gray-900">GHS {{ number_format($transaction->commission_amount, 2) }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-900">
+                        {{ ucfirst($transaction->payment_status ?? 'n/a') }}
+                    </td>
                     <td class="px-6 py-4 text-sm">
-                        <form method="POST" action="{{ route('admin.transactions.update', $transaction) }}" class="inline-block">
-                            @csrf
-                            @method('PATCH')
-                            <select name="payment_status"
-                                    onchange="this.form.submit()"
-                                    class="text-sm border-gray-300 rounded-lg focus:ring-brand-bright-blue focus:border-brand-bright-blue px-3 py-2 font-medium shadow-sm">
-                                <option value="pending" {{ $transaction->payment_status === 'pending' ? 'selected' : '' }}>Pending</option>
-                                <option value="successful" {{ $transaction->payment_status === 'successful' ? 'selected' : '' }}>Successful</option>
-                                <option value="completed" {{ $transaction->payment_status === 'completed' ? 'selected' : '' }}>Completed</option>
-                                <option value="failed" {{ $transaction->payment_status === 'failed' ? 'selected' : '' }}>Failed</option>
-                            </select>
-                        </form>
+                        @php($order = $transaction->order)
+                        @if ($order && !in_array($order->payment_status, ['paid', 'completed'], true))
+                            <form method="POST" action="{{ route('admin.transactions.confirm-payment', $transaction) }}" class="inline-block">
+                                @csrf
+                                <button type="submit"
+                                        class="text-sm px-3 py-2 rounded-lg bg-brand-bright-blue text-white font-medium shadow-sm hover:bg-brand-deep-blue">
+                                    Confirm
+                                </button>
+                            </form>
+                        @elseif ($order)
+                            <span class="text-xs font-medium text-green-700">Paid</span>
+                        @else
+                            <span class="text-xs text-gray-500">N/A</span>
+                        @endif
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-500">
                         {{ $transaction->created_at?->format('M d, Y H:i') }}
@@ -52,7 +57,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="6" class="px-6 py-4 text-center text-sm text-gray-500">No transactions recorded yet.</td>
+                    <td colspan="7" class="px-6 py-4 text-center text-sm text-gray-500">No transactions recorded yet.</td>
                 </tr>
             @endforelse
         </x-table>

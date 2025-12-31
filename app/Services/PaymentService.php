@@ -581,7 +581,21 @@ class PaymentService
             ->first();
 
         if ($transaction) {
-            if (in_array($transaction->payment_status, ['completed', 'successful'], true)) {
+            $isFinal = in_array($transaction->payment_status, ['completed', 'successful'], true);
+
+            // If an admin prematurely marked a placeholder transaction as successful/completed,
+            // we still need to backfill financial fields (commission/earning). This keeps
+            // reporting consistent with wallet credits.
+            $existingCommission = (float) ($transaction->commission_amount ?? 0);
+            $existingEarning = (float) ($transaction->vendor_earning ?? 0);
+            $incomingCommission = (float) ($attributes['commission_amount'] ?? 0);
+            $incomingEarning = (float) ($attributes['vendor_earning'] ?? 0);
+
+            $isPlaceholderFinancials = $existingCommission === 0.0
+                && $existingEarning === 0.0
+                && ($incomingCommission > 0.0 || $incomingEarning > 0.0);
+
+            if ($isFinal && ! $isPlaceholderFinancials) {
                 return;
             }
             $transaction->update($attributes);
