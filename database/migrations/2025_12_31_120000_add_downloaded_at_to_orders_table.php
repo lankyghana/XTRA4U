@@ -12,12 +12,17 @@ return new class extends Migration
             if (! Schema::hasColumn('orders', 'downloaded_at')) {
                 $table->timestamp('downloaded_at')->nullable()->after('payment_completed_at');
             }
-
-            // Index-friendly scans for "available" vs "downloaded" fulfillment queues.
-            if (Schema::hasColumn('orders', 'downloaded_at')) {
-                $table->index(['downloaded_at'], 'orders_downloaded_at_idx');
-            }
         });
+
+        // Index-friendly scans for "available" vs "downloaded" fulfillment queues.
+        // Do not rely on hasColumn checks inside the same Schema::table callback.
+        try {
+            Schema::table('orders', function (Blueprint $table) {
+                $table->index(['downloaded_at'], 'orders_downloaded_at_idx');
+            });
+        } catch (\Throwable $e) {
+            // ignore (index may already exist)
+        }
     }
 
     public function down(): void

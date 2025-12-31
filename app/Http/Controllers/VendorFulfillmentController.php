@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class VendorFulfillmentController extends Controller
@@ -21,6 +22,8 @@ class VendorFulfillmentController extends Controller
     public function index(Request $request)
     {
         $vendor = $this->resolveVendor();
+
+        $this->ensureFulfillmentSchemaReady();
 
         $networks = $this->resolveNetworksForVendor($vendor);
 
@@ -55,6 +58,8 @@ class VendorFulfillmentController extends Controller
     public function download(Request $request, string $network): Response|RedirectResponse
     {
         $vendor = $this->resolveVendor();
+
+        $this->ensureFulfillmentSchemaReady();
 
         $network = $this->normalizeNetwork($network);
         $this->assertNetworkAllowed($vendor, $network);
@@ -105,6 +110,8 @@ class VendorFulfillmentController extends Controller
     public function complete(Request $request, string $network): RedirectResponse
     {
         $vendor = $this->resolveVendor();
+
+        $this->ensureFulfillmentSchemaReady();
 
         $network = $this->normalizeNetwork($network);
         $this->assertNetworkAllowed($vendor, $network);
@@ -176,6 +183,15 @@ class VendorFulfillmentController extends Controller
         abort_unless($vendor, 403, 'Vendor account required.');
 
         return $vendor;
+    }
+
+    private function ensureFulfillmentSchemaReady(): void
+    {
+        abort_unless(
+            Schema::hasColumn('orders', 'downloaded_at'),
+            503,
+            'Order Fulfillment is not enabled yet. Please run database migrations.'
+        );
     }
 
     private function resolveNetworksForVendor(Vendor $vendor): array
