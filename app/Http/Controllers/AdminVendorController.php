@@ -14,8 +14,19 @@ class AdminVendorController extends Controller
 	public function index(Request $request): View
 	{
 		$statusFilter = $request->query('status');
+		$search = trim((string) $request->query('q', ''));
 
 		$vendors = Vendor::query()
+			->with('affiliateVendor')
+			->withCount('affiliates')
+			->when($search !== '', function ($query) use ($search) {
+				$query->where(function ($q) use ($search) {
+					$q->where('name', 'like', '%' . $search . '%')
+						->orWhere('email', 'like', '%' . $search . '%')
+						->orWhere('phone_number', 'like', '%' . $search . '%')
+						->orWhere('vendor_code', 'like', '%' . $search . '%');
+				});
+			})
 			->when($statusFilter === 'approved', fn ($query) => $query->where('is_approved', true))
 			->when($statusFilter === 'pending', fn ($query) => $query->where('is_approved', false))
 			->latest()
@@ -28,7 +39,7 @@ class AdminVendorController extends Controller
 			'pending' => Vendor::where('is_approved', false)->count(),
 		];
 
-		return view('admin.vendors', compact('vendors', 'stats', 'statusFilter'));
+		return view('admin.vendors', compact('vendors', 'stats', 'statusFilter', 'search'));
 	}
 
 	public function update(Request $request, Vendor $vendor): RedirectResponse
@@ -76,5 +87,16 @@ class AdminVendorController extends Controller
 		}
 
 		return back()->with('status', 'Vendor marked as pending/suspended.');
+	}
+
+	public function disableAffiliate(Vendor $vendor): RedirectResponse
+	{
+		if (is_null($vendor->affiliate_vendor_id)) {
+			return back()->with('status', 'This vendor is not currently affiliated to anyone.');
+		}
+
+		$vendor->forceFill(['affiliate_vendor_id' => null])->save();
+
+		return back()->with('status', 'Affiliate relationship disabled successfully.');
 	}
 }

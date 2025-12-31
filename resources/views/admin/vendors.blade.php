@@ -31,6 +31,31 @@
             </div>
         @endif
 
+        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div class="px-5 py-4 border-b border-gray-100 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <h2 class="text-sm font-semibold text-gray-900">Search</h2>
+                    <p class="text-xs text-gray-500">Search by name, email, phone, or vendor code.</p>
+                </div>
+                <form method="GET" action="{{ route('admin.vendors.index') }}" class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                    @if ($statusFilter)
+                        <input type="hidden" name="status" value="{{ $statusFilter }}" />
+                    @endif
+                    <input
+                        type="text"
+                        name="q"
+                        value="{{ $search ?? '' }}"
+                        placeholder="e.g. Acme, 024..., VND123AB"
+                        class="w-full sm:w-80 border border-gray-300 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                    />
+                    <div class="flex gap-2">
+                        <x-button type="submit" variant="primary" class="justify-center">Search</x-button>
+                        <x-button href="{{ route('admin.vendors.index', array_filter(['status' => $statusFilter])) }}" variant="outline" class="justify-center">Reset</x-button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <div class="flex flex-wrap gap-2">
             <a href="{{ route('admin.vendors.index') }}"
                class="px-3 py-2 rounded-lg text-sm font-medium {{ $statusFilter ? 'text-gray-600 border border-gray-200' : 'bg-brand-deep-blue text-white' }}">
@@ -46,7 +71,7 @@
             </a>
         </div>
 
-        <x-table :headers="['Vendor', 'Contact', 'Status', 'Actions']">
+        <x-table :headers="['Vendor', 'Contact', 'Affiliate', 'Status', 'Actions']">
             @forelse ($vendors as $vendor)
                 <tr class="hover:bg-gray-50">
                     <td class="px-6 py-4 whitespace-nowrap">
@@ -58,6 +83,17 @@
                         <div class="text-sm text-gray-500">{{ $vendor->phone_number }}</div>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm text-gray-900">
+                            <span class="text-gray-500">Affiliate of:</span>
+                            @if ($vendor->affiliateVendor)
+                                <span class="font-medium">{{ $vendor->affiliateVendor->name }}</span>
+                            @else
+                                <span class="text-gray-500">-</span>
+                            @endif
+                        </div>
+                        <div class="text-sm text-gray-500">Affiliates: {{ (int) ($vendor->affiliates_count ?? 0) }}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
                         @if ($vendor->is_approved)
                             <x-badge variant="completed">Approved</x-badge>
                         @else
@@ -66,6 +102,14 @@
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div class="flex flex-wrap justify-end gap-2">
+                            @if ($vendor->affiliate_vendor_id)
+                                <form method="POST" action="{{ route('admin.vendors.disable-affiliate', $vendor) }}" onsubmit="return confirm('Disable this affiliate relationship?');">
+                                    @csrf
+                                    <button type="submit" class="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-800 hover:bg-gray-200 text-xs font-semibold">
+                                        Disable Affiliate
+                                    </button>
+                                </form>
+                            @endif
                             @if (! $vendor->is_approved)
                                 <form method="POST" action="{{ route('admin.vendors.approve', $vendor) }}">
                                     @csrf
@@ -93,7 +137,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">No vendors found for this filter.</td>
+                    <td colspan="5" class="px-6 py-4 text-center text-sm text-gray-500">No vendors found for this filter.</td>
                 </tr>
             @endforelse
         </x-table>

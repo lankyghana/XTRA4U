@@ -34,6 +34,16 @@ class Vendor extends Authenticatable
         return $this->hasMany(Product::class);
     }
 
+    public function affiliateVendor()
+    {
+        return $this->belongsTo(Vendor::class, 'affiliate_vendor_id');
+    }
+
+    public function affiliates(): HasMany
+    {
+        return $this->hasMany(Vendor::class, 'affiliate_vendor_id');
+    }
+
     public function withdrawals(): HasMany
     {
         return $this->hasMany(VendorWithdrawal::class);

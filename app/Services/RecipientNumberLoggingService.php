@@ -70,6 +70,10 @@ class RecipientNumberLoggingService
             $order->owner_vendor_id,
         ])->filter(fn ($id) => !is_null($id))->unique()->values();
 
+        if ($vendorIds->isEmpty()) {
+            return;
+        }
+
         $rows = [];
         foreach ($vendorIds as $vendorId) {
             $rows[] = [
@@ -83,19 +87,11 @@ class RecipientNumberLoggingService
             ];
         }
 
-        if (empty($rows)) {
-            $rows[] = [
-                'phone_number' => $phone,
-                'vendor_id' => null,
-                'order_id' => (int) $order->id,
-                'service_type' => $serviceType,
-                'used_at' => $usedAt,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ];
-        }
-
-        DB::table('recipient_number_logs')->insert($rows);
+        DB::table('recipient_number_logs')->upsert(
+            $rows,
+            ['phone_number', 'vendor_id', 'service_type'],
+            ['order_id', 'used_at', 'updated_at']
+        );
     }
 
     public function logFromAfaRegistration(AfaRegistration $registration): void
@@ -114,6 +110,10 @@ class RecipientNumberLoggingService
             $registration->reseller_vendor_id,
         ])->filter(fn ($id) => !is_null($id))->unique()->values();
 
+        if ($vendorIds->isEmpty()) {
+            return;
+        }
+
         $rows = [];
         foreach ($vendorIds as $vendorId) {
             $rows[] = [
@@ -127,19 +127,11 @@ class RecipientNumberLoggingService
             ];
         }
 
-        if (empty($rows)) {
-            $rows[] = [
-                'phone_number' => $phone,
-                'vendor_id' => null,
-                'order_id' => null,
-                'service_type' => 'afa_registration',
-                'used_at' => $usedAt,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ];
-        }
-
-        DB::table('recipient_number_logs')->insert($rows);
+        DB::table('recipient_number_logs')->upsert(
+            $rows,
+            ['phone_number', 'vendor_id', 'service_type'],
+            ['order_id', 'used_at', 'updated_at']
+        );
     }
 
     public function shouldEnqueue(): bool

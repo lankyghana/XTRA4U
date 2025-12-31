@@ -108,9 +108,25 @@
                                 <input type="password" 
                                        name="password" 
                                        id="password" 
-                                       class="pl-10 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue transition-colors py-3" 
+                                       class="pl-10 pr-10 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue transition-colors py-3" 
                                        placeholder="Enter your password"
                                        required>
+
+                                <button
+                                    type="button"
+                                    id="toggle_password_visibility"
+                                    class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-gray-700"
+                                    aria-label="Show password"
+                                >
+                                    <svg id="icon_eye" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    </svg>
+                                    <svg id="icon_eye_off" class="h-5 w-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a9.956 9.956 0 012.223-3.592m3.086-2.29A9.956 9.956 0 0112 5c4.478 0 8.268 2.943 9.542 7a9.963 9.963 0 01-4.124 5.303M15 12a3 3 0 00-3-3m0 0a2.99 2.99 0 00-2.12.879M12 9v0m0 6a3 3 0 01-3-3" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3l18 18" />
+                                    </svg>
+                                </button>
                             </div>
                         </div>
 
@@ -168,5 +184,30 @@
             </div>
         </div>
     </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const toggle = document.getElementById('toggle_password_visibility');
+            const password = document.getElementById('password');
+            const eye = document.getElementById('icon_eye');
+            const eyeOff = document.getElementById('icon_eye_off');
+
+            if (!toggle || !password || !eye || !eyeOff) return;
+
+            const setVisible = (visible) => {
+                password.type = visible ? 'text' : 'password';
+                eye.classList.toggle('hidden', visible);
+                eyeOff.classList.toggle('hidden', !visible);
+                toggle.setAttribute('aria-label', visible ? 'Hide password' : 'Show password');
+            };
+
+            // default: hidden
+            setVisible(false);
+
+            toggle.addEventListener('click', function () {
+                setVisible(password.type === 'password');
+            });
+        });
+    </script>
 </body>
 </html>
