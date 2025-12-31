@@ -20,12 +20,37 @@
             </div>
         </div>
 
-        <x-table :headers="['Reference', 'Vendor', 'Amount', 'Commission', 'Status', 'Payment', 'Created']">
+        <form method="GET" action="{{ route('admin.transactions.index') }}" class="flex flex-col sm:flex-row gap-3 sm:items-center">
+            <div class="flex-1">
+                <input
+                    type="text"
+                    name="q"
+                    value="{{ $search ?? request('q') }}"
+                    placeholder="Search by gateway ref, order id, transaction id, vendor, phone"
+                    class="w-full text-sm border-gray-300 rounded-lg focus:ring-brand-bright-blue focus:border-brand-bright-blue px-3 py-2 font-medium shadow-sm"
+                />
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="text-sm px-4 py-2 rounded-lg bg-brand-bright-blue text-white font-medium shadow-sm hover:bg-brand-deep-blue">
+                    Search
+                </button>
+                @if (($search ?? request('q')))
+                    <a href="{{ route('admin.transactions.index') }}" class="text-sm px-4 py-2 rounded-lg border border-gray-300 text-gray-700 font-medium shadow-sm hover:bg-gray-50">
+                        Clear
+                    </a>
+                @endif
+            </div>
+        </form>
+
+        <x-table :headers="['Reference', 'Gateway Ref', 'Vendor', 'Amount', 'Commission', 'Status', 'Payment', 'Created']">
             @forelse ($transactions as $transaction)
                 <tr class="hover:bg-gray-50">
                     <td class="px-6 py-4 text-sm text-gray-900">
                         #{{ $transaction->id }}<br>
                         <span class="text-xs text-gray-500">Order #{{ $transaction->order_id }}</span>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-900">
+                        <span class="text-xs text-gray-500">{{ $transaction->order?->payment_reference ?? '—' }}</span>
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-900">
                         {{ $transaction->vendor?->name ?? 'Unknown Vendor' }}
@@ -57,7 +82,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="7" class="px-6 py-4 text-center text-sm text-gray-500">No transactions recorded yet.</td>
+                    <td colspan="8" class="px-6 py-4 text-center text-sm text-gray-500">No transactions recorded yet.</td>
                 </tr>
             @endforelse
         </x-table>

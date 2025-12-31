@@ -30,8 +30,24 @@ class PaymentService
      */
     public function initiatePayment(Order $order, string $email, float $amount): array
     {
+        // Create pending transaction(s) immediately so admin can audit/confirm payments
+        // even if the gateway init call times out or the customer never returns.
+        $this->ensurePendingTransactions($order);
+
         // All collection flows go through GatewayManager.
         $result = $this->gatewayManager->collect($order, $email, $amount);
+
+        // Persist reference whenever we have one (even if init failed/timeout).
+        // Gateways typically generate a reference client-side before making the HTTP call,
+        // so this helps manual verification when the init response is lost.
+        $reference = $result['reference'] ?? null;
+        if (is_string($reference) && $reference !== '' && empty($order->payment_reference)) {
+            $order->update([
+                'payment_reference' => $reference,
+                // Keep the canonical lifecycle in this app: unpaid -> paid
+                'payment_status' => $order->payment_status ?: 'unpaid',
+            ]);
+        }
 
         if ($result['success']) {
             $order->update([
@@ -40,8 +56,6 @@ class PaymentService
                 'payment_status' => 'unpaid',
             ]);
 
-			// Payment lifecycle: create pending transaction(s) at checkout initiation.
-			$this->ensurePendingTransactions($order);
             return [
                 'success' => true,
                 'message' => $result['message'] ?? 'Payment initialized. Please complete payment.',

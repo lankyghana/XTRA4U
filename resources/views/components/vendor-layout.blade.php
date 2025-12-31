@@ -15,6 +15,9 @@
                         . '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v6h-8V5z" />',
                     'orders' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2" />'
                         . '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 7h6m-6 4h6" />',
+                    'fulfillment' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V9" />'
+                        . '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3h6l3 3" />'
+                        . '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13l2 2 4-4" />',
                     'products' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10" />',
                     'withdrawals' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V4m0 12v4m8-10a8 8 0 11-16 0 8 8 0 0116 0z" />',
                     'analytics' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2z" />'
@@ -47,6 +50,12 @@
             'label' => 'Orders',
             'href' => route('vendor.orders.index'),
             'matches' => ['vendor.orders.*'],
+        ],
+        [
+            'key' => 'fulfillment',
+            'label' => 'Order Fulfillment',
+            'href' => route('vendor.fulfillment.index'),
+            'matches' => ['vendor.fulfillment.*'],
         ],
         [
             'key' => 'products',

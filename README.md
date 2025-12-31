@@ -94,6 +94,14 @@
 - Order management with status tracking
 - Transaction history with detailed reporting
 
+#### 📥 Order Fulfillment (Vendor-Internal)
+- Bulk-download **paid** orders that are still in **Processing**, grouped by telecom network.
+- Prevents duplicate downloads using an internal `orders.downloaded_at` timestamp marker.
+- Download format: plain text with `Number\tPackage` per line.
+- Optional batch size selector (adds a `?limit=` cap per download).
+- After delivering externally, vendor can mark downloaded orders as **Completed** (uses existing completion status; customers never see a “downloaded” state).
+- Affiliate/reseller orders are fulfilled by the **product owner** vendor (not the reseller).
+
 #### 🛍️ Product Management
 - Create and manage unlimited digital products
 - Set custom pricing and stock levels
@@ -150,6 +158,10 @@
 - Transaction archival
 - Database optimization tools
 - Audit logging
+
+#### 🧾 Transaction Audit & Recovery
+- Admin Transactions supports searching by gateway reference, order/transaction id, vendor details, and recipient phone.
+- “Confirm Payment” on a transaction runs the canonical order completion workflow (safer than manually editing statuses).
 
 ---
 

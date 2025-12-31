@@ -11,11 +11,32 @@ use Illuminate\View\View;
 
 class AdminTransactionController extends Controller
 {
-	public function index(): View
+	public function index(Request $request): View
 	{
-		$transactions = Transaction::with(['order', 'vendor'])
+		$search = trim((string) $request->query('q', ''));
+
+		$transactionsQuery = Transaction::query()->with(['order', 'vendor']);
+
+		if ($search !== '') {
+			$transactionsQuery->where(function ($q) use ($search) {
+				$q->where('id', $search)
+					->orWhere('order_id', $search)
+					->orWhere('recipient_phone', 'like', '%' . $search . '%')
+					->orWhereHas('order', function ($orderQuery) use ($search) {
+						$orderQuery->where('payment_reference', 'like', '%' . $search . '%');
+					})
+					->orWhereHas('vendor', function ($vendorQuery) use ($search) {
+						$vendorQuery->where('name', 'like', '%' . $search . '%')
+							->orWhere('email', 'like', '%' . $search . '%')
+							->orWhere('phone_number', 'like', '%' . $search . '%');
+					});
+			});
+		}
+
+		$transactions = $transactionsQuery
 			->latest()
-			->paginate(20);
+			->paginate(20)
+			->withQueryString();
 
 		$totals = [
 			'processed' => Transaction::count(),
@@ -23,7 +44,7 @@ class AdminTransactionController extends Controller
 			'revenue' => Transaction::sum('amount'),
 		];
 
-		return view('admin.transactions', compact('transactions', 'totals'));
+		return view('admin.transactions', compact('transactions', 'totals', 'search'));
 	}
 
 	public function show(Transaction $transaction): View

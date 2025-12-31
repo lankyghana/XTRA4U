@@ -8,6 +8,7 @@ use App\Http\Controllers\VendorController;
 use App\Http\Controllers\VendorRequestController;
 use App\Http\Controllers\VendorAuthController;
 use App\Http\Controllers\VendorDashboardController;
+use App\Http\Controllers\VendorFulfillmentController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\TransactionController;
@@ -166,6 +167,11 @@ Route::middleware(['vendor.approved'])
             ->name('orders.affiliate');
         Route::patch('orders/{order}/status', [VendorDashboardController::class, 'updateOrderStatus'])
             ->name('orders.update-status');
+
+        // Vendor Order Fulfillment (internal-only, additive)
+        Route::get('fulfillment', [VendorFulfillmentController::class, 'index'])->name('fulfillment.index');
+        Route::get('fulfillment/download/{network}', [VendorFulfillmentController::class, 'download'])->name('fulfillment.download');
+        Route::post('fulfillment/complete/{network}', [VendorFulfillmentController::class, 'complete'])->name('fulfillment.complete');
         
         Route::get('analytics', [VendorDashboardController::class, 'analytics'])
             ->name('analytics.index');
