@@ -286,6 +286,13 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
     Route::get('settings/email', [\App\Http\Controllers\Admin\EmailSettingsController::class, 'index'])->name('settings.email');
     Route::put('settings/email', [\App\Http\Controllers\Admin\EmailSettingsController::class, 'update'])->name('settings.email.update');
     Route::post('settings/email/test', [\App\Http\Controllers\Admin\EmailSettingsController::class, 'sendTestEmail'])->name('settings.email.test');
+
+    // External Fulfillment Settings
+    Route::get('settings/external-fulfillment', [\App\Http\Controllers\Admin\ExternalFulfillmentSettingsController::class, 'index'])->name('settings.external-fulfillment');
+    Route::put('settings/external-fulfillment', [\App\Http\Controllers\Admin\ExternalFulfillmentSettingsController::class, 'update'])->name('settings.external-fulfillment.update');
+
+    // Manual Queue Run Trigger (scheduler-bridge)
+    Route::post('queue/run', [\App\Http\Controllers\Admin\ManualQueueRunController::class, 'run'])->name('queue.run');
 });
 Route::get('/vendor/product/create', [ProductController::class, 'create'])->name('product.create');
 Route::post('/vendor/product', [ProductController::class, 'store'])->name('product.store');

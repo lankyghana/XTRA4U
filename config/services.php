@@ -75,5 +75,11 @@ return [
         'payment_url' => env('PAYSTACK_PAYMENT_URL', 'https://api.paystack.co'),
     ],
 
+    'external_fulfillment' => [
+        // Configured by the system administrator (.env). Not editable from the admin UI.
+        'base_url' => env('EXTERNAL_FULFILLMENT_BASE_URL', ''),
+        'endpoint' => env('EXTERNAL_FULFILLMENT_ENDPOINT', ''),
+    ],
+
 
 ];

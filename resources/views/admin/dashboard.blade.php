@@ -216,6 +216,18 @@
                 <div class="px-4 py-5 sm:p-6">
                     <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Quick Actions</h3>
                     <div class="space-y-3">
+                        <form method="POST" action="{{ route('admin.queue.run') }}">
+                            @csrf
+                            <x-button type="submit" variant="primary" class="w-full justify-center">
+                                Run Queue Now
+                            </x-button>
+                        </form>
+
+                        <div class="text-xs text-gray-500">
+                            <div>Last requested: {{ $manualQueueLastRequestedAt ? \Carbon\Carbon::parse($manualQueueLastRequestedAt)->format('M d, Y H:i') : '—' }}</div>
+                            <div>Last finished: {{ $manualQueueLastFinishedAt ? \Carbon\Carbon::parse($manualQueueLastFinishedAt)->format('M d, Y H:i') : '—' }}</div>
+                        </div>
+
                         <x-button href="{{ route('admin.vendors.index') }}" variant="primary" class="w-full justify-center">
                             Manage Vendors
                         </x-button>

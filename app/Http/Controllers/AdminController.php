@@ -9,6 +9,7 @@ use App\Models\VendorWithdrawal;
 use App\Models\AdminNotification;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class AdminController extends Controller
 {
@@ -23,6 +24,9 @@ class AdminController extends Controller
 
         $pendingWithdrawals = VendorWithdrawal::where('status', VendorWithdrawal::STATUS_PROCESSING)->count();
 
+        $manualQueueLastRequestedAt = Cache::get('queue_manual_run_requested_at');
+        $manualQueueLastFinishedAt = Cache::get('queue_manual_run_last_finished_at');
+
         return view('admin.dashboard', [
             'activeVendors' => $activeVendors,
             'pendingVendors' => $pendingVendors,
@@ -30,6 +34,8 @@ class AdminController extends Controller
             'transactionsToday' => $transactionsToday,
             'ordersToday' => $ordersToday,
             'pendingWithdrawals' => $pendingWithdrawals,
+            'manualQueueLastRequestedAt' => $manualQueueLastRequestedAt,
+            'manualQueueLastFinishedAt' => $manualQueueLastFinishedAt,
         ]);
     }
 

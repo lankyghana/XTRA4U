@@ -2,6 +2,8 @@
 
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
@@ -58,6 +60,67 @@ Schedule::command('withdrawals:retry-stuck --minutes=10 --limit=200')->everyFive
 
 // Auto-cancel withdrawals that remain processing too long (refunds wallet once)
 Schedule::command('withdrawals:cancel-stale --minutes=5 --limit=200')->everyMinute();
+
+// Manual queue runner (admin-triggered flag + scheduler bridge).
+// This avoids shell execution from HTTP and works on shared hosting.
+Schedule::call(function () {
+    if (! Cache::get('queue_manual_run_requested')) {
+        return;
+    }
+
+    $lock = Cache::lock('lock:queue_manual_run', 3600);
+    if (! $lock->get()) {
+        return;
+    }
+
+    $startedAt = now();
+    $requestedAt = Cache::get('queue_manual_run_requested_at');
+    $requestedBy = Cache::get('queue_manual_run_requested_by');
+
+    // Consume the flag immediately so we don't keep re-running.
+    Cache::forget('queue_manual_run_requested');
+
+    Cache::put('queue_manual_run_last_started_at', $startedAt->toIso8601String(), now()->addDays(30));
+
+    Log::info('Manual queue run starting', [
+        'requested_at' => $requestedAt,
+        'requested_by' => $requestedBy,
+        'started_at' => $startedAt->toIso8601String(),
+    ]);
+
+    try {
+        // Safe, self-terminating worker run.
+        $exitCode = Artisan::call('queue:work', [
+            '--stop-when-empty' => true,
+        ]);
+
+        $finishedAt = now();
+        Cache::put('queue_manual_run_last_finished_at', $finishedAt->toIso8601String(), now()->addDays(30));
+        Cache::put('queue_manual_run_last_exit_code', (int) $exitCode, now()->addDays(30));
+        Cache::forget('queue_manual_run_last_error');
+
+        Log::info('Manual queue run finished', [
+            'exit_code' => (int) $exitCode,
+            'started_at' => $startedAt->toIso8601String(),
+            'finished_at' => $finishedAt->toIso8601String(),
+            'duration_seconds' => $finishedAt->diffInSeconds($startedAt),
+        ]);
+    } catch (\Throwable $e) {
+        $finishedAt = now();
+        Cache::put('queue_manual_run_last_finished_at', $finishedAt->toIso8601String(), now()->addDays(30));
+        Cache::put('queue_manual_run_last_error', $e->getMessage(), now()->addDays(30));
+
+        Log::error('Manual queue run failed', [
+            'started_at' => $startedAt->toIso8601String(),
+            'finished_at' => $finishedAt->toIso8601String(),
+            'error' => $e->getMessage(),
+        ]);
+    } finally {
+        // Always clear the flag (even if there were no jobs) and release the lock.
+        Cache::forget('queue_manual_run_requested');
+        optional($lock)->release();
+    }
+})->everyMinute()->name('queue-manual-run-bridge');
 
 Artisan::command('xtra4u:mail-test {to : Recipient email address}', function () {
     $to = (string) $this->argument('to');
