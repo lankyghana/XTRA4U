@@ -5,8 +5,8 @@ namespace Tests\Feature;
 use App\Events\OrderCompleted;
 use App\Jobs\ProcessExternalFulfillment;
 use App\Models\Order;
-use App\Models\Setting;
 use App\Models\Vendor;
+use App\Models\VendorSetting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -16,7 +16,7 @@ class ExternalFulfillmentIntegrationTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function enableExternalFulfillment(array $overrides = []): void
+    private function enableExternalFulfillmentForVendor(Vendor $vendor, array $overrides = []): void
     {
         $defaults = [
             'external_fulfillment_enabled' => '1',
@@ -25,7 +25,7 @@ class ExternalFulfillmentIntegrationTest extends TestCase
         ];
 
         foreach (array_merge($defaults, $overrides) as $key => $value) {
-            Setting::set($key, $value, 'external_fulfillment');
+            VendorSetting::setForVendor($vendor->id, $key, $value, 'external_fulfillment');
         }
     }
 
@@ -33,9 +33,16 @@ class ExternalFulfillmentIntegrationTest extends TestCase
     {
         Queue::fake();
 
-        $this->enableExternalFulfillment();
+        config([
+            'services.external_fulfillment.base_url' => 'https://fulfillment.example.test',
+            'services.external_fulfillment.endpoint' => '/v1/fulfill',
+        ]);
 
-        $vendor = Vendor::factory()->create();
+        $vendor = Vendor::factory()->create([
+            'affiliate_vendor_id' => null,
+        ]);
+
+        $this->enableExternalFulfillmentForVendor($vendor);
 
         $order = Order::create([
             'recipient_phone_number' => '0240000000',
@@ -49,7 +56,7 @@ class ExternalFulfillmentIntegrationTest extends TestCase
             'payment_gateway' => 'test',
         ]);
 
-        event(new OrderCompleted($order));
+        OrderCompleted::dispatch($order);
 
         Queue::assertPushed(ProcessExternalFulfillment::class, function (ProcessExternalFulfillment $job) use ($order) {
             return $job->orderId === $order->id;
@@ -60,11 +67,18 @@ class ExternalFulfillmentIntegrationTest extends TestCase
     {
         Queue::fake();
 
-        $this->enableExternalFulfillment([
-            'external_fulfillment_enabled' => '0',
+        config([
+            'services.external_fulfillment.base_url' => 'https://fulfillment.example.test',
+            'services.external_fulfillment.endpoint' => '/v1/fulfill',
         ]);
 
-        $vendor = Vendor::factory()->create();
+        $vendor = Vendor::factory()->create([
+            'affiliate_vendor_id' => null,
+        ]);
+
+        $this->enableExternalFulfillmentForVendor($vendor, [
+            'external_fulfillment_enabled' => '0',
+        ]);
 
         $order = Order::create([
             'recipient_phone_number' => '0240000000',
@@ -78,7 +92,7 @@ class ExternalFulfillmentIntegrationTest extends TestCase
             'payment_gateway' => 'test',
         ]);
 
-        event(new OrderCompleted($order));
+        OrderCompleted::dispatch($order);
 
         Queue::assertNotPushed(ProcessExternalFulfillment::class);
     }
@@ -90,8 +104,6 @@ class ExternalFulfillmentIntegrationTest extends TestCase
             'services.external_fulfillment.endpoint' => '/v1/fulfill',
         ]);
 
-        $this->enableExternalFulfillment();
-
         Http::fake([
             'https://fulfillment.example.test/v1/fulfill' => Http::response([
                 'success' => true,
@@ -99,7 +111,11 @@ class ExternalFulfillmentIntegrationTest extends TestCase
             ], 200),
         ]);
 
-        $vendor = Vendor::factory()->create();
+        $vendor = Vendor::factory()->create([
+            'affiliate_vendor_id' => null,
+        ]);
+
+        $this->enableExternalFulfillmentForVendor($vendor);
 
         $order = Order::create([
             'recipient_phone_number' => '0240000000',
@@ -125,5 +141,83 @@ class ExternalFulfillmentIntegrationTest extends TestCase
         $job->handle();
 
         Http::assertSentCount(1);
+    }
+
+    public function test_affiliate_order_dispatches_external_fulfillment_for_owner_vendor_when_enabled(): void
+    {
+        Queue::fake();
+
+        config([
+            'services.external_fulfillment.base_url' => 'https://fulfillment.example.test',
+            'services.external_fulfillment.endpoint' => '/v1/fulfill',
+        ]);
+
+        $owner = Vendor::factory()->create([
+            'affiliate_vendor_id' => null,
+        ]);
+
+        $reseller = Vendor::factory()->create([
+            'affiliate_vendor_id' => $owner->id,
+        ]);
+
+        $this->enableExternalFulfillmentForVendor($owner);
+
+        $order = Order::create([
+            'recipient_phone_number' => '0240000000',
+            'mobile_money_number' => '0240000000',
+            'service_purchased' => 'TEST-SERVICE',
+            'amount_paid' => 10.00,
+            'vendor_id' => $reseller->id,
+            'owner_vendor_id' => $owner->id,
+            'reseller_vendor_id' => $reseller->id,
+            'is_reseller_order' => true,
+            'status' => 'Processing',
+            'payment_status' => 'paid',
+            'payment_reference' => 'TEST-REF-EXT-4',
+            'payment_gateway' => 'test',
+        ]);
+
+        OrderCompleted::dispatch($order);
+
+        Queue::assertPushed(ProcessExternalFulfillment::class, function (ProcessExternalFulfillment $job) use ($order) {
+            return $job->orderId === $order->id;
+        });
+    }
+
+    public function test_order_completed_does_not_dispatch_for_reseller_vendor_even_if_configured(): void
+    {
+        Queue::fake();
+
+        config([
+            'services.external_fulfillment.base_url' => 'https://fulfillment.example.test',
+            'services.external_fulfillment.endpoint' => '/v1/fulfill',
+        ]);
+
+        $owner = Vendor::factory()->create([
+            'affiliate_vendor_id' => null,
+        ]);
+
+        $reseller = Vendor::factory()->create([
+            'affiliate_vendor_id' => $owner->id,
+        ]);
+
+        // Even if reseller somehow has settings, they must not be eligible.
+        $this->enableExternalFulfillmentForVendor($reseller);
+
+        $order = Order::create([
+            'recipient_phone_number' => '0240000000',
+            'mobile_money_number' => '0240000000',
+            'service_purchased' => 'TEST-SERVICE',
+            'amount_paid' => 10.00,
+            'vendor_id' => $reseller->id,
+            'status' => 'Processing',
+            'payment_status' => 'paid',
+            'payment_reference' => 'TEST-REF-EXT-5',
+            'payment_gateway' => 'test',
+        ]);
+
+        OrderCompleted::dispatch($order);
+
+        Queue::assertNotPushed(ProcessExternalFulfillment::class);
     }
 }
