@@ -287,6 +287,27 @@
                     </div>
                 </div>
             </div>
+
+            <!-- External Fulfillment -->
+            <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                <div class="bg-gradient-to-r from-brand-deep-blue to-blue-700 px-6 py-4">
+                    <h2 class="text-xl font-bold text-white flex items-center">
+                        <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                        </svg>
+                        External Fulfillment
+                    </h2>
+                    <p class="text-blue-100">Configure your external fulfillment integration</p>
+                </div>
+
+                <div class="p-6">
+                    <a href="{{ route('vendor.settings.external-fulfillment') }}"
+                       class="inline-flex items-center px-4 py-2 bg-brand-deep-blue text-white font-medium rounded-lg hover:bg-blue-700 transition-colors">
+                        Manage Settings
+                    </a>
+                    <p class="mt-3 text-sm text-gray-600">Only root vendors can enable this feature.</p>
+                </div>
+            </div>
         </div>
     </div>
 </x-vendor-layout>
