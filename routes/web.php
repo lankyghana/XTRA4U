@@ -227,6 +227,12 @@ Route::middleware(['vendor.approved'])
         Route::get('settings', [VendorDashboardController::class, 'settings'])->name('settings.index');
         Route::put('settings', [VendorDashboardController::class, 'updateSettings'])->name('settings.update');
         Route::put('settings/password', [VendorDashboardController::class, 'updatePassword'])->name('settings.password');
+
+        // Vendor External Fulfillment Settings
+        Route::get('settings/external-fulfillment', [\App\Http\Controllers\Vendor\ExternalFulfillmentSettingsController::class, 'index'])
+            ->name('settings.external-fulfillment');
+        Route::put('settings/external-fulfillment', [\App\Http\Controllers\Vendor\ExternalFulfillmentSettingsController::class, 'update'])
+            ->name('settings.external-fulfillment.update');
     });
 Route::get('/checkout', [CheckoutController::class, 'show'])->name('checkout.show');
 Route::post('/checkout', [CheckoutController::class, 'process'])->name('checkout.process');
@@ -288,8 +294,6 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
     Route::post('settings/email/test', [\App\Http\Controllers\Admin\EmailSettingsController::class, 'sendTestEmail'])->name('settings.email.test');
 
     // External Fulfillment Settings
-    Route::get('settings/external-fulfillment', [\App\Http\Controllers\Admin\ExternalFulfillmentSettingsController::class, 'index'])->name('settings.external-fulfillment');
-    Route::put('settings/external-fulfillment', [\App\Http\Controllers\Admin\ExternalFulfillmentSettingsController::class, 'update'])->name('settings.external-fulfillment.update');
 
     // Manual Queue Run Trigger (scheduler-bridge)
     Route::post('queue/run', [\App\Http\Controllers\Admin\ManualQueueRunController::class, 'run'])->name('queue.run');
