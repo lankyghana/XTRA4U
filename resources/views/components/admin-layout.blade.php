@@ -94,12 +94,6 @@
             'href' => route('admin.settings.email'),
             'matches' => ['admin.settings.email*'],
         ],
-        [
-            'key' => 'external-fulfillment-settings',
-            'label' => 'External Fulfillment',
-            'href' => route('admin.settings.external-fulfillment'),
-            'matches' => ['admin.settings.external-fulfillment*'],
-        ],
     ];
 
     foreach ($navLinks as &$link) {
