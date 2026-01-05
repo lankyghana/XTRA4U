@@ -4,7 +4,8 @@ namespace App\Listeners;
 
 use App\Events\OrderCompleted;
 use App\Jobs\ProcessExternalFulfillment;
-use App\Models\Setting;
+use App\Models\Vendor;
+use App\Services\ExternalFulfillment\ExternalFulfillmentConfig;
 use Illuminate\Support\Facades\Schema;
 
 class DispatchExternalFulfillmentFromOrderCompleted
@@ -21,17 +22,25 @@ class DispatchExternalFulfillmentFromOrderCompleted
             return;
         }
 
-        if (! Schema::hasTable('settings')) {
+        if (! Schema::hasTable('vendor_settings')) {
             return;
         }
 
-        $settings = Setting::getGroupFresh('external_fulfillment');
-        $enabled = filter_var($settings['external_fulfillment_enabled'] ?? null, FILTER_VALIDATE_BOOLEAN);
-
-        if (! $enabled) {
+        $targetVendorId = (int) ($order->owner_vendor_id ?: $order->vendor_id);
+        if ($targetVendorId <= 0) {
             return;
         }
 
-        ProcessExternalFulfillment::dispatch((int) $order->id)->afterCommit();
+        $vendor = Vendor::query()->find($targetVendorId);
+        if (! $vendor) {
+            return;
+        }
+
+        $config = ExternalFulfillmentConfig::loadFreshForVendor($vendor);
+        if (! $config->isReady()) {
+            return;
+        }
+
+        ProcessExternalFulfillment::dispatch((int) $order->id);
     }
 }
