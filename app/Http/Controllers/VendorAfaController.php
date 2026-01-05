@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AfaRegistration;
 use App\Models\Vendor;
+use App\Services\AffiliateChainService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -195,9 +196,14 @@ class VendorAfaController extends Controller
         if (!is_null($vendor->affiliate_vendor_id)) {
             $availableAfaVendors = Vendor::where('id', $vendor->affiliate_vendor_id)
                 ->where('is_approved', true)
-                ->where('afa_enabled', true)
-                ->where('afa_price', '>', 0)
-                ->select('id', 'name', 'vendor_code', 'afa_price')
+                ->where(function ($q) {
+                    $q->where(function ($qq) {
+                        $qq->where('afa_enabled', true)->where('afa_price', '>', 0);
+                    })->orWhere(function ($qq) {
+                        $qq->where('afa_reseller_enabled', true)->where('afa_selling_price', '>', 0);
+                    });
+                })
+                ->select('id', 'name', 'vendor_code', 'afa_price', 'afa_selling_price', 'afa_enabled', 'afa_reseller_enabled')
                 ->get();
         }
         
@@ -261,11 +267,18 @@ class VendorAfaController extends Controller
             
             // Get the source vendor's base price
             $sourceVendor = Vendor::find($request->afa_source_vendor_id);
-            if (!$sourceVendor || !$sourceVendor->afa_enabled || $sourceVendor->afa_price <= 0) {
+            $chainService = new AffiliateChainService();
+            $basePrice = $sourceVendor ? $chainService->getVendorAfaSellingPrice($sourceVendor) : null;
+            if (!$sourceVendor || !$basePrice || $basePrice <= 0) {
                 return back()->with('error', 'Selected vendor does not offer AFA service.');
             }
-            
-            $basePrice = $sourceVendor->afa_price;
+
+            // Ensure there is a root provider behind this source (provider or reseller source).
+            $rootProvider = $chainService->resolveRootAfaProviderFromSeller($sourceVendor);
+            if (!$rootProvider) {
+                return back()->with('error', 'Selected vendor does not have an active AFA provider in its affiliate chain.');
+            }
+
             $markup = $request->afa_markup;
             $sellingPrice = $basePrice + $markup;
 
