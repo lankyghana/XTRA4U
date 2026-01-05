@@ -8,6 +8,7 @@ class ResellerProduct extends Model
 {
     protected $fillable = [
         'product_id',
+        'source_reseller_product_id',
         'reseller_vendor_id',
         'owner_vendor_id',
         'base_price',
@@ -33,6 +34,12 @@ class ResellerProduct extends Model
     public function resellerVendor()
     {
         return $this->belongsTo(Vendor::class, 'reseller_vendor_id');
+    }
+
+    // Upstream reseller product (when reselling a reseller's listing)
+    public function sourceResellerProduct()
+    {
+        return $this->belongsTo(self::class, 'source_reseller_product_id');
     }
 
     // Original product owner
