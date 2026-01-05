@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Order;
+use App\Models\Vendor;
 use App\Services\ExternalFulfillment\ExternalFulfillmentClient;
 use App\Services\ExternalFulfillment\ExternalFulfillmentConfig;
 use Illuminate\Bus\Queueable;
@@ -30,12 +31,6 @@ class ProcessExternalFulfillment implements ShouldQueue
 
     public function handle(): void
     {
-        $config = ExternalFulfillmentConfig::loadFresh();
-
-        if (! $config->isReady()) {
-            return;
-        }
-
         $lockKey = sprintf('lock:external-fulfillment:%d', $this->orderId);
         $lock = Cache::lock($lockKey, 600);
 
@@ -55,6 +50,21 @@ class ProcessExternalFulfillment implements ShouldQueue
             }
 
             if ($order->external_fulfillment_status === 'succeeded') {
+                return;
+            }
+
+            $targetVendorId = (int) ($order->owner_vendor_id ?: $order->vendor_id);
+            if ($targetVendorId <= 0) {
+                return;
+            }
+
+            $vendor = Vendor::query()->find($targetVendorId);
+            if (! $vendor) {
+                return;
+            }
+
+            $config = ExternalFulfillmentConfig::loadFreshForVendor($vendor);
+            if (! $config->isReady()) {
                 return;
             }
 
