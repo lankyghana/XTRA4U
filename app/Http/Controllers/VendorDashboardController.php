@@ -668,15 +668,62 @@ class VendorDashboardController extends Controller
 		}
 
 		$affiliateParent = Vendor::find($vendor->affiliate_vendor_id);
-		
-		// Get all resellable products from affiliate parent
-		$products = Product::where('vendor_id', $affiliateParent->id)
+
+		// Products available to resell from the affiliate parent:
+		// - Products the parent owns
+		// - Products the parent is reselling (enables multi-level reseller chains)
+		$ownedProducts = Product::where('vendor_id', $affiliateParent->id)
 			->where('is_active', true)
 			->where('is_resellable', true)
-			->with(['resellerProducts' => function ($query) use ($vendor) {
-				$query->where('reseller_vendor_id', $vendor->id);
-			}])
-			->paginate(12);
+			->get();
+
+		$parentResellerListings = ResellerProduct::where('reseller_vendor_id', $affiliateParent->id)
+			->where('is_active', true)
+			->with('product')
+			->get();
+
+		$parentResellProducts = $parentResellerListings
+			->pluck('product')
+			->filter(function ($p) {
+				return $p && $p->is_active && $p->is_resellable;
+			});
+
+		$allProducts = $ownedProducts
+			->merge($parentResellProducts)
+			->unique('id')
+			->values();
+
+		$perPage = 12;
+		$page = \Illuminate\Pagination\LengthAwarePaginator::resolveCurrentPage();
+		$pageItems = $allProducts->slice(($page - 1) * $perPage, $perPage)->values();
+		$productIds = $pageItems->pluck('id')->all();
+
+		$resellerProductsForVendor = ResellerProduct::whereIn('product_id', $productIds)
+			->where('reseller_vendor_id', $vendor->id)
+			->get()
+			->groupBy('product_id');
+
+		foreach ($pageItems as $p) {
+			$p->setRelation('resellerProducts', $resellerProductsForVendor->get($p->id, collect()));
+
+			$parentListing = $parentResellerListings->firstWhere('product_id', $p->id);
+			if ($parentListing && (int) $p->vendor_id !== (int) $affiliateParent->id) {
+				$p->resell_base_price = (float) $parentListing->selling_price;
+			} else {
+				$p->resell_base_price = (float) ($p->min_base_price ?? $p->price);
+			}
+		}
+
+		$products = new \Illuminate\Pagination\LengthAwarePaginator(
+			$pageItems,
+			$allProducts->count(),
+			$perPage,
+			$page,
+			[
+				'path' => request()->url(),
+				'query' => request()->query(),
+			]
+		);
 
 		// Get network services for logos
 		$networkServices = \App\Models\NetworkService::active()
@@ -701,9 +748,19 @@ class VendorDashboardController extends Controller
 
 		$product = Product::findOrFail($request->product_id);
 
-		// Verify product belongs to affiliate parent
-		if ($product->vendor_id !== $vendor->affiliate_vendor_id) {
-			return back()->with('error', 'You can only resell products from your affiliate parent.');
+		if (!$vendor->affiliate_vendor_id) {
+			return back()->with('error', 'You must have an affiliate parent to resell products.');
+		}
+
+		$affiliateParentId = (int) $vendor->affiliate_vendor_id;
+		$parentListing = ResellerProduct::where('product_id', $product->id)
+			->where('reseller_vendor_id', $affiliateParentId)
+			->where('is_active', true)
+			->first();
+
+		$parentOwnsProduct = ((int) $product->vendor_id === $affiliateParentId);
+		if (!$parentOwnsProduct && !$parentListing) {
+			return back()->with('error', 'You can only resell products offered by your affiliate parent.');
 		}
 
 		// Check if already reselling
@@ -715,11 +772,16 @@ class VendorDashboardController extends Controller
 			return back()->with('error', 'You are already reselling this product.');
 		}
 
+		$ownerVendorId = $parentListing ? (int) $parentListing->owner_vendor_id : (int) $product->vendor_id;
+		$basePrice = $parentListing ? (float) $parentListing->selling_price : (float) ($product->min_base_price ?? $product->price);
+		$sourceResellerProductId = $parentListing ? (int) $parentListing->id : null;
+
 		ResellerProduct::create([
 			'product_id' => $product->id,
+			'source_reseller_product_id' => $sourceResellerProductId,
 			'reseller_vendor_id' => $vendor->id,
-			'owner_vendor_id' => $product->vendor_id,
-			'base_price' => $product->min_base_price ?? $product->price,
+			'owner_vendor_id' => $ownerVendorId,
+			'base_price' => $basePrice,
 			'markup_price' => $request->markup_price,
 		]);
 
