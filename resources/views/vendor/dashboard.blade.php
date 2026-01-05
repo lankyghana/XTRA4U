@@ -284,6 +284,15 @@
                         </svg>
                         View Analytics
                     </a>
+
+                    @if (empty($vendor->affiliate_vendor_id))
+                        <a href="{{ route('vendor.settings.external-fulfillment') }}" class="flex items-center justify-center w-full bg-white/10 backdrop-blur-sm text-white hover:bg-white/20 font-semibold py-3 px-4 rounded-lg transition-all duration-200 hover:scale-105 border border-white/20">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            External Fulfillment
+                        </a>
+                    @endif
                 </div>
             </div>
         </div>
