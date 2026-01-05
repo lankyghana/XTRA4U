@@ -30,6 +30,7 @@ class Order extends Model
         'owner_earning',
         'reseller_earning',
         'platform_commission',
+        'affiliate_chain_snapshot',
         'is_reseller_order',
     ];
 
@@ -41,6 +42,7 @@ class Order extends Model
         'owner_earning' => 'decimal:2',
         'reseller_earning' => 'decimal:2',
         'platform_commission' => 'decimal:2',
+        'affiliate_chain_snapshot' => 'array',
         'payment_completed_at' => 'datetime',
         'downloaded_at' => 'datetime',
     ];
