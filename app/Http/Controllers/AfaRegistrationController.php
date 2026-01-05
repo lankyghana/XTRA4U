@@ -8,6 +8,7 @@ use App\Models\Vendor;
 use App\Models\PaymentGatewayConfig;
 use App\Services\PaymentService;
 use App\Services\AfaPaymentService;
+use App\Services\AffiliateChainService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -41,10 +42,10 @@ class AfaRegistrationController extends Controller
             // Reseller AFA service
             $afaPrice = $vendor->afa_selling_price;
             $isReseller = true;
-            $sourceVendor = Vendor::find($vendor->afa_source_vendor_id);
-            
-            // Check if source vendor still has AFA enabled
-            if (!$sourceVendor || !$sourceVendor->afa_enabled) {
+            $chainService = new AffiliateChainService();
+            $sourceVendor = $chainService->resolveRootAfaProviderFromSeller($vendor);
+
+            if (!$sourceVendor) {
                 return redirect()->route('storefront.vendor', $vendor->vendor_code)
                     ->with('error', 'AFA Registration is currently not available.');
             }
@@ -106,6 +107,7 @@ class AfaRegistrationController extends Controller
         $sourceVendorId = null;
         $basePrice = 0;
         $markupPrice = 0;
+        $affiliateChainSnapshot = null;
         
         if ($vendor->afa_enabled && $vendor->afa_price > 0) {
             // Direct AFA order
@@ -113,16 +115,24 @@ class AfaRegistrationController extends Controller
             $sourceVendorId = $vendor->id;
         } elseif ($vendor->afa_reseller_enabled && $vendor->afa_selling_price > 0 && $vendor->afa_source_vendor_id) {
             // Reseller AFA order
-            $sourceVendor = Vendor::find($vendor->afa_source_vendor_id);
-            if (!$sourceVendor || !$sourceVendor->afa_enabled) {
+            $chainService = new AffiliateChainService();
+            $payout = $chainService->computeAfaPayoutFromSeller($vendor);
+            if (!($payout['ok'] ?? false)) {
                 return back()->with('error', 'AFA Registration is currently not available.');
             }
-            
+
             $isResellerOrder = true;
             $afaPrice = $vendor->afa_selling_price;
-            $sourceVendorId = $vendor->afa_source_vendor_id;
-            $basePrice = $vendor->afa_base_price;
-            $markupPrice = $vendor->afa_markup;
+            $sourceVendorId = (int) $payout['owner_vendor_id'];
+            $basePrice = (float) $payout['base_amount'];
+            $markupPrice = (float) $vendor->afa_markup;
+            $affiliateChainSnapshot = $payout['snapshot'] ?? null;
+
+            // Guard against misconfiguration (markups/base not matching selling price)
+            $expected = (float) ($payout['expected_amount'] ?? 0);
+            if ($expected > 0 && abs($expected - (float) $afaPrice) > 0.01) {
+                return back()->with('error', 'AFA pricing is misconfigured for this vendor. Please try again later.');
+            }
         }
 
         if (!$afaPrice || $afaPrice <= 0) {
@@ -133,12 +143,47 @@ class AfaRegistrationController extends Controller
         $commissionRate = 0.02;
         
         if ($isResellerOrder) {
-            // Split commission for reseller orders
+            // Snapshot-based multi-level logic: platform commission is per-portion.
+            // For stored summary fields, we keep the owner + immediate seller amounts.
             $ownerCommission = round($basePrice * $commissionRate, 2);
             $resellerCommission = round($markupPrice * $commissionRate, 2);
             $platformCommission = $ownerCommission + $resellerCommission;
-            $vendorEarning = round($basePrice - $ownerCommission, 2); // Source vendor earning
-            $resellerEarning = round($markupPrice - $resellerCommission, 2); // Reseller earning
+            $vendorEarning = round($basePrice - $ownerCommission, 2); // Root provider earning
+            $resellerEarning = round($markupPrice - $resellerCommission, 2); // Immediate seller earning
+
+            if (is_array($affiliateChainSnapshot) && !empty($affiliateChainSnapshot)) {
+                // Recompute totals from snapshot to include all resellers.
+                $platformCommission = 0.0;
+                $vendorEarning = 0.0;
+                $resellerEarning = 0.0;
+
+                foreach ($affiliateChainSnapshot as $idx => $entry) {
+                    if (!is_array($entry)) {
+                        continue;
+                    }
+
+                    $role = (string) ($entry['role'] ?? '');
+                    $portion = $role === 'owner'
+                        ? (float) ($entry['amount'] ?? 0)
+                        : (float) ($entry['markup'] ?? 0);
+
+                    if ($portion <= 0) {
+                        continue;
+                    }
+
+                    $commission = round($portion * $commissionRate, 2);
+                    $earning = round($portion - $commission, 2);
+                    $platformCommission = round($platformCommission + $commission, 2);
+
+                    if ($role === 'owner') {
+                        $vendorEarning = $earning;
+                    }
+
+                    if ($role === 'reseller' && (int) ($entry['vendor_id'] ?? 0) === (int) $vendor->id) {
+                        $resellerEarning = $earning;
+                    }
+                }
+            }
         } else {
             // Direct order - single vendor
             $platformCommission = round($afaPrice * $commissionRate, 2);
@@ -166,6 +211,7 @@ class AfaRegistrationController extends Controller
                 'platform_commission' => $platformCommission,
                 'vendor_earning' => $vendorEarning,
                 'reseller_earning' => $resellerEarning,
+                'affiliate_chain_snapshot' => $affiliateChainSnapshot,
                 'is_reseller_order' => $isResellerOrder,
                 'status' => AfaRegistration::STATUS_PENDING,
                 'payment_status' => AfaRegistration::PAYMENT_PENDING,
