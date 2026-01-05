@@ -29,7 +29,8 @@
     25 => 'Carbon\\Laravel\\ServiceProvider',
     26 => 'Termwind\\Laravel\\TermwindServiceProvider',
     27 => 'App\\Providers\\AppServiceProvider',
-    28 => 'App\\Providers\\DynamicMailServiceProvider',
+    28 => 'App\\Providers\\EventServiceProvider',
+    29 => 'App\\Providers\\DynamicMailServiceProvider',
   ),
   'eager' => 
   array (
@@ -47,7 +48,8 @@
     11 => 'Carbon\\Laravel\\ServiceProvider',
     12 => 'Termwind\\Laravel\\TermwindServiceProvider',
     13 => 'App\\Providers\\AppServiceProvider',
-    14 => 'App\\Providers\\DynamicMailServiceProvider',
+    14 => 'App\\Providers\\EventServiceProvider',
+    15 => 'App\\Providers\\DynamicMailServiceProvider',
   ),
   'deferred' => 
   array (
