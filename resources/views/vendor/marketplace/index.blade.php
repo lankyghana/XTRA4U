@@ -110,7 +110,7 @@
                             $logoUrl = $networkService ? $networkService->image_url : null;
                             
                             $alreadyReselling = $product->resellerProducts->isNotEmpty();
-                            $basePrice = $product->min_base_price ?? $product->price;
+                            $basePrice = $product->resell_base_price ?? ($product->min_base_price ?? $product->price);
                         @endphp
 
                         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md hover:border-purple-200 transition-all duration-200 group">
