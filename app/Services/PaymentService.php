@@ -224,6 +224,13 @@ class PaymentService
             return false;
         }
 
+        // Multi-level reseller chain support (additive):
+        // If this reseller product is sourced from an upstream reseller listing,
+        // distribute earnings across the full chain. Single-level path stays unchanged.
+        if (!empty($resellerProduct->source_reseller_product_id)) {
+            return $this->completeMultiLevelResellerOrder($order, $resellerProduct, $postCommit);
+        }
+
         $basePrice = $resellerProduct->base_price;
         $markupPrice = $resellerProduct->markup_price;
 
@@ -350,6 +357,181 @@ class PaymentService
             'owner_earning' => $ownerEarning,
             'reseller_earning' => $resellerEarning,
             'platform_commission' => $totalPlatformCommission,
+        ]);
+
+        return true;
+    }
+
+    /**
+     * Multi-level reseller order completion.
+     *
+     * Preserves existing external/customer flow and order schema.
+     * Payouts are split across owner + all resellers in the reseller product chain.
+     */
+    protected function completeMultiLevelResellerOrder(Order $order, ResellerProduct $resellerProduct, array &$postCommit = []): bool
+    {
+        $chainService = new AffiliateChainService();
+        $payout = $chainService->computeResellerProductPayout($resellerProduct);
+
+        if (!($payout['ok'] ?? false)) {
+            Log::warning('Multi-level reseller payout computation failed; falling back to 2-party split', [
+                'order_id' => $order->id,
+                'reseller_product_id' => $resellerProduct->id,
+                'reason' => $payout['reason'] ?? null,
+            ]);
+
+            // Fallback: treat everything except immediate seller markup as the owner's portion.
+            $fallbackOwnerAmount = max(0.0, round(((float) $order->amount_paid) - (float) $resellerProduct->markup_price, 2));
+            $fallbackOwnerCommission = round($fallbackOwnerAmount * 0.02, 2);
+            $fallbackOwnerEarning = round($fallbackOwnerAmount - $fallbackOwnerCommission, 2);
+
+            $fallbackResellerAmount = (float) $resellerProduct->markup_price;
+            $fallbackResellerCommission = round($fallbackResellerAmount * 0.02, 2);
+            $fallbackResellerEarning = round($fallbackResellerAmount - $fallbackResellerCommission, 2);
+
+            $platformCommission = round($fallbackOwnerCommission + $fallbackResellerCommission, 2);
+
+            $order->update([
+                'status' => 'Processing',
+                'payment_status' => 'paid',
+                'payment_completed_at' => now(),
+                'base_price' => (float) $resellerProduct->base_price,
+                'markup_price' => (float) $resellerProduct->markup_price,
+                'owner_earning' => $fallbackOwnerEarning,
+                'reseller_earning' => $fallbackResellerEarning,
+                'platform_commission' => $platformCommission,
+                'owner_vendor_id' => $resellerProduct->owner_vendor_id,
+                'reseller_vendor_id' => $resellerProduct->reseller_vendor_id,
+                'is_reseller_order' => true,
+            ]);
+
+            $this->upsertOrderTransaction($order, (int) $resellerProduct->owner_vendor_id, [
+                'recipient_phone' => $order->recipient_phone_number,
+                'amount' => $fallbackOwnerAmount,
+                'commission_amount' => $fallbackOwnerCommission,
+                'vendor_earning' => $fallbackOwnerEarning,
+                'payment_status' => 'successful',
+            ]);
+
+            $this->upsertOrderTransaction($order, (int) $resellerProduct->reseller_vendor_id, [
+                'recipient_phone' => $order->recipient_phone_number,
+                'amount' => $fallbackResellerAmount,
+                'commission_amount' => $fallbackResellerCommission,
+                'vendor_earning' => $fallbackResellerEarning,
+                'payment_status' => 'successful',
+            ]);
+
+            Vendor::whereKey((int) $resellerProduct->owner_vendor_id)->increment('wallet_balance', $fallbackOwnerEarning);
+            Vendor::whereKey((int) $resellerProduct->reseller_vendor_id)->increment('wallet_balance', $fallbackResellerEarning);
+
+            AdminNotification::notifyNewOrder($order);
+            $postCommit[] = ['type' => 'event', 'order_id' => $order->id];
+
+            return true;
+        }
+
+        $resolvedServiceName = $resellerProduct->product?->name ?? $order->service?->name;
+
+        // Persist order-facing fields; keep vendor_id semantics unchanged (seller/vendor storefront).
+        $order->update([
+            'status' => 'Processing',
+            'payment_status' => 'paid',
+            'payment_completed_at' => now(),
+            'base_price' => (float) $resellerProduct->base_price,
+            'markup_price' => (float) $resellerProduct->markup_price,
+            'owner_earning' => (float) $payout['owner_earning'],
+            'reseller_earning' => (float) $payout['immediate_seller_earning'],
+            'platform_commission' => (float) $payout['platform_commission'],
+            'affiliate_chain_snapshot' => $payout['snapshot'] ?? null,
+            'owner_vendor_id' => $resellerProduct->owner_vendor_id,
+            'reseller_vendor_id' => $resellerProduct->reseller_vendor_id,
+            'is_reseller_order' => true,
+            ...($resellerProduct->product?->id ? ['vendor_service_id' => $resellerProduct->product->id] : []),
+            ...($resolvedServiceName ? ['service_purchased' => $resolvedServiceName] : []),
+        ]);
+
+        // Upsert transactions and credit wallets for each party in the chain.
+        foreach (($payout['lines'] ?? []) as $line) {
+            $vendorId = (int) ($line['vendor_id'] ?? 0);
+            if ($vendorId <= 0) {
+                continue;
+            }
+
+            $this->upsertOrderTransaction($order, $vendorId, [
+                'recipient_phone' => $order->recipient_phone_number,
+                'amount' => (float) ($line['amount'] ?? 0),
+                'commission_amount' => (float) ($line['commission'] ?? 0),
+                'vendor_earning' => (float) ($line['earning'] ?? 0),
+                'payment_status' => 'successful',
+            ]);
+
+            $earning = (float) ($line['earning'] ?? 0);
+            if ($earning > 0) {
+                Vendor::whereKey($vendorId)->increment('wallet_balance', $earning);
+            }
+        }
+
+        // Notifications: keep existing behavior for owner + immediate seller.
+        $ownerVendor = $resellerProduct->ownerVendor;
+        $immediateSeller = $resellerProduct->resellerVendor;
+
+        if ($ownerVendor) {
+            VendorNotification::create([
+                'vendor_id' => $ownerVendor->id,
+                'type' => VendorNotification::TYPE_AFFILIATE_ORDER,
+                'title' => 'New Affiliate Order',
+                'message' => "A reseller made a sale of your product '{$order->service_purchased}'. Your earning: GHS " . number_format((float) $payout['owner_earning'], 2),
+                'order_id' => $order->id,
+                'data' => [
+                    'product_name' => $order->service_purchased,
+                    'earning' => (float) $payout['owner_earning'],
+                    'reseller_vendor_id' => $resellerProduct->reseller_vendor_id,
+                ],
+            ]);
+
+            $postCommit[] = [
+                'type' => 'communications',
+                'order_id' => $order->id,
+                'vendor_id' => $ownerVendor->id,
+                'role' => 'owner',
+                'earning' => (float) $payout['owner_earning'],
+                'sms_type' => 'affiliate',
+            ];
+        }
+
+        if ($immediateSeller) {
+            VendorNotification::create([
+                'vendor_id' => $immediateSeller->id,
+                'type' => VendorNotification::TYPE_NEW_ORDER,
+                'title' => 'New Order Received',
+                'message' => "You have a new order for '{$order->service_purchased}'. Your markup earning: GHS " . number_format((float) $payout['immediate_seller_earning'], 2),
+                'order_id' => $order->id,
+                'data' => [
+                    'product_name' => $order->service_purchased,
+                    'markup_price' => (float) $resellerProduct->markup_price,
+                    'earning' => (float) $payout['immediate_seller_earning'],
+                ],
+            ]);
+
+            $postCommit[] = [
+                'type' => 'communications',
+                'order_id' => $order->id,
+                'vendor_id' => $immediateSeller->id,
+                'role' => 'reseller',
+                'earning' => (float) $payout['immediate_seller_earning'],
+                'sms_type' => 'order',
+            ];
+        }
+
+        AdminNotification::notifyNewOrder($order);
+        $postCommit[] = ['type' => 'event', 'order_id' => $order->id];
+
+        Log::info('Multi-level reseller order completed with split payment', [
+            'order_id' => $order->id,
+            'owner_vendor_id' => $resellerProduct->owner_vendor_id,
+            'immediate_seller_vendor_id' => $resellerProduct->reseller_vendor_id,
+            'platform_commission' => $payout['platform_commission'] ?? null,
+            'depth' => $payout['depth'] ?? null,
         ]);
 
         return true;
