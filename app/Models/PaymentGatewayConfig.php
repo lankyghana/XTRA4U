@@ -71,8 +71,8 @@ class PaymentGatewayConfig extends Model
                 'supports_sms' => false,
             ],
             self::GATEWAY_BULKCLIX => [
-                'supports_collection' => false,
-                'supports_generic' => false,
+                'supports_collection' => true,
+                'supports_generic' => true,
                 'supports_payout' => true,
                 'supports_sms' => true,
             ],
@@ -238,12 +238,22 @@ class PaymentGatewayConfig extends Model
             ],
             self::GATEWAY_BULKCLIX => [
                 'name' => 'BulkClix',
-                'types' => [self::TYPE_PAYOUT, self::TYPE_SMS],
+                'types' => [self::TYPE_PAYMENT_COLLECTION, self::TYPE_PAYOUT, self::TYPE_SMS],
                 'capabilities' => self::defaultCapabilitiesFor(self::GATEWAY_BULKCLIX),
-                'config_fields' => [
-                    'api_key' => 'API Key',
-                    'sender_id' => 'Sender ID',
-                    'base_url' => 'Base URL',
+                'config_fields_by_type' => [
+                    self::TYPE_PAYMENT_COLLECTION => [
+                        'api_key' => 'API Key',
+                        'base_url' => 'Base URL',
+                    ],
+                    self::TYPE_PAYOUT => [
+                        'api_key' => 'API Key',
+                        'base_url' => 'Base URL',
+                    ],
+                    self::TYPE_SMS => [
+                        'api_key' => 'API Key',
+                        'sender_id' => 'Sender ID',
+                        'base_url' => 'Base URL',
+                    ],
                 ],
                 'default_config' => [
                     'base_url' => 'https://api.bulkclix.com/api/v1',
