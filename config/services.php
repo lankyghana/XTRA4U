@@ -66,7 +66,7 @@ return [
     'bulkclix' => [
         'api_key' => env('BULKCLIX_API_KEY'),
         'sender_id' => env('BULKCLIX_SENDER_ID', 'XTRA4U'),
-        'base_url' => env('BULKCLIX_BASE_URL', 'https://bulkclix.com/api/v1'),
+        'base_url' => env('BULKCLIX_BASE_URL', 'https://api.bulkclix.com/api/v1'),
     ],
 
     'paystack' => [
