@@ -11,6 +11,7 @@ use App\Models\VendorWithdrawal;
 use App\Services\PaystackPaymentService;
 use App\Services\FlutterwavePaymentService;
 use App\Services\HubtelPaymentService;
+use App\Services\BulkClixPaymentService;
 use App\Services\MoolrePaymentService;
 use App\Services\SmsService;
 use App\Services\Payouts\BulkClixPayoutService;
@@ -217,6 +218,7 @@ class GatewayManager
             PaymentGatewayConfig::GATEWAY_FLUTTERWAVE => new FlutterwavePaymentService($config),
             // Hubtel checkout isn't wired into the CollectsPayments contract yet; keep blocked until implemented.
             PaymentGatewayConfig::GATEWAY_HUBTEL => null,
+            PaymentGatewayConfig::GATEWAY_BULKCLIX => new BulkClixPaymentService($config),
             PaymentGatewayConfig::GATEWAY_MOOLRE => new MoolrePaymentService($config),
             default => null
         };
