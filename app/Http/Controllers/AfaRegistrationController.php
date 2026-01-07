@@ -300,6 +300,26 @@ class AfaRegistrationController extends Controller
         $verificationResult = $this->paymentService->checkPaymentStatus($reference);
 
         if ($verificationResult['success']) {
+            $paymentStatus = strtolower((string) data_get($verificationResult, 'data.status', ''));
+
+            if ($paymentStatus === 'pending' || $paymentStatus === 'unknown') {
+                return redirect()->route('storefront.vendor', $registration->vendor->vendor_code)
+                    ->with('success', 'Payment pending. Please approve the MoMo prompt or try again shortly.');
+            }
+
+            if ($paymentStatus && ! in_array($paymentStatus, ['success', 'successful', 'completed'], true)) {
+                // Payment verification returned a terminal non-success state.
+                if ($registration->payment_status !== AfaRegistration::PAYMENT_COMPLETED) {
+                    $registration->update([
+                        'payment_status' => AfaRegistration::PAYMENT_FAILED,
+                        'status' => AfaRegistration::STATUS_CANCELLED,
+                    ]);
+                }
+
+                return redirect()->route('storefront.vendor', $registration->vendor->vendor_code)
+                    ->with('error', 'Payment failed. Please try again.');
+            }
+
             // Use dedicated AFA payment service to handle completion
             $this->afaPaymentService->completeRegistration($registration);
 
