@@ -50,7 +50,7 @@
             @endforeach
         </div>
 
-        <x-table :headers="['Vendor', 'MoMo Details', 'Amount', 'Status', 'Gateway', 'References', 'Timestamps', 'Error']">
+        <x-table :headers="['Vendor', 'MoMo Details', 'Amount', 'Status', 'Gateway', 'References', 'Timestamps', 'Error', 'Actions']">
             @forelse ($withdrawals as $withdrawal)
                 <tr class="hover:bg-gray-50">
                     <td class="px-6 py-4 whitespace-nowrap">
@@ -119,10 +119,30 @@
                             <span class="text-gray-400">—</span>
                         @endif
                     </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        @php
+                            $isProcessing = $withdrawal->status === \App\Models\VendorWithdrawal::STATUS_PROCESSING;
+                            $cooldownActive = $withdrawal->payout_attempted_at && $withdrawal->payout_attempted_at->gt(now()->subSeconds(60));
+                        @endphp
+
+                        @if($isProcessing)
+                            <form method="POST" action="{{ route('admin.withdrawals.refresh', $withdrawal) }}">
+                                @csrf
+                                <x-button type="submit" variant="outline" size="sm" :disabled="$cooldownActive" title="{{ $cooldownActive ? 'Please wait a moment before retrying.' : 'Refresh payout status now' }}">
+                                    Refresh
+                                </x-button>
+                            </form>
+                            @if($cooldownActive)
+                                <p class="text-xs text-gray-400 mt-1">Try again shortly</p>
+                            @endif
+                        @else
+                            <span class="text-gray-400">—</span>
+                        @endif
+                    </td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="8" class="px-6 py-4 text-center text-sm text-gray-500">No withdrawals match this filter.</td>
+                    <td colspan="9" class="px-6 py-4 text-center text-sm text-gray-500">No withdrawals match this filter.</td>
                 </tr>
             @endforelse
         </x-table>
