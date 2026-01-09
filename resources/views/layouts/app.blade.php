@@ -31,7 +31,20 @@
                 submitting: false,
                 orderMessage: '',
                 recipientPhone: '',
+                requiresInlineMomo: !!opts.requiresInlineMomo,
+                initialPaymentFailed: !!opts.initialPaymentFailed,
+                initialPaymentFailureMessage: opts.initialPaymentFailureMessage || '',
+                momoModalOpen: false,
                 payerPhone: '',
+                payerNetwork: '',
+                verifyRoute: opts.verifyRoute || '',
+                paymentPollTimer: null,
+                paymentPolling: false,
+                paymentInitiating: false,
+                paymentVerifyInFlight: false,
+                activePaymentReference: null,
+                paymentFailed: false,
+                paymentFailureMessage: '',
                 loadingServices: false,
                 loadingPackages: false,
                 orderRoute: opts.orderRoute || '',
@@ -54,7 +67,6 @@
                 },
 
                 get availablePackages() {
-
                     const raw = this.selectedService?.packages;
                     if (!raw) return [];
 
@@ -109,10 +121,51 @@
                                 this.selectedService = matches[0];
                             }
                         }
+
+						if (this.initialPaymentFailed && this.initialPaymentFailureMessage) {
+							this.showPaymentFailure(this.initialPaymentFailureMessage);
+						}
                     });
                 },
 
                 // Methods
+                confirmMomoDetails() {
+                    if (!this.payerPhone || !this.payerNetwork) {
+                        this.orderMessage = 'Please enter your MoMo number and select network.';
+                        return;
+                    }
+
+                    this.momoModalOpen = false;
+                    // Re-attempt submit with payer details.
+                    this.submitOrder();
+                },
+
+                cancelMomoDetails() {
+                    this.momoModalOpen = false;
+                },
+
+                showPaymentFailure(message) {
+                    this.paymentFailureMessage = message || 'Payment failed. Please try again.';
+                    this.paymentFailed = true;
+
+                    // Auto-return user to checkout after a short moment.
+                    setTimeout(() => {
+                        if (this.paymentFailed) {
+                            this.dismissPaymentFailure();
+                        }
+                    }, 2500);
+                },
+
+                dismissPaymentFailure() {
+                    this.paymentFailed = false;
+                    this.paymentFailureMessage = '';
+                    this.orderMessage = '';
+                    this.paymentInitiating = false;
+                    this.paymentPolling = false;
+                    this.submitting = false;
+                    this.scrollToCheckout();
+                },
+
                 selectCategory(cat) {
                     if (!cat) return;
                     this.selectedCategory = cat;
@@ -195,13 +248,35 @@
                 },
 
                 async submitOrder() {
+                    if (this.paymentPolling) {
+                        return;
+                    }
+
+                    if (this.paymentFailed) {
+                        return;
+                    }
+
                     if (!this.selectedPackage) {
                         this.orderMessage = 'Please select a package first.';
                         return;
                     }
 
+                    if (this.requiresInlineMomo && (!this.payerPhone || !this.payerNetwork)) {
+                        this.momoModalOpen = true;
+                        this.orderMessage = '';
+                        return;
+                    }
+
                     this.submitting = true;
                     this.orderMessage = '';
+
+                    const shouldShowInlineOverlayEarly = this.requiresInlineMomo && this.payerPhone && this.payerNetwork;
+                    if (shouldShowInlineOverlayEarly) {
+                        // Give immediate feedback; the gateway initiation call can take a few seconds.
+                        this.paymentInitiating = true;
+                        this.paymentPolling = true;
+                        this.orderMessage = 'Initiating payment… Please wait for the MoMo prompt.';
+                    }
 
                     const payload = {
                         vendor_id: this.vendorId,
@@ -213,11 +288,15 @@
                         service_purchased: this.selectedPackage?.name || this.selectedPackage?.title || this.selectedService?.name || null,
                         amount: this.selectedPackage?.price,
                         recipient_phone: this.recipientPhone,
-                        payer_phone: this.payerPhone,
                         is_reseller_product: this.selectedPackage?.is_reseller_product ? 1 : 0,
                         reseller_product_id: this.selectedPackage?.reseller_product_id || null,
                         original_product_id: this.selectedPackage?.original_product_id || this.selectedPackage?.id,
                     };
+
+                    if (this.requiresInlineMomo) {
+                        payload.payer_phone = this.payerPhone;
+                        payload.payer_network = this.payerNetwork;
+                    }
 
                     try {
                         const res = await fetch(this.orderRoute, {
@@ -232,16 +311,46 @@
                         });
 
                         if (!res.ok) {
-                            const text = await res.text();
-                            throw new Error(text || 'Order submission failed');
+                            let message = '';
+                            try {
+                                const data = await res.json();
+                                if (data?.message) {
+                                    message = data.message;
+                                } else if (data?.errors && typeof data.errors === 'object') {
+                                    const firstField = Object.keys(data.errors)[0];
+                                    const firstMsg = Array.isArray(data.errors[firstField]) ? data.errors[firstField][0] : String(data.errors[firstField]);
+                                    message = firstMsg;
+                                }
+                            } catch (e) {
+                                // Fallback for non-JSON responses
+                                message = await res.text();
+                            }
+                            throw new Error(message || 'Order submission failed');
                         }
 
                         const resp = await res.json();
                         if (resp.success) {
+                            // Inline gateways (e.g. BulkClix): do not redirect away; poll for completion.
+                            if (this.requiresInlineMomo && resp.reference && this.verifyRoute) {
+                                this.paymentInitiating = false;
+                                this.orderMessage = resp.message || 'Payment initiated. Please approve the MoMo prompt.';
+                                this.startPaymentPolling(resp.reference);
+                                return;
+                            }
+
                             if (resp.redirect) {
                                 window.location.href = resp.redirect;
                                 return;
                             }
+
+                            // Fallback: if a gateway returned no redirect but did return a reference, poll.
+                            if (resp.reference && this.verifyRoute) {
+                                this.paymentInitiating = false;
+                                this.orderMessage = resp.message || 'Payment initiated. Please complete payment.';
+                                this.startPaymentPolling(resp.reference);
+                                return;
+                            }
+
                             this.orderMessage = resp.message || 'Order submitted successfully';
                         } else {
                             this.orderMessage = resp.message || 'Order failed';
@@ -251,7 +360,118 @@
                         this.orderMessage = err.message || 'An error occurred while submitting the order';
                     } finally {
                         this.submitting = false;
+                        // If initiation failed before we got a reference, drop the overlay.
+                        if (this.paymentInitiating && !this.activePaymentReference) {
+                            this.paymentInitiating = false;
+                            this.paymentPolling = false;
+                        }
                     }
+                },
+
+                stopPaymentPolling(message = null) {
+                    if (this.paymentPollTimer) {
+                        clearTimeout(this.paymentPollTimer);
+                        this.paymentPollTimer = null;
+                    }
+                    this.paymentVerifyInFlight = false;
+                    this.paymentInitiating = false;
+                    this.paymentPolling = false;
+                    this.activePaymentReference = null;
+
+                    if (message) {
+                        this.showPaymentFailure(message);
+                    }
+                },
+
+                startPaymentPolling(reference) {
+                    // Reset any previous poller.
+                    this.stopPaymentPolling();
+
+                    this.paymentPolling = true;
+                    this.paymentInitiating = false;
+                    this.activePaymentReference = reference;
+
+                    const startedAt = Date.now();
+                    const maxMs = 2 * 60 * 1000; // 2 minutes
+
+                    const nextIntervalMs = (attempt) => {
+                        // Faster early polling (gateway often updates within the first ~10–20s)
+                        if (attempt < 6) return 1500;
+                        if (attempt < 14) return 2000;
+                        return 3000;
+                    };
+
+                    const pollOnce = async (attempt = 0) => {
+                        if (!this.verifyRoute) {
+                            this.stopPaymentPolling('Unable to verify payment at the moment.');
+                            return;
+                        }
+
+                        // If another payment has started, stop this one.
+                        if (this.activePaymentReference !== reference) {
+                            return;
+                        }
+
+                        // Stop after timeout.
+                        if (Date.now() - startedAt > maxMs) {
+                            this.stopPaymentPolling('Payment could not be confirmed. Please try again or use “Track Your Order”.');
+                            return;
+                        }
+
+                        // Prevent overlapping verify calls.
+                        if (this.paymentVerifyInFlight) {
+                            this.paymentPollTimer = setTimeout(() => pollOnce(attempt + 1), nextIntervalMs(attempt));
+                            return;
+                        }
+
+                        this.paymentVerifyInFlight = true;
+                        try {
+                            const res = await fetch(this.verifyRoute, {
+                                method: 'POST',
+                                credentials: 'same-origin',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                                    'Accept': 'application/json'
+                                },
+                                body: JSON.stringify({ reference })
+                            });
+
+                            if (res.ok) {
+                                const data = await res.json();
+
+                                if (data?.status === 'success' && data?.redirect) {
+                                    // Keep overlay visible while navigating.
+                                    this.orderMessage = data.message || 'Payment completed. Redirecting…';
+                                    this.activePaymentReference = reference;
+                                    if (this.paymentPollTimer) {
+                                        clearTimeout(this.paymentPollTimer);
+                                        this.paymentPollTimer = null;
+                                    }
+                                    window.location.href = data.redirect;
+                                    return;
+                                }
+
+                                if (data?.status === 'failed') {
+                                    this.stopPaymentPolling(data.message || 'Payment failed. Please try again.');
+                                    return;
+                                }
+
+                                // Pending: keep waiting.
+                                if (data?.message) {
+                                    this.orderMessage = data.message;
+                                }
+                            }
+                        } catch (e) {
+                            // Ignore transient network errors.
+                        } finally {
+                            this.paymentVerifyInFlight = false;
+                        }
+
+                        this.paymentPollTimer = setTimeout(() => pollOnce(attempt + 1), nextIntervalMs(attempt));
+                    };
+
+                    pollOnce(0);
                 }
             };
         }
