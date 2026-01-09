@@ -23,27 +23,26 @@ class PaymentCallbackController extends Controller
 			return response()->json(['success' => false, 'message' => 'Missing payment reference'], 400);
 		}
 
-		$verification = $this->paymentService->checkPaymentStatus($reference);
-		if (! ($verification['success'] ?? false)) {
-			Log::warning('Payment verification failed', ['reference' => $reference, 'response' => $verification]);
-			return redirect()->route('checkout.show')->withErrors(['payment' => $verification['message'] ?? 'Verification failed']);
-		}
-
 		$order = Order::where('payment_reference', $reference)->first();
 		if (! $order) {
 			return response()->json(['success' => false, 'message' => 'Order not found for reference'], 404);
 		}
 
-		$paymentStatus = strtolower((string) data_get($verification, 'data.status', ''));
-
-		if ($paymentStatus === 'pending' || $paymentStatus === 'unknown') {
-			return redirect()->route('checkout.show')
-				->with('payment_pending', true)
-				->with('payment_reference', $reference)
-				->with('payment_message', 'Payment pending. Please wait for confirmation.');
+		$verification = $this->paymentService->checkPaymentStatus($reference);
+		if (! ($verification['success'] ?? false)) {
+			Log::warning('Payment verification failed', ['reference' => $reference, 'response' => $verification]);
+			return $this->redirectBackToStoreOrCheckout($order, $verification['message'] ?? 'Verification failed', true);
 		}
 
-		if ($paymentStatus && $paymentStatus !== 'success') {
+		$paymentStatus = strtolower((string) data_get($verification, 'data.status', ''));
+
+		if ($paymentStatus === 'pending' || $paymentStatus === 'unknown' || $paymentStatus === '') {
+			return $this->redirectBackToStoreOrCheckout($order, 'Payment pending. Please wait for confirmation.', false);
+		}
+
+		$isSuccess = in_array($paymentStatus, ['success', 'successful', 'completed', 'paid'], true);
+
+		if (! $isSuccess) {
 			$order->update([
 				'payment_status' => 'failed',
 				'status' => 'Failed',
@@ -52,7 +51,7 @@ class PaymentCallbackController extends Controller
 				->whereNotIn('payment_status', ['completed', 'successful'])
 				->update(['payment_status' => 'failed']);
 
-			return redirect()->route('checkout.show')->withErrors(['payment' => 'Payment failed.']);
+			return $this->redirectBackToStoreOrCheckout($order, 'Payment failed.', true);
 		}
 
 		// Update order amount if gateway returned it.
@@ -70,5 +69,35 @@ class PaymentCallbackController extends Controller
 		$this->paymentService->completeOrder($order);
 
 		return redirect()->route('checkout.success', ['order' => $order->id]);
+	}
+
+	private function redirectBackToStoreOrCheckout(Order $order, string $message, bool $isError)
+	{
+		try {
+			$order->loadMissing('vendor');
+		} catch (\Throwable $e) {
+			// Best-effort only; fall back to checkout.
+		}
+
+		$vendorCode = $order->vendor?->vendor_code;
+		if (is_string($vendorCode) && $vendorCode !== '') {
+			if ($isError) {
+				return redirect()->route('storefront.vendor', $vendorCode)
+					->with('payment_failed', true)
+					->with('payment_message', $message);
+			}
+			return redirect()->route('storefront.vendor', $vendorCode)->with('success', $message);
+		}
+
+		if ($isError) {
+			return redirect()->route('checkout.show')
+				->with('payment_failed', true)
+				->with('payment_message', $message);
+		}
+
+		return redirect()->route('checkout.show')
+			->with('payment_pending', true)
+			->with('payment_reference', $order->payment_reference)
+			->with('payment_message', $message);
 	}
 }
