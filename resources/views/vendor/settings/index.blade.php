@@ -66,6 +66,8 @@
                             name="phone_number" 
                             id="phone_number"
                             value="{{ old('phone_number', $vendor->phone_number) }}"
+                            inputmode="tel"
+                            autocomplete="tel"
                             class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue"
                             required
                         >
