@@ -357,6 +357,8 @@
                             name="recipient_phone_number"
                             x-model="recipientPhone"
                             placeholder="Recipient Phone"
+                            inputmode="tel"
+                            autocomplete="tel"
                             required
                             class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all text-sm"
                         >
@@ -367,6 +369,8 @@
                             name="mobile_money_number"
                             x-model="momoNumber"
                             placeholder="MoMo Number"
+                            inputmode="tel"
+                            autocomplete="tel"
                             required
                             class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all text-sm"
                         >
