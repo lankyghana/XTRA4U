@@ -12,6 +12,7 @@ class Order extends Model
     protected $fillable = [
         'recipient_phone_number',
         'mobile_money_number',
+        'mobile_money_network',
         'service_purchased',
         'amount_paid',
         'vendor_id',
