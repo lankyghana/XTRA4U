@@ -34,6 +34,8 @@
                             id="phone" 
                             x-model="phone"
                             placeholder="e.g., 0244123456"
+                            inputmode="tel"
+                            autocomplete="tel"
                             class="block w-full pl-12 pr-4 py-4 text-lg border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue transition-colors"
                             required
                         >
