@@ -13,7 +13,11 @@
         vendorId: {{ $vendor->id ?? 'null' }},
         categories: {!! json_encode($categories ?? []) !!},
         services: {!! json_encode($services ?? []) !!},
-        orderRoute: '{{ route('checkout.process') }}'
+        requiresInlineMomo: {{ ($requiresInlineMomo ?? false) ? 'true' : 'false' }},
+        initialPaymentFailed: {{ session('payment_failed') ? 'true' : 'false' }},
+        initialPaymentFailureMessage: {!! json_encode(session('payment_message') ?? null) !!},
+        orderRoute: '{{ route('checkout.process') }}',
+        verifyRoute: '{{ route('checkout.verify') }}'
     };
 </script>
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-24 md:pb-0"
@@ -60,10 +64,14 @@
                 {{-- Search Form --}}
                 <form @submit.prevent="checkStatus" class="flex gap-2">
                     <div class="flex-1 relative">
+                        <label for="order-track-phone" class="sr-only">Enter recipient phone number</label>
                         <input 
                             type="tel" 
+                            id="order-track-phone"
+                            name="order_track_phone"
                             x-model="phone"
                             placeholder="Enter recipient phone number"
+                            autocomplete="tel"
                             class="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
                         >
                         <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -306,29 +314,179 @@
                 <input type="hidden" name="reseller_product_id" :value="selectedPackage?.reseller_product_id">
                 <input type="hidden" name="original_product_id" :value="selectedPackage?.original_product_id">
 
-                {{-- minimal checkout fields (recipient phone & payer mobile money) --}}
+                {{-- minimal checkout fields (recipient phone) --}}
                 <div class="mb-3">
-                    <label class="block text-sm text-gray-600 mb-1">Recipient phone</label>
-                    <input type="tel" name="recipient_phone" x-model="recipientPhone" required
+                    <label for="recipient_phone" class="block text-sm text-gray-600 mb-1">Recipient phone</label>
+                    <input type="tel" id="recipient_phone" name="recipient_phone" x-model="recipientPhone" required
                         x-ref="recipientPhoneInput"
-                        class="w-full border border-gray-200 rounded-lg p-3 focus:ring-2 focus:ring-purple-300">
-                </div>
-
-                <div class="mb-4">
-                    <label class="block text-sm text-gray-600 mb-1">Mobile money (payer)</label>
-                    <input type="tel" name="payer_phone" x-model="payerPhone" required
+                        autocomplete="tel"
                         class="w-full border border-gray-200 rounded-lg p-3 focus:ring-2 focus:ring-purple-300">
                 </div>
 
                 <button type="submit"
                     class="w-full bg-purple-600 hover:bg-purple-700 text-white rounded-xl py-3 font-semibold disabled:opacity-60"
-                    :disabled="submitting">
-                    <span x-show="!submitting">Proceed to Payment</span>
+                    :disabled="submitting || paymentPolling || paymentFailed">
+                    <span x-show="!submitting && !paymentPolling && !paymentFailed">Proceed to Payment</span>
                     <span x-show="submitting">Processing…</span>
+                    <span x-show="paymentPolling">Waiting for verification…</span>
+                    <span x-show="paymentFailed">Payment failed</span>
                 </button>
             </form>
 
+            {{-- Inline MoMo Modal (for non-redirect gateways like BulkClix) --}}
+            <div x-show="momoModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center">
+                <div class="absolute inset-0 bg-black/50" @click="cancelMomoDetails"></div>
+                <div class="relative bg-white rounded-xl shadow-md w-full max-w-md p-6 mx-4">
+                    <h4 class="text-lg font-semibold mb-4">Mobile Money Payment</h4>
+                    <div class="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                        <div class="flex items-start gap-3">
+                            <svg class="w-5 h-5 text-amber-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"/>
+                            </svg>
+                            <div class="text-sm text-amber-900">
+                                <p class="font-semibold">Didn’t receive the MoMo prompt?</p>
+                                <p class="mt-1 text-amber-800">
+                                    You can approve the payment manually from your MoMo menu:
+                                </p>
+                                <ol class="mt-2 list-decimal pl-5 space-y-1 text-amber-800">
+                                    <li>Dial <span class="font-semibold">*170#</span></li>
+                                    <li>Select <span class="font-semibold">6</span> (My Wallet)</li>
+                                    <li>Select <span class="font-semibold">3</span> (My Approvals)</li>
+                                    <li>Approve the pending transaction</li>
+                                </ol>
+                                <p class="mt-2 text-xs text-amber-700">
+                                    Tip: Make sure your phone has network signal and you have enough balance to cover any MoMo charges.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="payer_phone" class="block text-sm text-gray-600 mb-1">MoMo number</label>
+                        <input type="tel"
+                               id="payer_phone"
+                               name="payer_phone"
+                               x-model="payerPhone"
+                               inputmode="tel"
+                               autocomplete="tel"
+                               class="w-full border border-gray-200 rounded-lg p-3 focus:ring-2 focus:ring-purple-300"
+                               placeholder="e.g. 0551234567">
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="payer_network" class="block text-sm text-gray-600 mb-1">Network</label>
+                        <select x-model="payerNetwork"
+                                id="payer_network"
+                                name="payer_network"
+                                class="w-full border border-gray-200 rounded-lg p-3 focus:ring-2 focus:ring-purple-300">
+                            <option value="">Select network</option>
+                            <option value="MTN">MTN</option>
+                            <option value="TELECEL">Telecel</option>
+                            <option value="AIRTELTIGO">AirtelTigo</option>
+                        </select>
+                    </div>
+
+                    <div class="flex gap-3">
+                        <button type="button"
+                                class="flex-1 border border-gray-200 rounded-xl py-3 font-semibold text-gray-700 hover:bg-gray-50"
+                                @click="cancelMomoDetails">
+                            Cancel
+                        </button>
+                        <button type="button"
+                                class="flex-1 bg-purple-600 hover:bg-purple-700 text-white rounded-xl py-3 font-semibold"
+                                @click="confirmMomoDetails">
+                            Confirm & Pay
+                        </button>
+                    </div>
+
+                    <p class="text-xs text-gray-500 mt-3">Enter the number that will approve the payment prompt.</p>
+                </div>
+            </div>
+
             <div class="mt-4 text-sm text-gray-500" x-show="orderMessage" x-text="orderMessage"></div>
+        </div>
+
+        {{-- Full-screen verification overlay (inline gateways) --}}
+        <div x-show="paymentPolling" x-cloak class="fixed inset-0 z-50 flex items-center justify-center">
+            <div class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+            <div class="relative w-full max-w-lg mx-4 rounded-2xl bg-white shadow-2xl overflow-hidden">
+                <div class="p-6 sm:p-8">
+                    <div class="flex items-center gap-4">
+                        <div class="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-purple-50">
+                            <svg class="h-8 w-8 text-purple-600" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path d="M12 2a10 10 0 100 20 10 10 0 000-20z" stroke="currentColor" stroke-width="2" opacity="0.2" />
+                                <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                            <svg class="absolute -inset-1 h-16 w-16 animate-spin text-purple-600" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z"></path>
+                            </svg>
+                        </div>
+
+                        <div class="flex-1">
+                            <h3 class="text-xl font-semibold text-gray-900">Verifying your payment</h3>
+                            <p class="mt-1 text-sm text-gray-600">We’re confirming your Mobile Money transaction. This usually takes a moment.</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 rounded-xl border border-gray-100 bg-gray-50 p-4">
+                        <div class="flex items-start gap-3">
+                            <div class="mt-0.5 h-7 w-7 rounded-full bg-purple-100 flex items-center justify-center">
+                                <svg class="h-4 w-4 text-purple-700" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8.75 3.5a.75.75 0 001.5 0V9a.75.75 0 00-1.5 0v4.5zm.75-7.25a1 1 0 100 2 1 1 0 000-2z" clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                            <div class="text-sm text-gray-700">
+                                <div class="font-medium">Don’t close or refresh this page</div>
+                                <div class="mt-0.5 text-gray-600">If you received a MoMo prompt, please approve it to complete payment.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-6">
+                        <div class="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+                            <div class="h-2 w-1/3 rounded-full bg-purple-600 animate-pulse"></div>
+                        </div>
+                        <p class="mt-3 text-xs text-gray-500">You’ll be redirected automatically once payment is confirmed.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{-- Full-screen failure overlay --}}
+        <div x-show="paymentFailed" x-cloak class="fixed inset-0 z-50 flex items-center justify-center">
+            <div class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+            <div class="relative w-full max-w-lg mx-4 rounded-2xl bg-white shadow-2xl overflow-hidden">
+                <div class="p-6 sm:p-8">
+                    <div class="flex items-center gap-4">
+                        <div class="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50">
+                            <svg class="h-8 w-8 text-red-600" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path d="M12 2a10 10 0 100 20 10 10 0 000-20z" stroke="currentColor" stroke-width="2" opacity="0.2" />
+                                <path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                        </div>
+
+                        <div class="flex-1">
+                            <h3 class="text-xl font-semibold text-gray-900">Payment failed</h3>
+                            <p class="mt-1 text-sm text-gray-600" x-text="paymentFailureMessage || 'Your payment was not completed. Please try again.'"></p>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 rounded-xl border border-red-100 bg-red-50 p-4">
+                        <div class="text-sm text-red-800">
+                            You will be returned to checkout so you can try again.
+                        </div>
+                    </div>
+
+                    <div class="mt-6 flex gap-3">
+                        <button type="button"
+                                class="flex-1 bg-purple-600 hover:bg-purple-700 text-white rounded-xl py-3 font-semibold"
+                                @click="dismissPaymentFailure">
+                            Back to Checkout
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
 
     </div>
