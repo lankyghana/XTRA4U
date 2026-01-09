@@ -130,6 +130,7 @@ Route::post('/afa/store/{vendor:vendor_code}', [AfaRegistrationController::class
 Route::get('/afa/callback', [AfaRegistrationController::class, 'paymentCallback'])->name('afa.callback');
 Route::get('/afa/success/{reference}', [AfaRegistrationController::class, 'success'])->name('afa.success');
 Route::post('/afa/check-status', [AfaRegistrationController::class, 'checkStatus'])->name('afa.check-status');
+Route::post('/afa/verify', [AfaRegistrationController::class, 'verify'])->name('afa.verify');
 
 Route::get('/', [StorefrontController::class, 'index'])->name('storefront.index');
 Route::get('/about', fn() => view('pages.about'))->name('about');
@@ -236,6 +237,7 @@ Route::middleware(['vendor.approved'])
     });
 Route::get('/checkout', [CheckoutController::class, 'show'])->name('checkout.show');
 Route::post('/checkout', [CheckoutController::class, 'process'])->name('checkout.process');
+Route::post('/checkout/verify', [CheckoutController::class, 'verify'])->name('checkout.verify');
 Route::get('/checkout/success/{order}', [CheckoutController::class, 'success'])->name('checkout.success');
 Route::get('/checkout/receipt/{order}', [CheckoutController::class, 'receipt'])->name('checkout.receipt');
 Route::middleware('prune.purchase.tokens')->group(function () {
@@ -269,6 +271,7 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
     Route::post('transactions/{transaction}/confirm-payment', [AdminTransactionController::class, 'confirmPayment'])
         ->name('transactions.confirm-payment');
     Route::get('withdrawals', [AdminWithdrawalController::class, 'index'])->name('withdrawals.index');
+    Route::post('withdrawals/{withdrawal}/refresh', [AdminWithdrawalController::class, 'refresh'])->name('withdrawals.refresh');
 
     // High-volume recipient number audit log
     Route::get('recipient-numbers', [\App\Http\Controllers\AdminRecipientNumberController::class, 'index'])->name('recipient-numbers.index');
