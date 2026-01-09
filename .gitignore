@@ -16,6 +16,7 @@
 /public/hot
 /public/storage
 /public/build/*.map
+/bootstrap/cache/*.php
 /storage/framework/cache
 /storage/framework/sessions
 /storage/framework/views
