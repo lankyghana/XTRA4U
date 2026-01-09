@@ -590,7 +590,17 @@ class VendorDashboardController extends Controller
 			]);
 		});
 
+		// Queue a payout job (preferred) and also attempt an immediate sync run.
+		// This improves UX on hosts where queue workers/scheduler are not always running.
 		\App\Jobs\ProcessVendorWithdrawalPayout::dispatch($withdrawal->id)->afterCommit();
+		try {
+			\App\Jobs\ProcessVendorWithdrawalPayout::dispatchSync($withdrawal->id);
+		} catch (\Throwable $e) {
+			Log::warning('Immediate withdrawal payout attempt failed; queued job will retry', [
+				'withdrawal_id' => $withdrawal->id,
+				'error' => $e->getMessage(),
+			]);
+		}
 
 		try {
 			if (!empty($vendor->email)) {
