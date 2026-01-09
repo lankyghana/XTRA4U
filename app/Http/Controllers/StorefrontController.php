@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Vendor;
 use App\Models\NetworkService;
 use App\Models\ResellerProduct;
+use App\Models\PaymentGatewayConfig;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Collection;
@@ -127,6 +128,8 @@ class StorefrontController extends Controller
 			'vendor' => $vendor,
 			'services' => $services,
 			'categories' => $categories,
+			// Inline/API gateways like BulkClix require a MoMo number (and network) before initiating payment.
+			'requiresInlineMomo' => PaymentGatewayConfig::defaultCollectionRequiresPayerPhone(),
 		]);
 	}
 
