@@ -98,6 +98,9 @@ class ProcessVendorWithdrawalPayout implements ShouldQueue
                 if (empty($locked->payout_transaction_id) && !empty($result['transaction_id'])) {
                     $updates['payout_transaction_id'] = $result['transaction_id'];
                 }
+                if (!empty($result['message'])) {
+                    $updates['error_message'] = (string) $result['message'];
+                }
                 if (!empty($updates)) {
                     $locked->update($updates);
                 }
