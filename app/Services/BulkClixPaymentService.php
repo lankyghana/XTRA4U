@@ -81,7 +81,11 @@ class BulkClixPaymentService implements CollectsPayments, HandlesGenericPayments
         $local = $this->toLocalGhanaNumber($phone);
         $prefix = substr($local, 0, 3);
 
-        $mtn = ['024', '025', '054', '055', '059'];
+        // Ghana MoMo prefixes (best-effort; numbers can evolve over time).
+        // MTN: 024/025/053/054/055/058/059
+        // Telecel (Vodafone): 020/050
+        // AirtelTigo: 026/027/056/057
+        $mtn = ['024', '025', '053', '054', '055', '058', '059'];
         $telecel = ['020', '050'];
         $airteltigo = ['026', '027', '056', '057'];
 
@@ -139,11 +143,14 @@ class BulkClixPaymentService implements CollectsPayments, HandlesGenericPayments
             ];
         }
 
-        $network = $this->guessBulkClixNetwork($localPhone);
+        $providedNetwork = strtoupper(trim((string) ($metadata['network'] ?? $metadata['payer_network'] ?? '')));
+        $network = in_array($providedNetwork, ['MTN', 'TELECEL', 'AIRTELTIGO'], true)
+            ? $providedNetwork
+            : $this->guessBulkClixNetwork($localPhone);
         if (! $network) {
             return [
                 'success' => false,
-                'message' => 'Unable to determine MoMo network for this number. Please use a supported network (MTN/Telecel/AirtelTigo).',
+                'message' => 'Unable to determine MoMo network for this number. Please enter a valid Ghana MoMo number (e.g. MTN: 024/025/053/054/055/058/059, Telecel: 020/050, AirtelTigo: 026/027/056/057).',
                 'reference' => $reference,
             ];
         }
@@ -181,8 +188,8 @@ class BulkClixPaymentService implements CollectsPayments, HandlesGenericPayments
                     'success' => true,
                     'message' => $json['message'] ?? 'Payment initiated. Please approve the MoMo prompt to complete.',
                     'reference' => $transactionId,
-                    // Route the user to our callback verifier.
-                    'authorization_url' => $callbackWithRef,
+                    // Inline flow: do not redirect away; the frontend should poll a verify endpoint.
+                    'authorization_url' => null,
                     'transaction_id' => data_get($json, 'data.ext_transaction_id') ?: data_get($json, 'data.transaction_id'),
                     'data' => $json['data'] ?? null,
                 ];
@@ -235,11 +242,14 @@ class BulkClixPaymentService implements CollectsPayments, HandlesGenericPayments
             ];
         }
 
-        $network = $this->guessBulkClixNetwork($localPhone);
+        $providedNetwork = strtoupper(trim((string) ($order->mobile_money_network ?? '')));
+        $network = in_array($providedNetwork, ['MTN', 'TELECEL', 'AIRTELTIGO'], true)
+            ? $providedNetwork
+            : $this->guessBulkClixNetwork($localPhone);
         if (! $network) {
             return [
                 'success' => false,
-                'message' => 'Unable to determine MoMo network for this number. Please use a supported network (MTN/Telecel/AirtelTigo).',
+                'message' => 'Unable to determine MoMo network for this number. Please enter a valid Ghana MoMo number (e.g. MTN: 024/025/053/054/055/058/059, Telecel: 020/050, AirtelTigo: 026/027/056/057).',
                 'reference' => null,
             ];
         }
@@ -279,8 +289,8 @@ class BulkClixPaymentService implements CollectsPayments, HandlesGenericPayments
                     'success' => true,
                     'message' => $json['message'] ?? 'Payment initiated. Please approve the MoMo prompt to complete.',
                     'reference' => $transactionId,
-                    // Route the user to our callback verifier (it will show pending/success/failure).
-                    'authorization_url' => route('payment.callback') . '?reference=' . urlencode($transactionId),
+                    // Inline flow: do not redirect away; the frontend will poll /checkout/verify.
+                    'authorization_url' => null,
                     // Helps us persist the provider transaction id early when available.
                     'transaction_id' => data_get($json, 'data.ext_transaction_id') ?: data_get($json, 'data.transaction_id'),
                     'data' => $json['data'] ?? null,
