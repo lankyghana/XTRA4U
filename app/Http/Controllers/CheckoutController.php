@@ -6,7 +6,9 @@ use App\Models\Product;
 use App\Models\Vendor;
 use App\Models\ResellerProduct;
 use App\Models\NetworkService;
+use App\Models\PaymentGatewayConfig;
 use App\Services\PaymentService;
+use App\Services\GatewayManager;
 use Illuminate\Http\Request;
 use Barryvdh\DomPDF\Facade\Pdf;
 
@@ -153,6 +155,8 @@ class CheckoutController extends Controller
 
 	public function process(Request $request)
 	{
+		$gatewayName = (new GatewayManager())->getDefaultGatewayName(PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION) ?? 'paystack';
+
 		$validated = $request->validate([
 			'vendor_id' => 'required|exists:vendors,id',
 			'category_id' => 'nullable|string',
@@ -163,7 +167,9 @@ class CheckoutController extends Controller
 			'service_purchased' => 'nullable|string|max:255',
 			'amount' => 'required|numeric|min:0.1',
 			'recipient_phone' => 'required|string',
-			'payer_phone' => 'required|string',
+			// Backward compatible: older clients may still send payer_phone.
+			'payer_phone' => 'nullable|string',
+			'payer_network' => 'nullable|string|in:MTN,TELECEL,AIRTELTIGO',
 			'is_reseller_product' => 'sometimes|boolean',
 			'reseller_product_id' => 'nullable',
 			'original_product_id' => 'nullable',
@@ -199,9 +205,14 @@ class CheckoutController extends Controller
 			?? ($validated['service_name'] ?? null)
 			?? 'Unknown Service';
 
+		// orders.mobile_money_number is NOT NULL in the schema.
+		// For redirect/hosted gateways we don't require payer_phone on our UI, so fall back to recipient.
+		$payerPhoneForStorage = (string) ($validated['payer_phone'] ?? $validated['recipient_phone']);
+
 		$order = Order::create([
 			'recipient_phone_number' => $validated['recipient_phone'],
-			'mobile_money_number' => $validated['payer_phone'],
+			'mobile_money_number' => $payerPhoneForStorage,
+			'mobile_money_network' => $validated['payer_network'] ?? null,
 			'service_purchased' => $resolvedServiceName,
 			'amount_paid' => $validated['amount'],
 			'vendor_id' => $validated['vendor_id'],
@@ -214,7 +225,7 @@ class CheckoutController extends Controller
 			'is_reseller_order' => $isResellerOrder,
 			'status' => 'Pending',
 			'payment_status' => 'unpaid',
-			'payment_gateway' => 'paystack',
+			'payment_gateway' => $gatewayName,
 		]);
 
 		// Use vendor's email for Paystack instead of requiring customer email
@@ -240,6 +251,80 @@ class CheckoutController extends Controller
 			'reference' => $init['reference'] ?? null,
 			'redirect' => $init['authorization_url'] ?? null,
 			'callback_url' => route('payment.callback'),
+			'verify_url' => route('checkout.verify'),
+		]);
+	}
+
+	public function verify(Request $request)
+	{
+		$validated = $request->validate([
+			'reference' => 'required|string',
+		]);
+
+		$reference = (string) $validated['reference'];
+		$order = Order::where('payment_reference', $reference)->first();
+		if (! $order) {
+			return response()->json([
+				'success' => false,
+				'message' => 'Order not found for reference.',
+			], 404);
+		}
+
+		$verification = $this->paymentService->checkPaymentStatus($reference);
+		if (! ($verification['success'] ?? false)) {
+			return response()->json([
+				'success' => false,
+				'message' => $verification['message'] ?? 'Verification failed.',
+			], 422);
+		}
+
+		$paymentStatus = strtolower((string) data_get($verification, 'data.status', ''));
+		if ($paymentStatus === 'pending' || $paymentStatus === 'unknown' || $paymentStatus === '') {
+			return response()->json([
+				'success' => true,
+				'status' => 'pending',
+				'message' => 'Payment pending. Please approve the MoMo prompt.',
+				'order_id' => $order->id,
+			]);
+		}
+
+		$isSuccess = in_array($paymentStatus, ['success', 'successful', 'completed', 'paid'], true);
+
+		if (! $isSuccess) {
+			$order->update([
+				'payment_status' => 'failed',
+				'status' => 'Failed',
+			]);
+			\App\Models\Transaction::where('order_id', $order->id)
+				->whereNotIn('payment_status', ['completed', 'successful'])
+				->update(['payment_status' => 'failed']);
+
+			return response()->json([
+				'success' => true,
+				'status' => 'failed',
+				'message' => 'Payment failed.',
+				'order_id' => $order->id,
+			]);
+		}
+
+		$amount = data_get($verification, 'data.amount');
+		if ($amount) {
+			$numericAmount = (float) $amount;
+			if (($order->payment_gateway ?? null) === 'paystack') {
+				$order->amount_paid = $numericAmount / 100;
+			} else {
+				$order->amount_paid = $numericAmount;
+			}
+		}
+
+		$this->paymentService->completeOrder($order);
+
+		return response()->json([
+			'success' => true,
+			'status' => 'success',
+			'message' => 'Payment completed.',
+			'order_id' => $order->id,
+			'redirect' => route('checkout.success', ['order' => $order->id]),
 		]);
 	}
 
