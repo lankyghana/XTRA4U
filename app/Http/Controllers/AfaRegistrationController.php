@@ -63,6 +63,8 @@ class AfaRegistrationController extends Controller
             'sourceVendor' => $sourceVendor,
             'regions' => AfaRegistration::getRegions(),
             'idTypes' => AfaRegistration::getIdTypes(),
+            // Inline/API gateways like BulkClix require payer phone/network before initiation.
+            'requiresInlineMomo' => PaymentGatewayConfig::defaultCollectionRequiresPayerPhone(),
         ]);
     }
 
@@ -71,6 +73,8 @@ class AfaRegistrationController extends Controller
      */
     public function store(Request $request, Vendor $vendor)
     {
+        $requiresInlineMomo = PaymentGatewayConfig::defaultCollectionRequiresPayerPhone();
+
         // Build validation rules based on ID type
         $idType = $request->input('id_type');
         $idNumberRules = ['required', 'string', 'max:50'];
@@ -96,7 +100,13 @@ class AfaRegistrationController extends Controller
             'location' => ['required', 'string', 'max:255'],
             'region' => ['required', 'string', 'max:100'],
             'occupation' => ['nullable', 'string', 'max:255'],
-            'payer_phone' => ['required', 'string', 'min:10', 'max:15'],
+			// Inline/API gateways like BulkClix require payer phone/network before initiation.
+			'payer_phone' => $requiresInlineMomo
+				? ['required', 'string', 'min:10', 'max:15']
+				: ['nullable', 'string', 'min:10', 'max:15'],
+			'payer_network' => $requiresInlineMomo
+				? ['required', 'string', 'in:MTN,TELECEL,AIRTELTIGO']
+				: ['nullable', 'string', 'in:MTN,TELECEL,AIRTELTIGO'],
         ], [
             'id_number.regex' => $this->getIdNumberErrorMessage($idType),
         ]);
@@ -220,8 +230,9 @@ class AfaRegistrationController extends Controller
 
             DB::commit();
 
-            // Use the selling vendor's email for payment (reseller or direct)
-            $paymentEmail = $vendor->email;
+            // Use the selling vendor's email for payment (reseller or direct).
+            // Some vendor accounts may not have an email set; payment gateways like Paystack require one.
+            $paymentEmail = $vendor->email ?: 'noreply@xtra4u.com';
 
             // Initiate payment using the active default payment gateway
             $paymentResult = $this->paymentService->initiateGenericPayment(
@@ -236,6 +247,10 @@ class AfaRegistrationController extends Controller
                     'reseller_vendor_id' => $isResellerOrder ? $vendor->id : null,
                     'customer_name' => $registration->full_name,
                     'is_reseller_order' => $isResellerOrder,
+                    // Needed for inline/API collections like BulkClix.
+                    'phone_number' => $validated['payer_phone'] ?? null,
+					'network' => $validated['payer_network'] ?? null,
+					'payer_network' => $validated['payer_network'] ?? null,
                 ]
             );
 
@@ -246,11 +261,36 @@ class AfaRegistrationController extends Controller
                     'payment_gateway' => $paymentResult['gateway_name'] ?? PaymentGatewayConfig::getDefault(PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION)?->gateway_name,
                 ]);
 
-                return redirect($paymentResult['authorization_url']);
+                // AJAX flow (inline gateways like BulkClix): return payload so frontend can poll.
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => true,
+                        'message' => $paymentResult['message'] ?? 'Payment initiated. Please approve the MoMo prompt.',
+                        'reference' => $paymentResult['reference'] ?? null,
+                        'redirect' => $paymentResult['authorization_url'] ?? null,
+                        'verify_url' => route('afa.verify'),
+                        'success_url' => route('afa.success', ['reference' => $registration->reference]),
+                    ]);
+                }
+
+                // Non-AJAX fallback.
+                if (!empty($paymentResult['authorization_url'])) {
+                    return redirect($paymentResult['authorization_url']);
+                }
+
+                return redirect()->route('afa.register', $vendor->vendor_code)
+                    ->with('success', 'Payment initiated. Please approve the MoMo prompt, then check status.');
             }
 
             // Payment initiation failed
             $registration->update(['status' => AfaRegistration::STATUS_CANCELLED]);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payment could not be initiated: ' . ($paymentResult['message'] ?? 'Unknown error'),
+                ], 422);
+            }
 
             return back()->with('error', 'Payment could not be initiated: ' . ($paymentResult['message'] ?? 'Unknown error'));
 
@@ -261,8 +301,88 @@ class AfaRegistrationController extends Controller
                 'error' => $e->getMessage(),
             ]);
 
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'An error occurred. Please try again.',
+                ], 500);
+            }
+
             return back()->with('error', 'An error occurred. Please try again.');
         }
+    }
+
+    /**
+     * Verify AFA payment for inline polling flows.
+     */
+    public function verify(Request $request)
+    {
+        $validated = $request->validate([
+            'reference' => ['required', 'string'],
+        ]);
+
+        $paymentReference = (string) $validated['reference'];
+
+        $registration = AfaRegistration::where('payment_reference', $paymentReference)
+            ->with('vendor')
+            ->first();
+
+        if (! $registration) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Registration not found for reference.',
+            ], 404);
+        }
+
+        // Idempotency: if already marked paid, return success immediately.
+        if ($registration->payment_status === AfaRegistration::PAYMENT_COMPLETED) {
+            return response()->json([
+                'success' => true,
+                'status' => 'success',
+                'message' => 'Payment completed.',
+                'redirect' => route('afa.success', ['reference' => $registration->reference]),
+            ]);
+        }
+
+        $verification = $this->paymentService->checkPaymentStatus($paymentReference);
+        if (! ($verification['success'] ?? false)) {
+            return response()->json([
+                'success' => false,
+                'message' => $verification['message'] ?? 'Verification failed.',
+            ], 422);
+        }
+
+        $paymentStatus = strtolower((string) data_get($verification, 'data.status', ''));
+        if ($paymentStatus === 'pending' || $paymentStatus === 'unknown' || $paymentStatus === '') {
+            return response()->json([
+                'success' => true,
+                'status' => 'pending',
+                'message' => 'Payment pending. Please approve the MoMo prompt.',
+            ]);
+        }
+
+        $isSuccess = in_array($paymentStatus, ['success', 'successful', 'completed', 'paid'], true);
+        if (! $isSuccess) {
+            $registration->update([
+                'payment_status' => AfaRegistration::PAYMENT_FAILED,
+                'status' => AfaRegistration::STATUS_CANCELLED,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'status' => 'failed',
+                'message' => 'Payment failed.',
+            ]);
+        }
+
+        $this->afaPaymentService->completeRegistration($registration);
+
+        return response()->json([
+            'success' => true,
+            'status' => 'success',
+            'message' => 'Payment completed.',
+            'redirect' => route('afa.success', ['reference' => $registration->reference]),
+        ]);
     }
 
     /**
