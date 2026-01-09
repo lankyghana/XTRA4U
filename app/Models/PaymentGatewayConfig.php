@@ -199,6 +199,8 @@ class PaymentGatewayConfig extends Model
             self::GATEWAY_PAYSTACK => [
                 'name' => 'Paystack',
                 'types' => [self::TYPE_PAYMENT_COLLECTION, self::TYPE_PAYOUT],
+                // Redirect/hosted checkout: payer phone is collected on the gateway UI when needed.
+                'collection_flow' => 'redirect',
                 'capabilities' => self::defaultCapabilitiesFor(self::GATEWAY_PAYSTACK),
                 'config_fields' => [
                     'public_key' => 'Public Key',
@@ -219,6 +221,8 @@ class PaymentGatewayConfig extends Model
             self::GATEWAY_FLUTTERWAVE => [
                 'name' => 'Flutterwave',
                 'types' => [self::TYPE_PAYMENT_COLLECTION, self::TYPE_PAYOUT],
+                // Redirect/hosted checkout: payer phone is collected on the gateway UI when needed.
+                'collection_flow' => 'redirect',
                 'capabilities' => self::defaultCapabilitiesFor(self::GATEWAY_FLUTTERWAVE),
                 'config_fields' => [
                     'public_key' => 'Public Key',
@@ -239,6 +243,8 @@ class PaymentGatewayConfig extends Model
             self::GATEWAY_BULKCLIX => [
                 'name' => 'BulkClix',
                 'types' => [self::TYPE_PAYMENT_COLLECTION, self::TYPE_PAYOUT, self::TYPE_SMS],
+                // Inline/API MoMo collection: we must collect the payer phone number before initiating payment.
+                'collection_flow' => 'inline',
                 'capabilities' => self::defaultCapabilitiesFor(self::GATEWAY_BULKCLIX),
                 'config_fields_by_type' => [
                     self::TYPE_PAYMENT_COLLECTION => [
@@ -288,6 +294,8 @@ class PaymentGatewayConfig extends Model
             self::GATEWAY_MOOLRE => [
                 'name' => 'Moolre',
                 'types' => [self::TYPE_PAYMENT_COLLECTION, self::TYPE_PAYOUT],
+                // Redirect/hosted checkout.
+                'collection_flow' => 'redirect',
                 'capabilities' => self::defaultCapabilitiesFor(self::GATEWAY_MOOLRE),
                 // Moolre has distinct credentials for collections vs transfers.
                 // We model required fields by type to keep payout-only configs usable.
@@ -322,6 +330,27 @@ class PaymentGatewayConfig extends Model
                 ],
             ],
         ];
+    }
+
+    public static function collectionFlowFor(string $gatewayName): string
+    {
+        $info = static::getAvailableGateways()[$gatewayName] ?? [];
+        $flow = (string) ($info['collection_flow'] ?? 'redirect');
+
+        return in_array($flow, ['inline', 'redirect'], true) ? $flow : 'redirect';
+    }
+
+    public static function requiresPayerPhoneForCollectionGateway(string $gatewayName): bool
+    {
+        return static::collectionFlowFor($gatewayName) === 'inline';
+    }
+
+    public static function defaultCollectionRequiresPayerPhone(): bool
+    {
+        $gatewayName = static::getDefault(static::TYPE_PAYMENT_COLLECTION)?->gateway_name
+            ?? static::GATEWAY_PAYSTACK;
+
+        return static::requiresPayerPhoneForCollectionGateway($gatewayName);
     }
 
     /**
