@@ -135,6 +135,23 @@ class BulkClixPayoutService implements HandlesPayouts
                 ];
             }
 
+            // Some provider errors are operational/config-related and should not immediately fail+refund.
+            // Keep the withdrawal in processing so it can be retried after fixes (e.g. IP whitelisting).
+            $httpStatus = $response->status();
+            $providerMessage = (string) ($responseData['message'] ?? '');
+            $nonTerminalStatuses = [401, 403, 429, 500, 502, 503, 504];
+            if (in_array($httpStatus, $nonTerminalStatuses, true)) {
+                return [
+                    'success' => null,
+                    'pending' => true,
+                    'message' => $providerMessage !== ''
+                        ? $providerMessage
+                        : ('Payout temporarily unavailable (HTTP ' . $httpStatus . '). Please retry later.'),
+                    'reference' => $clientReference,
+                    'http_status' => $httpStatus,
+                ];
+            }
+
             Log::error('BulkClix payout failed', [
                 'withdrawal_id' => $withdrawal->id,
                 'http_status' => $response->status(),
@@ -176,6 +193,18 @@ class BulkClixPayoutService implements HandlesPayouts
 
             $json = $response->json();
             $status = strtolower((string) data_get($json, 'data.status', ''));
+
+            // If access is blocked (e.g. IP not whitelisted), treat as non-terminal.
+            if (!$response->successful() && in_array($response->status(), [401, 403, 429, 500, 502, 503, 504], true)) {
+                return [
+                    'success' => null,
+                    'pending' => true,
+                    'message' => $json['message'] ?? ('Unable to check payout status right now (HTTP ' . $response->status() . ').'),
+                    'reference' => $reference,
+                    'transaction_id' => $transactionId,
+                    'http_status' => $response->status(),
+                ];
+            }
 
             // Normalize common success/pending states.
             $successStates = ['success', 'successful', 'completed', 'paid'];
