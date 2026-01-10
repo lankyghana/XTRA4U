@@ -18,6 +18,7 @@ use Illuminate\Support\Str;
 class VendorFulfillmentController extends Controller
 {
     private const DEFAULT_NETWORKS = ['MTN', 'Vodafone', 'AirtelTigo', 'Telecel'];
+    private const EXTERNAL_API_NETWORK = 'External API';
 
     public function index(Request $request)
     {
@@ -35,6 +36,18 @@ class VendorFulfillmentController extends Controller
         $downloadedOrdersPreview = [];
 
         foreach ($networks as $network) {
+            if ($network === self::EXTERNAL_API_NETWORK) {
+                $availableByNetwork[$network] = $this->externalApiSentOrdersQuery($vendor)->count();
+                $downloadedByNetwork[$network] = 0;
+
+                $downloadedOrdersPreview[$network] = $this->externalApiSentOrdersQuery($vendor)
+                    ->with(['service'])
+                    ->latest('external_fulfillment_completed_at')
+                    ->limit(20)
+                    ->get();
+                continue;
+            }
+
             $availableByNetwork[$network] = $this->availableOrdersQuery($vendor, $network)->count();
             $downloadedByNetwork[$network] = $this->downloadedOrdersQuery($vendor, $network)->count();
 
@@ -63,6 +76,10 @@ class VendorFulfillmentController extends Controller
 
         $network = $this->normalizeNetwork($network);
         $this->assertNetworkAllowed($vendor, $network);
+
+        if ($network === self::EXTERNAL_API_NETWORK) {
+            return back()->with('status', 'External API orders are not downloadable. Use the External API section to mark them completed after you confirm delivery.');
+        }
 
         $batchSize = (int) $request->query('limit', 2000);
         $batchSize = max(1, min($batchSize, 10000));
@@ -115,6 +132,66 @@ class VendorFulfillmentController extends Controller
 
         $network = $this->normalizeNetwork($network);
         $this->assertNetworkAllowed($vendor, $network);
+
+        if ($network === self::EXTERNAL_API_NETWORK) {
+            $confirmed = (string) $request->input('confirm_external_api_completed', '0');
+            if ($confirmed !== '1') {
+                return back()->with('status', 'Please tick the confirmation box before marking External API orders as completed.');
+            }
+
+            $smsService = app(SmsService::class);
+            $updatedCount = 0;
+
+            $this->externalApiSentOrdersQuery($vendor)
+                ->with(['service'])
+                ->orderBy('id')
+                ->chunkById(200, function ($orders) use (&$updatedCount, $smsService) {
+                    foreach ($orders as $order) {
+                        $didUpdate = DB::transaction(function () use ($order) {
+                            $fresh = Order::query()
+                                ->where('id', $order->id)
+                                ->where('status', 'Processing')
+                                ->where('external_fulfillment_status', 'succeeded')
+                                ->lockForUpdate()
+                                ->first();
+
+                            if (! $fresh) {
+                                return false;
+                            }
+
+                            $fresh->forceFill(['status' => 'Completed'])->save();
+
+                            Transaction::where('order_id', $fresh->id)->update([
+                                'payment_status' => 'completed',
+                            ]);
+
+                            return true;
+                        });
+
+                        if (! $didUpdate) {
+                            continue;
+                        }
+
+                        $updatedCount++;
+
+                        try {
+                            $smsService->sendOrderCompletedSms(
+                                $order->recipient_phone_number,
+                                $order->service_purchased,
+                                $order->id
+                            );
+                        } catch (\Throwable $e) {
+                            // Completion should still succeed even if SMS fails.
+                        }
+                    }
+                });
+
+            if ($updatedCount === 0) {
+                return back()->with('status', 'No External API orders found to mark as completed.');
+            }
+
+            return back()->with('success', 'Marked ' . $updatedCount . ' External API orders as completed.');
+        }
 
         $smsService = app(SmsService::class);
 
@@ -201,6 +278,10 @@ class VendorFulfillmentController extends Controller
 
         $networks = array_values(array_unique(array_merge(self::DEFAULT_NETWORKS, $names, $orderNetworks)));
 
+        if (! in_array(self::EXTERNAL_API_NETWORK, $networks, true)) {
+            $networks[] = self::EXTERNAL_API_NETWORK;
+        }
+
         // Keep stable ordering: defaults first, then the rest alphabetically.
         usort($networks, function ($a, $b) {
             $aIndex = array_search($a, self::DEFAULT_NETWORKS, true);
@@ -228,6 +309,10 @@ class VendorFulfillmentController extends Controller
     {
         $network = trim($network);
         $network = str_replace(['%20', '+'], ' ', $network);
+
+        if (strcasecmp($network, 'external-api') === 0 || strcasecmp($network, 'externalapi') === 0) {
+            return self::EXTERNAL_API_NETWORK;
+        }
 
         // Common normalization
         if (strcasecmp($network, 'airtel-tigo') === 0) {
@@ -308,6 +393,10 @@ class VendorFulfillmentController extends Controller
     {
         return $this->baseFulfillableOrdersQuery($vendor)
             ->where('status', 'Processing')
+            ->where(function ($q) {
+                $q->whereNull('external_fulfillment_status')
+                    ->orWhereNotIn('external_fulfillment_status', ['processing', 'succeeded']);
+            })
             ->whereNull('downloaded_at')
             ->whereHas('service', function ($q) use ($network) {
                 $q->where('description->network', $network);
@@ -318,9 +407,20 @@ class VendorFulfillmentController extends Controller
     {
         return $this->baseFulfillableOrdersQuery($vendor)
             ->where('status', 'Processing')
+            ->where(function ($q) {
+                $q->whereNull('external_fulfillment_status')
+                    ->orWhereNotIn('external_fulfillment_status', ['processing', 'succeeded']);
+            })
             ->whereNotNull('downloaded_at')
             ->whereHas('service', function ($q) use ($network) {
                 $q->where('description->network', $network);
             });
+    }
+
+    private function externalApiSentOrdersQuery(Vendor $vendor)
+    {
+        return $this->baseFulfillableOrdersQuery($vendor)
+            ->where('status', 'Processing')
+            ->where('external_fulfillment_status', 'succeeded');
     }
 }
