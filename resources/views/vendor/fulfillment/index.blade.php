@@ -27,13 +27,46 @@
             </div>
         @endif
 
-        <!-- Available for Download -->
-        <div class="bg-white rounded-xl shadow-lg border border-gray-200">
-            <div class="px-6 py-5 border-b border-gray-100">
+        <!-- Guidance -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div class="bg-gradient-to-br from-white to-gray-50 border border-gray-200 rounded-xl p-5 shadow-sm">
+                <div class="flex items-start gap-3">
+                    <div class="mt-0.5 w-9 h-9 rounded-lg bg-brand-deep-blue/10 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-brand-deep-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        </svg>
+                    </div>
+                    <div>
+                        <p class="text-sm font-semibold text-gray-900">Manual fulfillment (Download → Deliver → Mark Completed)</p>
+                        <p class="text-sm text-gray-600 mt-1">Use this for networks you fulfill outside the API. Downloads never repeat the same order twice.</p>
+                        <p class="text-xs text-gray-500 mt-2">Tip: after delivery, click “Mark Downloaded Orders as Completed” to update status + SMS.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-gradient-to-br from-emerald-50 to-white border border-emerald-200 rounded-xl p-5 shadow-sm">
+                <div class="flex items-start gap-3">
+                    <div class="mt-0.5 w-9 h-9 rounded-lg bg-emerald-600/10 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <p class="text-sm font-semibold text-gray-900">External API fulfillment (Sent via API)</p>
+                        <p class="text-sm text-gray-700 mt-1">Orders sent via API are excluded from downloads to prevent double-fulfillment.</p>
+                        <p class="text-xs text-gray-600 mt-2">When you confirm delivery in your provider dashboard, use the “External API” section below to mark them completed.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Available / External API Pending Confirmation -->
+        <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+            <div class="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
                 <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                     <div>
-                        <h2 class="text-lg font-bold text-gray-900">Available for Download</h2>
-                        <p class="text-sm text-gray-600">Processing orders that haven’t been downloaded yet. Downloads are per network and never repeat the same order twice.</p>
+                        <h2 class="text-lg font-bold text-gray-900">Work Queues</h2>
+                        <p class="text-sm text-gray-600">Download-ready orders per network, plus External API orders awaiting your confirmation.</p>
                     </div>
 
                     <form method="GET" action="{{ route('vendor.fulfillment.index') }}" class="flex items-end gap-2">
@@ -61,26 +94,41 @@
                     @foreach($networks as $network)
                         @php
                             $count = (int) ($availableByNetwork[$network] ?? 0);
+                            $isExternalApi = $network === 'External API';
                         @endphp
-                        <div class="rounded-lg border border-gray-200 bg-gradient-to-br from-white to-gray-50 p-4">
+                        <div class="rounded-xl border border-gray-200 bg-gradient-to-br from-white to-gray-50 p-4 shadow-sm hover:shadow-md transition-shadow">
                             <div class="flex items-start justify-between">
                                 <div>
-                                    <p class="text-sm font-semibold text-gray-900">{{ $network }}</p>
-                                    <p class="text-xs text-gray-500 mt-1">{{ $count }} available</p>
+                                    <div class="flex items-center gap-2">
+                                        <p class="text-sm font-semibold text-gray-900">{{ $network }}</p>
+                                        @if($isExternalApi)
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">API</span>
+                                        @endif
+                                    </div>
+                                    <p class="text-xs text-gray-500 mt-1">
+                                        {{ $count }} {{ $isExternalApi ? 'sent via API (awaiting your confirmation)' : 'available' }}
+                                    </p>
                                 </div>
                                 @if($count > 0)
-                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Ready</span>
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">Ready</span>
                                 @else
-                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">None</span>
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">None</span>
                                 @endif
                             </div>
 
                             <div class="mt-4">
-                                <a href="{{ route('vendor.fulfillment.download', ['network' => $network, 'limit' => (int)($limit ?? 2000)]) }}"
-                                   class="w-full inline-flex items-center justify-center px-3 py-2 rounded-lg text-sm font-semibold text-white bg-brand-deep-blue hover:bg-brand-bright-blue transition-colors {{ $count === 0 ? 'opacity-50 pointer-events-none' : '' }}">
-                                    Download {{ $network }} Orders
-                                </a>
-                                <p class="text-xs text-gray-500 mt-2">File format: <span class="font-mono">Number\tPackage</span></p>
+                                @if($isExternalApi)
+                                    <div class="w-full inline-flex items-center justify-center px-3 py-2 rounded-lg text-sm font-semibold text-emerald-900 bg-emerald-100 border border-emerald-200">
+                                        Awaiting your confirmation
+                                    </div>
+                                    <p class="text-xs text-gray-600 mt-2">Use the “External API” completion button below after confirming delivery.</p>
+                                @else
+                                    <a href="{{ route('vendor.fulfillment.download', ['network' => $network, 'limit' => (int)($limit ?? 2000)]) }}"
+                                       class="w-full inline-flex items-center justify-center px-3 py-2 rounded-lg text-sm font-semibold text-white bg-brand-deep-blue hover:bg-brand-bright-blue transition-colors {{ $count === 0 ? 'opacity-50 pointer-events-none' : '' }}">
+                                        Download {{ $network }} Orders
+                                    </a>
+                                    <p class="text-xs text-gray-500 mt-2">File format: <span class="font-mono">Number\tPackage</span></p>
+                                @endif
                             </div>
                         </div>
                     @endforeach
@@ -88,31 +136,47 @@
             </div>
         </div>
 
-        <!-- Downloaded awaiting completion -->
-        <div class="bg-white rounded-xl shadow-lg border border-gray-200">
-            <div class="px-6 py-5 border-b border-gray-100">
-                <h2 class="text-lg font-bold text-gray-900">Downloaded (Awaiting Completion)</h2>
-                <p class="text-sm text-gray-600">Orders you’ve already downloaded. Mark them as Completed after fulfilling them externally.</p>
+        <!-- Completion queues -->
+        <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+            <div class="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+                <h2 class="text-lg font-bold text-gray-900">Completion</h2>
+                <p class="text-sm text-gray-600">Mark downloaded orders (manual) or API-sent orders (external) as Completed.</p>
             </div>
             <div class="p-6 space-y-6">
                 @foreach($networks as $network)
                     @php
                         $downloadedCount = (int) ($downloadedByNetwork[$network] ?? 0);
                         $preview = $downloadedOrdersPreview[$network] ?? collect();
+                        $isExternalApi = $network === 'External API';
                     @endphp
 
                     <div class="rounded-lg border border-gray-200 overflow-hidden">
-                        <div class="flex items-center justify-between px-4 py-3 bg-gray-50">
+                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 bg-gray-50">
                             <div>
                                 <p class="text-sm font-semibold text-gray-900">{{ $network }}</p>
-                                <p class="text-xs text-gray-500">{{ $downloadedCount }} downloaded</p>
+                                <p class="text-xs text-gray-500">
+                                    {{ $isExternalApi ? ((int)($availableByNetwork[$network] ?? 0)) . ' sent via API' : ($downloadedCount . ' downloaded') }}
+                                </p>
                             </div>
                             <form method="POST" action="{{ route('vendor.fulfillment.complete', ['network' => $network]) }}">
                                 @csrf
-                                <button type="submit"
-                                        class="inline-flex items-center px-3 py-2 rounded-lg text-sm font-semibold text-white bg-green-600 hover:bg-green-700 transition-colors {{ $downloadedCount === 0 ? 'opacity-50 pointer-events-none' : '' }}">
-                                    Mark Downloaded Orders as Completed
-                                </button>
+                                @if($isExternalApi)
+                                    <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+                                        <label class="inline-flex items-center text-xs font-semibold text-emerald-900 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                                            <input type="checkbox" name="confirm_external_api_completed" value="1" class="mr-2 rounded border-gray-300">
+                                            I confirm these API orders were delivered
+                                        </label>
+                                        <button type="submit"
+                                                class="inline-flex items-center justify-center px-3 py-2 rounded-lg text-sm font-semibold text-white bg-emerald-700 hover:bg-emerald-800 transition-colors {{ (int)($availableByNetwork[$network] ?? 0) === 0 ? 'opacity-50 pointer-events-none' : '' }}">
+                                            Mark API Orders as Completed
+                                        </button>
+                                    </div>
+                                @else
+                                    <button type="submit"
+                                            class="inline-flex items-center px-3 py-2 rounded-lg text-sm font-semibold text-white bg-green-600 hover:bg-green-700 transition-colors {{ $downloadedCount === 0 ? 'opacity-50 pointer-events-none' : '' }}">
+                                        Mark Downloaded Orders as Completed
+                                    </button>
+                                @endif
                             </form>
                         </div>
 
@@ -123,7 +187,7 @@
                                         <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Order ID</th>
                                         <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Number</th>
                                         <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Package</th>
-                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Downloaded</th>
+                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">{{ $isExternalApi ? 'Sent to API' : 'Downloaded' }}</th>
                                     </tr>
                                 </thead>
                                 <tbody class="bg-white divide-y divide-gray-100">
@@ -132,18 +196,25 @@
                                             <td class="px-4 py-3 text-sm font-semibold text-gray-900">#{{ $order->id }}</td>
                                             <td class="px-4 py-3 text-sm text-gray-900">{{ $order->recipient_phone_number }}</td>
                                             <td class="px-4 py-3 text-sm text-gray-900">{{ $order->display_product_label }}</td>
-                                            <td class="px-4 py-3 text-sm text-gray-500">{{ $order->downloaded_at?->format('M d, Y g:i A') ?? '—' }}</td>
+                                            <td class="px-4 py-3 text-sm text-gray-500">
+                                                {{ $isExternalApi
+                                                    ? ($order->external_fulfillment_completed_at?->format('M d, Y g:i A') ?? '—')
+                                                    : ($order->downloaded_at?->format('M d, Y g:i A') ?? '—')
+                                                }}
+                                            </td>
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="4" class="px-4 py-6 text-center text-sm text-gray-500">No downloaded orders for {{ $network }}.</td>
+                                            <td colspan="4" class="px-4 py-6 text-center text-sm text-gray-500">
+                                                {{ $isExternalApi ? 'No External API orders awaiting confirmation.' : ('No downloaded orders for ' . $network . '.') }}
+                                            </td>
                                         </tr>
                                     @endforelse
                                 </tbody>
                             </table>
                         </div>
 
-                        @if($downloadedCount > $preview->count())
+                        @if(!$isExternalApi && $downloadedCount > $preview->count())
                             <div class="px-4 py-3 bg-gray-50 text-xs text-gray-500">
                                 Showing latest {{ $preview->count() }}. Mark completed to clear this list.
                             </div>
