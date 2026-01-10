@@ -18,6 +18,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -545,6 +546,8 @@ class VendorDashboardController extends Controller
 			'withdraw_amount' => ['required', 'numeric', 'min:1'],
 			'momo_number' => ['required', 'string', 'regex:/^0[235][0-9]{8}$/'],
 			'momo_network' => ['required', 'string', Rule::in($withdrawalNetworks)],
+			'momo_account_name' => ['nullable', 'string', 'max:120'],
+			'momo_account_type' => ['nullable', 'string', 'max:50'],
 			'notes' => ['nullable', 'string', 'max:255'],
 		], [
 			'momo_number.regex' => 'Please enter a valid Ghana mobile number (e.g., 0241234567).',
@@ -578,7 +581,7 @@ class VendorDashboardController extends Controller
 
 			$lockedVendor->decrement('wallet_balance', $amount);
 
-			return VendorWithdrawal::create([
+			$create = [
 				'vendor_id' => $vendorId,
 				'amount' => $amount,
 				'momo_number' => $data['momo_number'],
@@ -587,7 +590,17 @@ class VendorDashboardController extends Controller
 				'status' => VendorWithdrawal::STATUS_PROCESSING,
 				'reference' => 'WD-' . Str::upper(Str::random(12)),
 				'notes' => $data['notes'] ?? null,
-			]);
+			];
+
+			// Backward-compatible: don't write new columns if migration hasn't run yet.
+			if (Schema::hasColumn('vendor_withdrawals', 'momo_account_name')) {
+				$create['momo_account_name'] = $data['momo_account_name'] ?? null;
+			}
+			if (Schema::hasColumn('vendor_withdrawals', 'momo_account_type')) {
+				$create['momo_account_type'] = $data['momo_account_type'] ?? null;
+			}
+
+			return VendorWithdrawal::create($create);
 		});
 
 		// Queue a payout job (preferred) and also attempt an immediate sync run.
@@ -618,6 +631,34 @@ class VendorDashboardController extends Controller
 		}
 
 		return back()->with('status', 'Withdrawal request received. Your payout is being processed automatically.');
+	}
+
+	public function lookupWithdrawalAccountName(Request $request)
+	{
+		$this->resolveVendor();
+
+		$data = $request->validate([
+			'momo_number' => ['required', 'string', 'regex:/^0[235][0-9]{8}$/'],
+		]);
+
+		$gatewayManager = app(\App\Services\GatewayManager::class);
+		$payoutService = $gatewayManager->getPayoutService();
+
+		if (!$payoutService || !($payoutService instanceof \App\Services\Payouts\BulkClixPayoutService)) {
+			return response()->json([
+				'success' => false,
+				'name' => null,
+				'message' => 'Account name lookup is not available for the current payout gateway.',
+			]);
+		}
+
+		$result = $payoutService->lookupMsisdnName((string) $data['momo_number']);
+
+		return response()->json([
+			'success' => (bool) ($result['success'] ?? false),
+			'name' => $result['name'] ?? null,
+			'message' => $result['message'] ?? null,
+		]);
 	}
 
 
