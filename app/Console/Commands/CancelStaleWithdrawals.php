@@ -38,8 +38,10 @@ class CancelStaleWithdrawals extends Command
 
         $cutoff = now()->subMinutes($minutes);
 
+        $targetStatuses = [VendorWithdrawal::STATUS_PROCESSING, 'pending'];
+
         $query = VendorWithdrawal::query()
-            ->where('status', VendorWithdrawal::STATUS_PROCESSING)
+            ->whereIn('status', $targetStatuses)
             ->when(! $includeReferenced, function ($q) {
                 // Only cancel if we have no payout identifiers (reduces risk of cancelling an in-flight payout).
                 $q->whereNull('payout_reference')
@@ -69,7 +71,7 @@ class CancelStaleWithdrawals extends Command
 
         if ($dryRun && $explain) {
             $processing = VendorWithdrawal::query()
-                ->where('status', VendorWithdrawal::STATUS_PROCESSING)
+                ->whereIn('status', $targetStatuses)
                 ->orderBy('id')
                 ->limit($limit)
                 ->get(['id', 'reference', 'vendor_id', 'amount', 'payout_attempted_at', 'created_at', 'payout_reference', 'payout_transaction_id']);
@@ -135,7 +137,7 @@ class CancelStaleWithdrawals extends Command
                     return;
                 }
 
-                if ($locked->status !== VendorWithdrawal::STATUS_PROCESSING) {
+                if (!in_array($locked->status, [VendorWithdrawal::STATUS_PROCESSING, 'pending'], true)) {
                     return;
                 }
 
