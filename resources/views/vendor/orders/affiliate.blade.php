@@ -71,6 +71,7 @@
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Owner Vendor</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Your Earning</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Status</th>
+                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">External API</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Placed</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Action</th>
                                 </tr>
@@ -81,6 +82,10 @@
                                         $canUpdateStatus = (bool) $order->is_reseller_order
                                             ? ((int) $order->owner_vendor_id === (int) $vendor->id)
                                             : ((int) $order->vendor_id === (int) $vendor->id);
+
+                                        $externalStatus = (string) ($order->external_fulfillment_status ?? '');
+                                        $externalError = (string) ($order->external_fulfillment_last_error ?? '');
+                                        $isExternallyProcessingOrDone = in_array($externalStatus, ['processing', 'succeeded'], true);
                                     @endphp
                                     <tr class="hover:bg-gradient-to-r hover:from-purple-50 hover:to-indigo-50 transition-all duration-200">
                                         <td class="px-6 py-4 text-sm font-semibold text-gray-900">#{{ $order->id }}</td>
@@ -107,6 +112,19 @@
                                                 <x-badge variant="pending">Pending</x-badge>
                                             @endif
                                         </td>
+                                        <td class="px-6 py-4 text-sm">
+                                            @if($externalStatus === 'succeeded')
+                                                <x-badge variant="completed">Sent to API</x-badge>
+                                            @elseif($externalStatus === 'processing')
+                                                <x-badge variant="processing">Sending</x-badge>
+                                            @elseif($externalStatus === 'failed')
+                                                <span title="{{ $externalError !== '' ? $externalError : 'External fulfillment failed' }}">
+                                                    <x-badge variant="warning">Failed</x-badge>
+                                                </span>
+                                            @else
+                                                <x-badge variant="pending">Not sent</x-badge>
+                                            @endif
+                                        </td>
                                         <td class="px-6 py-4 text-sm text-gray-500">{{ $order->created_at?->format('M d, Y g:i A') }}</td>
                                         <td class="px-6 py-4 text-sm">
                                         @if($canUpdateStatus)
@@ -116,7 +134,7 @@
                                                 <select name="status" 
                                                     onchange="this.form.submit()" 
                                                     class="text-sm border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500 px-3 py-2 font-medium shadow-sm"
-                                                    {{ $order->status === 'Completed' || $order->status === 'Cancelled' ? 'disabled' : '' }}>
+                                                    {{ $order->status === 'Completed' || $order->status === 'Cancelled' || $isExternallyProcessingOrDone ? 'disabled' : '' }}>
                                                     <option value="Pending" {{ $order->status === 'Pending' ? 'selected' : '' }}>Pending</option>
                                                     <option value="Processing" {{ $order->status === 'Processing' ? 'selected' : '' }}>Processing</option>
                                                     <option value="Completed" {{ $order->status === 'Completed' ? 'selected' : '' }}>Completed</option>
@@ -132,7 +150,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="8" class="px-6 py-8 text-center">
+                                        <td colspan="9" class="px-6 py-8 text-center">
                                             <div class="flex flex-col items-center justify-center">
                                                 <svg class="w-12 h-12 text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
