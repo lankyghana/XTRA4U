@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Events\OrderCompleted;
 use App\Jobs\ProcessExternalFulfillment;
 use App\Models\Order;
+use App\Models\Product;
 use App\Models\Vendor;
 use App\Models\VendorSetting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -34,8 +35,8 @@ class ExternalFulfillmentIntegrationTest extends TestCase
         Queue::fake();
 
         config([
-            'services.external_fulfillment.base_url' => 'https://fulfillment.example.test',
-            'services.external_fulfillment.endpoint' => '/v1/fulfill',
+            'services.external_fulfillment.base_url' => 'https://api.datafyhub.com',
+            'services.external_fulfillment.endpoint' => '/api/v1/placeOrder',
         ]);
 
         $vendor = Vendor::factory()->create([
@@ -68,8 +69,8 @@ class ExternalFulfillmentIntegrationTest extends TestCase
         Queue::fake();
 
         config([
-            'services.external_fulfillment.base_url' => 'https://fulfillment.example.test',
-            'services.external_fulfillment.endpoint' => '/v1/fulfill',
+            'services.external_fulfillment.base_url' => 'https://api.datafyhub.com',
+            'services.external_fulfillment.endpoint' => '/api/v1/placeOrder',
         ]);
 
         $vendor = Vendor::factory()->create([
@@ -100,15 +101,12 @@ class ExternalFulfillmentIntegrationTest extends TestCase
     public function test_job_posts_to_external_api_and_marks_order_succeeded_idempotently(): void
     {
         config([
-            'services.external_fulfillment.base_url' => 'https://fulfillment.example.test',
-            'services.external_fulfillment.endpoint' => '/v1/fulfill',
+            'services.external_fulfillment.base_url' => 'https://api.datafyhub.com',
+            'services.external_fulfillment.endpoint' => '/api/v1/placeOrder',
         ]);
 
         Http::fake([
-            'https://fulfillment.example.test/v1/fulfill' => Http::response([
-                'success' => true,
-                'reference' => 'REMOTE-123',
-            ], 200),
+            'https://api.datafyhub.com/api/v1/placeOrder' => Http::response([], 200),
         ]);
 
         $vendor = Vendor::factory()->create([
@@ -132,9 +130,20 @@ class ExternalFulfillmentIntegrationTest extends TestCase
         $job = new ProcessExternalFulfillment($order->id);
         $job->handle();
 
+        Http::assertSent(function ($request) use ($order) {
+            if ((string) $request->url() !== 'https://api.datafyhub.com/api/v1/placeOrder') {
+                return false;
+            }
+
+            $data = $request->data();
+
+            return isset($data['network'], $data['reference'], $data['recipient'], $data['capacity'])
+                && $data['reference'] === 'TEST-REF-EXT-3'
+                && $data['recipient'] === (string) $order->recipient_phone_number;
+        });
+
         $order->refresh();
         $this->assertSame('succeeded', $order->external_fulfillment_status);
-        $this->assertSame('REMOTE-123', $order->external_fulfillment_remote_reference);
         $this->assertNotNull($order->external_fulfillment_completed_at);
 
         // Second run should short-circuit without re-posting.
@@ -143,13 +152,120 @@ class ExternalFulfillmentIntegrationTest extends TestCase
         Http::assertSentCount(1);
     }
 
+    public function test_job_maps_airteltigo_products_to_datafyhub_ishare_and_capacity_from_size(): void
+    {
+        config([
+            'services.external_fulfillment.base_url' => 'https://api.datafyhub.com',
+            'services.external_fulfillment.endpoint' => '/api/v1/placeOrder',
+        ]);
+
+        Http::fake([
+            'https://api.datafyhub.com/api/v1/placeOrder' => Http::response([], 200),
+        ]);
+
+        $vendor = Vendor::factory()->create([
+            'affiliate_vendor_id' => null,
+        ]);
+
+        $this->enableExternalFulfillmentForVendor($vendor);
+
+        $product = Product::create([
+            'vendor_id' => $vendor->id,
+            'name' => 'AirtelTigo iShare 2GB',
+            'description' => json_encode([
+                'network' => 'AirtelTigo',
+                'size' => '2GB',
+                'category' => 'data',
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'price' => 10.00,
+            'is_active' => true,
+        ]);
+
+        $order = Order::create([
+            'recipient_phone_number' => '0591178627',
+            'mobile_money_number' => '0591178627',
+            'service_purchased' => $product->name,
+            'amount_paid' => 10.00,
+            'vendor_id' => $vendor->id,
+            'vendor_service_id' => $product->id,
+            'status' => 'Processing',
+            'payment_status' => 'paid',
+            'payment_reference' => 'TEST-REF-EXT-AT-1',
+            'payment_gateway' => 'test',
+        ]);
+
+        $job = new ProcessExternalFulfillment($order->id);
+        $job->handle();
+
+        Http::assertSent(function ($request) {
+            $data = $request->data();
+
+            return $data['network'] === 'ishare'
+                && $data['capacity'] === 2;
+        });
+    }
+
+    public function test_job_prefers_explicit_datafyhub_network_metadata_over_heuristics(): void
+    {
+        config([
+            'services.external_fulfillment.base_url' => 'https://api.datafyhub.com',
+            'services.external_fulfillment.endpoint' => '/api/v1/placeOrder',
+        ]);
+
+        Http::fake([
+            'https://api.datafyhub.com/api/v1/placeOrder' => Http::response([], 200),
+        ]);
+
+        $vendor = Vendor::factory()->create([
+            'affiliate_vendor_id' => null,
+        ]);
+
+        $this->enableExternalFulfillmentForVendor($vendor);
+
+        $product = Product::create([
+            'vendor_id' => $vendor->id,
+            'name' => 'AirtelTigo Data Bundle',
+            'description' => json_encode([
+                'network' => 'AirtelTigo',
+                'datafyhub_network' => 'bigtime',
+                'size' => '5GB',
+                'category' => 'data',
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'price' => 10.00,
+            'is_active' => true,
+        ]);
+
+        $order = Order::create([
+            'recipient_phone_number' => '0591178627',
+            'mobile_money_number' => '0591178627',
+            'service_purchased' => $product->name,
+            'amount_paid' => 10.00,
+            'vendor_id' => $vendor->id,
+            'vendor_service_id' => $product->id,
+            'status' => 'Processing',
+            'payment_status' => 'paid',
+            'payment_reference' => 'TEST-REF-EXT-AT-2',
+            'payment_gateway' => 'test',
+        ]);
+
+        $job = new ProcessExternalFulfillment($order->id);
+        $job->handle();
+
+        Http::assertSent(function ($request) {
+            $data = $request->data();
+
+            return $data['network'] === 'bigtime'
+                && $data['capacity'] === 5;
+        });
+    }
+
     public function test_affiliate_order_dispatches_external_fulfillment_for_owner_vendor_when_enabled(): void
     {
         Queue::fake();
 
         config([
-            'services.external_fulfillment.base_url' => 'https://fulfillment.example.test',
-            'services.external_fulfillment.endpoint' => '/v1/fulfill',
+            'services.external_fulfillment.base_url' => 'https://api.datafyhub.com',
+            'services.external_fulfillment.endpoint' => '/api/v1/placeOrder',
         ]);
 
         $owner = Vendor::factory()->create([
@@ -189,8 +305,8 @@ class ExternalFulfillmentIntegrationTest extends TestCase
         Queue::fake();
 
         config([
-            'services.external_fulfillment.base_url' => 'https://fulfillment.example.test',
-            'services.external_fulfillment.endpoint' => '/v1/fulfill',
+            'services.external_fulfillment.base_url' => 'https://api.datafyhub.com',
+            'services.external_fulfillment.endpoint' => '/api/v1/placeOrder',
         ]);
 
         $owner = Vendor::factory()->create([
