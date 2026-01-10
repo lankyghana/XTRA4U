@@ -37,6 +37,7 @@ class ProductController extends Controller
             'description' => 'nullable|string|max:500',
             'price' => 'required|numeric|min:0',
             'network' => $this->networkValidationRule(),
+            'datafyhub_network' => 'nullable|string|in:mtn,telecel,ishare,bigtime,xpress',
             'category' => $this->categoryValidationRule(),
             'size' => 'nullable|string|max:50',
             'validity' => 'nullable|string|max:50',
@@ -79,6 +80,7 @@ class ProductController extends Controller
             'description' => 'nullable|string|max:500',
             'price' => 'required|numeric|min:0',
             'network' => $this->networkValidationRule($existingNetwork),
+            'datafyhub_network' => 'nullable|string|in:mtn,telecel,ishare,bigtime,xpress',
             'category' => $this->categoryValidationRule(),
             'size' => 'nullable|string|max:50',
             'validity' => 'nullable|string|max:50',
@@ -195,6 +197,8 @@ class ProductController extends Controller
     {
         $payload = [
             'network' => $request->input('network'),
+            // Used only by External Fulfillment integrations (e.g. Datafyhub) and not shown to customers.
+            'datafyhub_network' => $request->input('datafyhub_network'),
             'category' => $request->input('category', $this->defaultCategory()),
             'size' => $request->input('size'),
             'validity' => $request->input('validity'),
