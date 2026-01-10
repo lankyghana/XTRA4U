@@ -145,6 +145,9 @@
                             required
                             {{ $withdrawableBalance <= 0 ? 'disabled' : '' }}
                         >
+                            <input type="hidden" name="momo_account_name" id="momo_account_name" value="{{ old('momo_account_name') }}">
+                            <input type="hidden" name="momo_account_type" id="momo_account_type" value="{{ old('momo_account_type', 'subscriber') }}">
+                            <div class="mt-2 text-sm" id="momo_name_status" aria-live="polite"></div>
                         @error('momo_number')
                             <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
                         @enderror
@@ -180,6 +183,20 @@
                             <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
                         @enderror
                     </div>
+                        <div>
+                            <label for="momo_account_type_select" class="block text-sm font-medium text-gray-700 mb-2">Account Type (optional)</label>
+                            <select
+                                id="momo_account_type_select"
+                                class="mt-1 block w-full rounded-lg border border-gray-300 shadow-sm focus:border-brand-bright-blue focus:ring-brand-bright-blue px-4 py-3"
+                                {{ $withdrawableBalance <= 0 ? 'disabled' : '' }}
+                            >
+                                <option value="subscriber" {{ old('momo_account_type', 'subscriber') === 'subscriber' ? 'selected' : '' }}>Subscriber</option>
+                                <option value="merchant" {{ old('momo_account_type') === 'merchant' ? 'selected' : '' }}>Merchant</option>
+                            </select>
+                            @error('momo_account_type')
+                                <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
+                        </div>
 
                     <div>
                         <label for="notes" class="block text-sm font-medium text-gray-700 mb-2">Notes (optional)</label>
@@ -211,6 +228,99 @@
                                     <p class="text-sm font-semibold text-gray-900">GHS {{ number_format($withdrawal->amount, 2) }}</p>
                                     <p class="text-xs text-gray-500">{{ $withdrawal->created_at?->diffForHumans() }}</p>
                                 </div>
+                                    <script>
+                                        (function () {
+                                            const form = document.querySelector('form[action="{{ route('vendor.withdrawals.store') }}"]');
+                                            if (!form) return;
+
+                                            const numberInput = form.querySelector('#momo_number');
+                                            const nameHidden = form.querySelector('#momo_account_name');
+                                            const typeHidden = form.querySelector('#momo_account_type');
+                                            const typeSelect = form.querySelector('#momo_account_type_select');
+                                            const statusEl = form.querySelector('#momo_name_status');
+                                            const networkInputs = Array.from(form.querySelectorAll('input[name="momo_network"]'));
+
+                                            if (!numberInput || !nameHidden || !typeHidden || !typeSelect || !statusEl) return;
+
+                                            const setStatus = (text, variant) => {
+                                                const cls = variant === 'ok'
+                                                    ? 'text-green-700'
+                                                    : variant === 'loading'
+                                                        ? 'text-gray-600'
+                                                        : 'text-red-600';
+                                                statusEl.className = 'text-sm ' + cls;
+                                                statusEl.textContent = text;
+                                            };
+
+                                            const validNumber = (value) => /^0[235][0-9]{8}$/.test((value || '').trim());
+                                            let inFlight = null;
+
+                                            const lookup = async () => {
+                                                const momoNumber = (numberInput.value || '').trim();
+                                                const selectedNetwork = networkInputs.find(i => i.checked)?.value;
+
+                                                if (!validNumber(momoNumber)) {
+                                                    nameHidden.value = '';
+                                                    statusEl.textContent = '';
+                                                    return;
+                                                }
+
+                                                if (!selectedNetwork) {
+                                                    nameHidden.value = '';
+                                                    setStatus('Select a network to verify account name.', 'loading');
+                                                    return;
+                                                }
+
+                                                if (inFlight) {
+                                                    try { inFlight.abort(); } catch (e) {}
+                                                }
+                                                inFlight = new AbortController();
+
+                                                setStatus('Verifying account name...', 'loading');
+
+                                                try {
+                                                    const response = await fetch('{{ route('vendor.withdrawals.name-query') }}', {
+                                                        method: 'POST',
+                                                        headers: {
+                                                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                                                            'Content-Type': 'application/json',
+                                                            'Accept': 'application/json'
+                                                        },
+                                                        body: JSON.stringify({ momo_number: momoNumber }),
+                                                        signal: inFlight.signal
+                                                    });
+
+                                                    const result = await response.json();
+
+                                                    if (result && result.success && result.name) {
+                                                        nameHidden.value = result.name;
+                                                        setStatus('Account Name: ' + result.name, 'ok');
+                                                        return;
+                                                    }
+
+                                                    nameHidden.value = '';
+                                                    setStatus(result?.message || 'Unable to verify account name.', 'error');
+                                                } catch (e) {
+                                                    if (e?.name === 'AbortError') return;
+                                                    nameHidden.value = '';
+                                                    setStatus('Unable to verify account name right now.', 'error');
+                                                }
+                                            };
+
+                                            typeSelect.addEventListener('change', () => {
+                                                typeHidden.value = typeSelect.value;
+                                            });
+                                            typeHidden.value = typeSelect.value;
+
+                                            numberInput.addEventListener('blur', lookup);
+                                            numberInput.addEventListener('change', lookup);
+                                            networkInputs.forEach(i => i.addEventListener('change', lookup));
+
+                                            if ((nameHidden.value || '').trim() !== '') {
+                                                setStatus('Account Name: ' + nameHidden.value, 'ok');
+                                            }
+                                        })();
+                                    </script>
                                 @if ($withdrawal->status === 'approved')
                                     <x-badge variant="completed">Approved</x-badge>
                                 @elseif ($withdrawal->status === 'rejected')
