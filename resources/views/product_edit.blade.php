@@ -55,6 +55,20 @@
                 </div>
             </div>
 
+            <div>
+                <label for="datafyhub_network" class="block text-sm font-semibold text-gray-700">External Fulfillment Network (Datafyhub)</label>
+                <select name="datafyhub_network" id="datafyhub_network" class="mt-1 block w-full border-gray-200 rounded-lg shadow-sm focus:border-purple-400 focus:ring-purple-400">
+                    @php($selectedDatafyhubNetwork = old('datafyhub_network', $metadata['datafyhub_network'] ?? ''))
+                    <option value="" {{ $selectedDatafyhubNetwork === '' ? 'selected' : '' }}>Auto (recommended)</option>
+                    <option value="mtn" {{ $selectedDatafyhubNetwork === 'mtn' ? 'selected' : '' }}>mtn</option>
+                    <option value="telecel" {{ $selectedDatafyhubNetwork === 'telecel' ? 'selected' : '' }}>telecel</option>
+                    <option value="ishare" {{ $selectedDatafyhubNetwork === 'ishare' ? 'selected' : '' }}>ishare</option>
+                    <option value="bigtime" {{ $selectedDatafyhubNetwork === 'bigtime' ? 'selected' : '' }}>bigtime</option>
+                    <option value="xpress" {{ $selectedDatafyhubNetwork === 'xpress' ? 'selected' : '' }}>xpress</option>
+                </select>
+                <p class="text-xs text-gray-400 mt-1">Optional. Used only for External Fulfillment; customers won’t see this.</p>
+            </div>
+
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label for="size" class="block text-sm font-semibold text-gray-700">Package Size</label>
