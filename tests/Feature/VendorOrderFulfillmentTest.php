@@ -13,6 +13,163 @@ class VendorOrderFulfillmentTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_vendor_fulfillment_download_excludes_orders_being_handled_by_external_api(): void
+    {
+        $vendor = Vendor::factory()->create(['is_approved' => true]);
+
+        $product = Product::create([
+            'vendor_id' => $vendor->id,
+            'name' => 'MTN Data',
+            'description' => json_encode(['network' => 'MTN', 'size' => '1 GB']),
+            'price' => 10.00,
+            'is_active' => true,
+            'is_resellable' => false,
+            'min_base_price' => 10.00,
+        ]);
+
+        $order = Order::create([
+            'recipient_phone_number' => '0241234567',
+            'mobile_money_number' => '0241234567',
+            'service_purchased' => 'MTN Data',
+            'amount_paid' => 10.00,
+            'vendor_id' => $vendor->id,
+            'vendor_service_id' => $product->id,
+            'status' => 'Processing',
+            'payment_status' => 'paid',
+        ]);
+
+        // Order model does not mass-assign external_fulfillment_* fields (by design),
+        // so set it explicitly for this scenario.
+        $order->forceFill(['external_fulfillment_status' => 'processing'])->save();
+
+        Transaction::create([
+            'order_id' => $order->id,
+            'vendor_id' => $vendor->id,
+            'recipient_phone' => $order->recipient_phone_number,
+            'amount' => 10.00,
+            'commission_amount' => 0.20,
+            'vendor_earning' => 9.80,
+            'payment_status' => 'successful',
+            'timestamp' => now(),
+            'payment_type' => 'order',
+        ]);
+
+        $this->actingAs($vendor, 'vendor');
+
+        $downloadResponse = $this->get(route('vendor.fulfillment.download', ['network' => 'MTN']));
+        $downloadResponse->assertRedirect();
+
+        $order->refresh();
+        $this->assertNull($order->downloaded_at);
+    }
+
+    public function test_vendor_can_manually_mark_external_api_sent_orders_as_completed_with_confirmation(): void
+    {
+        $vendor = Vendor::factory()->create(['is_approved' => true]);
+
+        $product = Product::create([
+            'vendor_id' => $vendor->id,
+            'name' => 'MTN Data',
+            'description' => json_encode(['network' => 'MTN', 'size' => '1 GB']),
+            'price' => 10.00,
+            'is_active' => true,
+            'is_resellable' => false,
+            'min_base_price' => 10.00,
+        ]);
+
+        $order = Order::create([
+            'recipient_phone_number' => '0241234567',
+            'mobile_money_number' => '0241234567',
+            'service_purchased' => 'MTN Data',
+            'amount_paid' => 10.00,
+            'vendor_id' => $vendor->id,
+            'vendor_service_id' => $product->id,
+            'status' => 'Processing',
+            'payment_status' => 'paid',
+        ]);
+
+        $order->forceFill([
+            'external_fulfillment_status' => 'succeeded',
+            'external_fulfillment_completed_at' => now(),
+        ])->save();
+
+        $tx = Transaction::create([
+            'order_id' => $order->id,
+            'vendor_id' => $vendor->id,
+            'recipient_phone' => $order->recipient_phone_number,
+            'amount' => 10.00,
+            'commission_amount' => 0.20,
+            'vendor_earning' => 9.80,
+            'payment_status' => 'successful',
+            'timestamp' => now(),
+            'payment_type' => 'order',
+        ]);
+
+        $this->actingAs($vendor, 'vendor');
+
+        $response = $this->post(route('vendor.fulfillment.complete', ['network' => 'External API']), [
+            'confirm_external_api_completed' => '1',
+        ]);
+        $response->assertRedirect();
+
+        $order->refresh();
+        $this->assertSame('Completed', $order->status);
+
+        $tx->refresh();
+        $this->assertSame('completed', $tx->payment_status);
+    }
+
+    public function test_vendor_cannot_bulk_complete_external_api_orders_without_confirmation(): void
+    {
+        $vendor = Vendor::factory()->create(['is_approved' => true]);
+
+        $product = Product::create([
+            'vendor_id' => $vendor->id,
+            'name' => 'MTN Data',
+            'description' => json_encode(['network' => 'MTN', 'size' => '1 GB']),
+            'price' => 10.00,
+            'is_active' => true,
+            'is_resellable' => false,
+            'min_base_price' => 10.00,
+        ]);
+
+        $order = Order::create([
+            'recipient_phone_number' => '0241234567',
+            'mobile_money_number' => '0241234567',
+            'service_purchased' => 'MTN Data',
+            'amount_paid' => 10.00,
+            'vendor_id' => $vendor->id,
+            'vendor_service_id' => $product->id,
+            'status' => 'Processing',
+            'payment_status' => 'paid',
+        ]);
+
+        $order->forceFill([
+            'external_fulfillment_status' => 'succeeded',
+            'external_fulfillment_completed_at' => now(),
+        ])->save();
+
+        Transaction::create([
+            'order_id' => $order->id,
+            'vendor_id' => $vendor->id,
+            'recipient_phone' => $order->recipient_phone_number,
+            'amount' => 10.00,
+            'commission_amount' => 0.20,
+            'vendor_earning' => 9.80,
+            'payment_status' => 'successful',
+            'timestamp' => now(),
+            'payment_type' => 'order',
+        ]);
+
+        $this->actingAs($vendor, 'vendor');
+
+        $response = $this->post(route('vendor.fulfillment.complete', ['network' => 'External API']));
+        $response->assertRedirect();
+
+        $order->refresh();
+        $this->assertSame('Processing', $order->status);
+    }
+
     public function test_vendor_can_download_processing_orders_per_network_and_prevent_duplicates(): void
     {
         $vendor = Vendor::factory()->create(['is_approved' => true]);
