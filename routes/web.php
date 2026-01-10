@@ -200,6 +200,8 @@ Route::middleware(['vendor.approved'])
 
         Route::get('withdrawals', [VendorDashboardController::class, 'withdrawals'])
             ->name('withdrawals.index');
+        Route::post('withdrawals/name-query', [VendorDashboardController::class, 'lookupWithdrawalAccountName'])
+            ->name('withdrawals.name-query');
         Route::post('withdrawals', [VendorDashboardController::class, 'requestWithdrawal'])
             ->name('withdrawals.store');
 
