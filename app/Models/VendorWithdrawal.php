@@ -23,6 +23,8 @@ class VendorWithdrawal extends Model
         'amount',
         'momo_number',
         'momo_network',
+        'momo_account_name',
+        'momo_account_type',
         'payout_gateway',
         'status',
         'reference',
