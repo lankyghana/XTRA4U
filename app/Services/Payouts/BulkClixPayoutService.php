@@ -69,6 +69,63 @@ class BulkClixPayoutService implements HandlesPayouts
         return $this->config->isConfigured();
     }
 
+    /**
+     * BulkClix KYC helper: resolve MSISDN account name.
+     * Endpoint: GET /kyc-api/msisdNameQuery?phone_number=...
+     */
+    public function lookupMsisdnName(string $phone): array
+    {
+        if (!$this->isConfigured()) {
+            return [
+                'success' => false,
+                'name' => null,
+                'message' => 'Payout gateway is not properly configured. Please check the API credentials.',
+            ];
+        }
+
+        $apiKey = (string) $this->config->getConfig('api_key');
+        $localPhone = $this->toLocalGhanaNumber($phone);
+
+        try {
+            $response = $this->http()->withHeaders([
+                'x-api-key' => $apiKey,
+                'Accept' => 'application/json',
+                'Content-Type' => 'application/json',
+            ])->get($this->baseUrl() . '/kyc-api/msisdNameQuery', [
+                'phone_number' => $localPhone,
+            ]);
+
+            $json = $response->json();
+            $name = (string) data_get($json, 'data.name', '');
+
+            if ($response->successful() && $name !== '') {
+                return [
+                    'success' => true,
+                    'name' => $name,
+                    'message' => $json['message'] ?? 'Account name resolved successfully.',
+                ];
+            }
+
+            return [
+                'success' => false,
+                'name' => $name !== '' ? $name : null,
+                'message' => $json['message'] ?? ('Unable to lookup account name (HTTP ' . $response->status() . ').'),
+                'http_status' => $response->status(),
+            ];
+        } catch (\Throwable $e) {
+            Log::warning('BulkClix msisdnNameQuery exception', [
+                'phone' => $localPhone,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'success' => false,
+                'name' => null,
+                'message' => 'Unable to lookup account name right now. Please try again.',
+            ];
+        }
+    }
+
     public function processPayout(VendorWithdrawal $withdrawal): array
     {
         if (!$this->isConfigured()) {
@@ -98,6 +155,7 @@ class BulkClixPayoutService implements HandlesPayouts
 
             $channel = $this->channelByNetwork[$withdrawal->momo_network] ?? 'MTN';
             $clientReference = (string) ($withdrawal->payout_reference ?: $withdrawal->reference);
+            $accountName = (string) ($withdrawal->momo_account_name ?: (($withdrawal->vendor?->name) ?: 'Vendor'));
 
             $response = $this->http()->withHeaders([
                 'x-api-key' => $apiKey,
@@ -107,7 +165,7 @@ class BulkClixPayoutService implements HandlesPayouts
                 'amount' => (string) ((float) $withdrawal->amount),
                 'account_number' => $localPhone,
                 'channel' => $channel,
-                'account_name' => (string) (($withdrawal->vendor?->name) ?: 'Vendor'),
+                'account_name' => $accountName,
                 'client_reference' => $clientReference,
             ]);
 
