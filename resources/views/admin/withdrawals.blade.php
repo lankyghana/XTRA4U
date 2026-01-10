@@ -70,7 +70,15 @@
                             @endif
                             <div>
                                 <p class="text-sm font-mono font-medium text-gray-900">{{ $withdrawal->momo_number ?? 'N/A' }}</p>
-                                <p class="text-xs text-gray-500">{{ $withdrawal->momo_network ?? 'Not specified' }}</p>
+                                <p class="text-xs text-gray-500">
+                                    {{ $withdrawal->momo_network ?? 'Not specified' }}
+                                    @if(!empty($withdrawal->momo_account_type))
+                                        • {{ $withdrawal->momo_account_type }}
+                                    @endif
+                                </p>
+                                @if(!empty($withdrawal->momo_account_name))
+                                    <p class="text-xs text-gray-600">Name: {{ $withdrawal->momo_account_name }}</p>
+                                @endif
                             </div>
                         </div>
                     </td>
