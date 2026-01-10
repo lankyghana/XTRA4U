@@ -74,6 +74,11 @@
                                     {{ $withdrawableBalance <= 0 ? 'disabled' : '' }}
                                 >
                             </div>
+
+                            <input type="hidden" name="momo_account_name" id="momo_account_name" value="{{ old('momo_account_name') }}">
+                            <input type="hidden" name="momo_account_type" id="momo_account_type" value="{{ old('momo_account_type', 'subscriber') }}">
+
+                            <div class="mt-2 text-sm" id="momo_name_status" aria-live="polite"></div>
                             @error('momo_number')
                                 <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
                             @enderror
@@ -109,6 +114,22 @@
                                 @endforeach
                             </div>
                             @error('momo_network')
+                                <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
+                        </div>
+
+                        <!-- Account Type (optional) -->
+                        <div>
+                            <label for="momo_account_type_select" class="block text-sm font-medium text-gray-700 mb-2">Account Type (optional)</label>
+                            <select
+                                id="momo_account_type_select"
+                                class="block w-full px-4 py-3 rounded-lg border border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500"
+                                {{ $withdrawableBalance <= 0 ? 'disabled' : '' }}
+                            >
+                                <option value="subscriber" {{ old('momo_account_type', 'subscriber') === 'subscriber' ? 'selected' : '' }}>Subscriber</option>
+                                <option value="merchant" {{ old('momo_account_type') === 'merchant' ? 'selected' : '' }}>Merchant</option>
+                            </select>
+                            @error('momo_account_type')
                                 <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
                             @enderror
                         </div>
@@ -198,7 +219,7 @@
                                         @endif
                                         <div>
                                             <p class="font-medium text-gray-900">{{ $withdrawal->momo_number ?? 'N/A' }}</p>
-                                            <p class="text-xs text-gray-500">{{ $withdrawal->momo_network ?? 'N/A' }}</p>
+                                            <p class="text-xs text-gray-500">{{ $withdrawal->momo_network ?? 'N/A' }}@if(!empty($withdrawal->momo_account_name)) • {{ $withdrawal->momo_account_name }}@endif</p>
                                         </div>
                                     </div>
                                 </td>
@@ -232,4 +253,97 @@
         </div>
     </div>
 </x-vendor-layout>
+
+<script>
+    (function () {
+        const numberInput = document.getElementById('momo_number');
+        const nameHidden = document.getElementById('momo_account_name');
+        const typeHidden = document.getElementById('momo_account_type');
+        const typeSelect = document.getElementById('momo_account_type_select');
+        const statusEl = document.getElementById('momo_name_status');
+        const networkInputs = Array.from(document.querySelectorAll('input[name="momo_network"]'));
+
+        if (!numberInput || !nameHidden || !typeHidden || !typeSelect || !statusEl) return;
+
+        const setStatus = (text, variant) => {
+            const base = 'text-sm';
+            const cls = variant === 'ok'
+                ? 'text-green-700'
+                : variant === 'loading'
+                    ? 'text-gray-600'
+                    : 'text-red-600';
+            statusEl.className = base + ' ' + cls;
+            statusEl.textContent = text;
+        };
+
+        const validNumber = (value) => /^0[235][0-9]{8}$/.test((value || '').trim());
+
+        let inFlight = null;
+        const lookup = async () => {
+            const momoNumber = (numberInput.value || '').trim();
+            const selectedNetwork = networkInputs.find(i => i.checked)?.value;
+
+            if (!validNumber(momoNumber)) {
+                nameHidden.value = '';
+                statusEl.textContent = '';
+                return;
+            }
+
+            if (!selectedNetwork) {
+                nameHidden.value = '';
+                setStatus('Select a network to verify account name.', 'loading');
+                return;
+            }
+
+            if (inFlight) {
+                try { inFlight.abort(); } catch (e) {}
+            }
+            inFlight = new AbortController();
+
+            setStatus('Verifying account name...', 'loading');
+
+            try {
+                const response = await fetch('{{ route('vendor.withdrawals.name-query') }}', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ momo_number: momoNumber }),
+                    signal: inFlight.signal
+                });
+
+                const result = await response.json();
+
+                if (result && result.success && result.name) {
+                    nameHidden.value = result.name;
+                    setStatus('Account Name: ' + result.name, 'ok');
+                    return;
+                }
+
+                nameHidden.value = '';
+                setStatus(result?.message || 'Unable to verify account name.', 'error');
+            } catch (e) {
+                if (e?.name === 'AbortError') return;
+                nameHidden.value = '';
+                setStatus('Unable to verify account name right now.', 'error');
+            }
+        };
+
+        typeSelect.addEventListener('change', () => {
+            typeHidden.value = typeSelect.value;
+        });
+        typeHidden.value = typeSelect.value;
+
+        numberInput.addEventListener('blur', lookup);
+        numberInput.addEventListener('change', lookup);
+        networkInputs.forEach(i => i.addEventListener('change', lookup));
+
+        // If returning to page with old input, show the stored name.
+        if ((nameHidden.value || '').trim() !== '') {
+            setStatus('Account Name: ' + nameHidden.value, 'ok');
+        }
+    })();
+</script>
 @endsection
