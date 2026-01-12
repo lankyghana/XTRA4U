@@ -13,6 +13,49 @@ class VendorOrderFulfillmentTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_vendor_fulfillment_page_does_not_crash_when_product_description_is_not_json(): void
+    {
+        $vendor = Vendor::factory()->create(['is_approved' => true]);
+
+        $product = Product::create([
+            'vendor_id' => $vendor->id,
+            'name' => 'Legacy Product',
+            'description' => 'NOT JSON',
+            'price' => 10.00,
+            'is_active' => true,
+            'is_resellable' => false,
+            'min_base_price' => 10.00,
+        ]);
+
+        $order = Order::create([
+            'recipient_phone_number' => '0241234567',
+            'mobile_money_number' => '0241234567',
+            'service_purchased' => 'Legacy Product',
+            'amount_paid' => 10.00,
+            'vendor_id' => $vendor->id,
+            'vendor_service_id' => $product->id,
+            'status' => 'Processing',
+            'payment_status' => 'paid',
+        ]);
+
+        Transaction::create([
+            'order_id' => $order->id,
+            'vendor_id' => $vendor->id,
+            'recipient_phone' => $order->recipient_phone_number,
+            'amount' => 10.00,
+            'commission_amount' => 0.20,
+            'vendor_earning' => 9.80,
+            'payment_status' => 'successful',
+            'timestamp' => now(),
+            'payment_type' => 'order',
+        ]);
+
+        $this->actingAs($vendor, 'vendor');
+
+        $response = $this->get(route('vendor.fulfillment.index'));
+        $response->assertOk();
+    }
+
     public function test_vendor_fulfillment_download_excludes_orders_being_handled_by_external_api(): void
     {
         $vendor = Vendor::factory()->create(['is_approved' => true]);

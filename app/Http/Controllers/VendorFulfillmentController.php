@@ -322,6 +322,23 @@ class VendorFulfillmentController extends Controller
         return $network;
     }
 
+    private function constrainServiceNetwork($query, string $network): void
+    {
+        $driver = DB::getDriverName();
+
+        match ($driver) {
+            'mysql', 'mariadb' => $query
+                ->whereNotNull('description')
+                ->whereRaw('JSON_VALID(description)')
+                ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(description, '$.network')) = ?", [$network]),
+            'sqlite' => $query
+                ->whereNotNull('description')
+                ->whereRaw('json_valid(description)')
+                ->whereRaw("json_extract(description, '$.network') = ?", [$network]),
+            default => $query->where('description->network', $network),
+        };
+    }
+
     private function assertNetworkAllowed(Vendor $vendor, string $network): void
     {
         $allowed = $this->resolveNetworksForVendor($vendor);
@@ -399,7 +416,7 @@ class VendorFulfillmentController extends Controller
             })
             ->whereNull('downloaded_at')
             ->whereHas('service', function ($q) use ($network) {
-                $q->where('description->network', $network);
+                $this->constrainServiceNetwork($q, $network);
             });
     }
 
@@ -413,7 +430,7 @@ class VendorFulfillmentController extends Controller
             })
             ->whereNotNull('downloaded_at')
             ->whereHas('service', function ($q) use ($network) {
-                $q->where('description->network', $network);
+                $this->constrainServiceNetwork($q, $network);
             });
     }
 
