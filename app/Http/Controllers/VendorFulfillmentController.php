@@ -20,6 +20,8 @@ class VendorFulfillmentController extends Controller
 {
     private const DEFAULT_NETWORKS = ['MTN', 'Vodafone', 'AirtelTigo', 'Telecel'];
     private const EXTERNAL_API_NETWORK = 'External API';
+    private const MAX_NETWORKS_ON_PAGE = 50;
+    private const PREVIEW_NETWORKS_LIMIT = 5;
 
     public function index(Request $request)
     {
@@ -27,7 +29,30 @@ class VendorFulfillmentController extends Controller
 
         $this->ensureFulfillmentSchemaReady();
 
-        $networks = $this->resolveNetworksForVendor($vendor);
+        try {
+            $networks = $this->resolveNetworksForVendor($vendor);
+        } catch (\Throwable $e) {
+            Log::error('Vendor fulfillment failed to resolve networks', [
+                'vendor_id' => (int) $vendor->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            $networks = array_values(array_unique(array_merge(self::DEFAULT_NETWORKS, [self::EXTERNAL_API_NETWORK])));
+        }
+
+        if (count($networks) > self::MAX_NETWORKS_ON_PAGE) {
+            Log::warning('Vendor fulfillment networks truncated for performance', [
+                'vendor_id' => (int) $vendor->id,
+                'networks_count' => count($networks),
+                'max' => self::MAX_NETWORKS_ON_PAGE,
+            ]);
+
+            $networks = array_slice($networks, 0, self::MAX_NETWORKS_ON_PAGE);
+
+            if (! in_array(self::EXTERNAL_API_NETWORK, $networks, true)) {
+                $networks[] = self::EXTERNAL_API_NETWORK;
+            }
+        }
 
         $limit = (int) $request->query('limit', 2000);
         $limit = max(1, min($limit, 10000));
@@ -36,28 +61,37 @@ class VendorFulfillmentController extends Controller
         $downloadedByNetwork = [];
         $downloadedOrdersPreview = [];
 
+        $availableCounts = $this->manualFulfillmentCountsByNetwork($vendor, false);
+        $downloadedCounts = $this->manualFulfillmentCountsByNetwork($vendor, true);
+
+        $previewNetworks = $this->resolvePreviewNetworks($networks);
+
         foreach ($networks as $network) {
             try {
                 if ($network === self::EXTERNAL_API_NETWORK) {
                     $availableByNetwork[$network] = $this->externalApiSentOrdersQuery($vendor)->count();
                     $downloadedByNetwork[$network] = 0;
 
-                    $downloadedOrdersPreview[$network] = $this->externalApiSentOrdersQuery($vendor)
-                        ->with(['service'])
-                        ->latest('external_fulfillment_completed_at')
-                        ->limit(20)
-                        ->get();
+                    $downloadedOrdersPreview[$network] = in_array($network, $previewNetworks, true)
+                        ? $this->externalApiSentOrdersQuery($vendor)
+                            ->with(['service'])
+                            ->latest('external_fulfillment_completed_at')
+                            ->limit(10)
+                            ->get()
+                        : collect();
                     continue;
                 }
 
-                $availableByNetwork[$network] = $this->availableOrdersQuery($vendor, $network)->count();
-                $downloadedByNetwork[$network] = $this->downloadedOrdersQuery($vendor, $network)->count();
+                $availableByNetwork[$network] = (int) ($availableCounts[$network] ?? 0);
+                $downloadedByNetwork[$network] = (int) ($downloadedCounts[$network] ?? 0);
 
-                $downloadedOrdersPreview[$network] = $this->downloadedOrdersQuery($vendor, $network)
-                    ->with(['service'])
-                    ->latest('downloaded_at')
-                    ->limit(20)
-                    ->get();
+                $downloadedOrdersPreview[$network] = in_array($network, $previewNetworks, true)
+                    ? $this->downloadedOrdersQuery($vendor, $network)
+                        ->with(['service'])
+                        ->latest('downloaded_at')
+                        ->limit(10)
+                        ->get()
+                    : collect();
             } catch (\Throwable $e) {
                 Log::error('Vendor fulfillment page failed for network', [
                     'vendor_id' => (int) $vendor->id,
@@ -79,6 +113,73 @@ class VendorFulfillmentController extends Controller
             'downloadedOrdersPreview',
             'limit'
         ));
+    }
+
+    private function resolvePreviewNetworks(array $networks): array
+    {
+        $preferred = array_values(array_unique(array_merge(self::DEFAULT_NETWORKS, [self::EXTERNAL_API_NETWORK])));
+        $preview = array_values(array_intersect($preferred, $networks));
+
+        if (count($preview) < self::PREVIEW_NETWORKS_LIMIT) {
+            foreach ($networks as $network) {
+                if (in_array($network, $preview, true)) {
+                    continue;
+                }
+                $preview[] = $network;
+                if (count($preview) >= self::PREVIEW_NETWORKS_LIMIT) {
+                    break;
+                }
+            }
+        }
+
+        return $preview;
+    }
+
+    private function manualFulfillmentCountsByNetwork(Vendor $vendor, bool $downloaded): array
+    {
+        $driver = DB::getDriverName();
+
+        $expr = match ($driver) {
+            'mysql', 'mariadb' => "JSON_UNQUOTE(JSON_EXTRACT(products.description, '$.network'))",
+            'sqlite' => "json_extract(products.description, '$.network')",
+            default => null,
+        };
+
+        $jsonValid = match ($driver) {
+            'mysql', 'mariadb' => 'JSON_VALID(products.description)',
+            'sqlite' => 'json_valid(products.description)',
+            default => null,
+        };
+
+        if (! $expr || ! $jsonValid) {
+            // Unknown driver: fall back to per-network queries elsewhere.
+            return [];
+        }
+
+        $query = $this->baseFulfillableOrdersQuery($vendor)
+            ->where('orders.status', 'Processing')
+            ->where(function ($q) {
+                $q->whereNull('orders.external_fulfillment_status')
+                    ->orWhereNotIn('orders.external_fulfillment_status', ['processing', 'succeeded']);
+            })
+            ->whereNotNull('orders.vendor_service_id')
+            ->join('products', 'orders.vendor_service_id', '=', 'products.id')
+            ->whereNotNull('products.description')
+            ->whereRaw($jsonValid);
+
+        if ($downloaded) {
+            $query->whereNotNull('orders.downloaded_at');
+        } else {
+            $query->whereNull('orders.downloaded_at');
+        }
+
+        return $query
+            ->selectRaw("{$expr} as network, COUNT(*) as aggregate")
+            ->groupByRaw($expr)
+            ->pluck('aggregate', 'network')
+            ->filter(fn ($count, $network) => is_string($network) && trim($network) !== '')
+            ->map(fn ($count) => (int) $count)
+            ->all();
     }
 
     public function download(Request $request, string $network): Response|RedirectResponse
@@ -286,7 +387,17 @@ class VendorFulfillmentController extends Controller
 
     private function resolveNetworksForVendor(Vendor $vendor): array
     {
-        $names = NetworkService::query()->active()->pluck('name')->filter()->values()->all();
+        $names = [];
+        try {
+            if (Schema::hasTable('network_services')) {
+                $names = NetworkService::query()->active()->pluck('name')->filter()->values()->all();
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Vendor fulfillment network services lookup failed', [
+                'error' => $e->getMessage(),
+            ]);
+            $names = [];
+        }
         $orderNetworks = $this->processingNetworksFromOrders($vendor);
 
         $networks = array_values(array_unique(array_merge(self::DEFAULT_NETWORKS, $names, $orderNetworks)));
@@ -376,8 +487,8 @@ class VendorFulfillmentController extends Controller
 
         try {
             return $this->baseFulfillableOrdersQuery($vendor)
-                ->where('status', 'Processing')
-                ->whereNotNull('vendor_service_id')
+                ->where('orders.status', 'Processing')
+                ->whereNotNull('orders.vendor_service_id')
                 ->join('products', 'orders.vendor_service_id', '=', 'products.id')
                 ->whereNotNull('products.description')
                 ->selectRaw("DISTINCT {$expr} as network")
@@ -398,24 +509,24 @@ class VendorFulfillmentController extends Controller
             ->where(function ($q) use ($vendorId) {
                 // Regular orders: selling vendor fulfills.
                 $q->where(function ($q2) use ($vendorId) {
-                    $q2->where('is_reseller_order', false)
-                        ->where('vendor_id', $vendorId);
+                    $q2->where('orders.is_reseller_order', false)
+                        ->where('orders.vendor_id', $vendorId);
                 })
                 // Affiliate/reseller orders: product owner fulfills.
                 ->orWhere(function ($q2) use ($vendorId) {
-                    $q2->where('is_reseller_order', true)
-                        ->where('owner_vendor_id', $vendorId);
+                    $q2->where('orders.is_reseller_order', true)
+                        ->where('orders.owner_vendor_id', $vendorId);
                 })
                 // Backward-compatible fallback: infer owner via reseller product.
                 ->orWhere(function ($q2) use ($vendorId) {
-                    $q2->where('is_reseller_order', true)
+                    $q2->where('orders.is_reseller_order', true)
                         ->whereHas('resellerProduct', function ($q3) use ($vendorId) {
                             $q3->where('owner_vendor_id', $vendorId);
                         });
                 });
             })
             // Paid-only safety: fulfillment should only operate on successfully-paid orders.
-            ->whereIn('payment_status', ['paid', 'completed'])
+            ->whereIn('orders.payment_status', ['paid', 'completed'])
             ->whereHas('transactions', fn ($q) => $q->whereIn('payment_status', ['successful', 'completed']));
     }
 
