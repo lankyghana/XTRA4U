@@ -46,6 +46,9 @@ class Order extends Model
         'affiliate_chain_snapshot' => 'array',
         'payment_completed_at' => 'datetime',
         'downloaded_at' => 'datetime',
+        'external_fulfillment_attempts' => 'integer',
+        'external_fulfillment_last_attempt_at' => 'datetime',
+        'external_fulfillment_completed_at' => 'datetime',
     ];
 
     public function vendor(): BelongsTo

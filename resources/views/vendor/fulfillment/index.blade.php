@@ -4,6 +4,23 @@
 
 @section('content')
 <x-vendor-layout :vendor="$vendor" title="Order Fulfillment" subtitle="Download processing orders and mark them completed" active="fulfillment">
+    @php
+        $formatDateTime = function ($value): string {
+            if ($value instanceof \Carbon\CarbonInterface) {
+                return $value->format('M d, Y g:i A');
+            }
+
+            if (is_string($value) && trim($value) !== '') {
+                try {
+                    return \Illuminate\Support\Carbon::parse($value)->format('M d, Y g:i A');
+                } catch (\Throwable $e) {
+                    // Fall through
+                }
+            }
+
+            return '—';
+        };
+    @endphp
     <div class="space-y-6">
         @if(session('success'))
             <div class="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg shadow-md">
@@ -198,8 +215,8 @@
                                             <td class="px-4 py-3 text-sm text-gray-900">{{ $order->display_product_label }}</td>
                                             <td class="px-4 py-3 text-sm text-gray-500">
                                                 {{ $isExternalApi
-                                                    ? ($order->external_fulfillment_completed_at?->format('M d, Y g:i A') ?? '—')
-                                                    : ($order->downloaded_at?->format('M d, Y g:i A') ?? '—')
+                                                    ? $formatDateTime($order->external_fulfillment_completed_at)
+                                                    : $formatDateTime($order->downloaded_at)
                                                 }}
                                             </td>
                                         </tr>
