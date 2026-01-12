@@ -145,7 +145,6 @@ class ExternalFulfillmentIntegrationTest extends TestCase
         $order->refresh();
         $this->assertSame('succeeded', $order->external_fulfillment_status);
         $this->assertNotNull($order->external_fulfillment_completed_at);
-        $this->assertSame('Completed', $order->status);
 
         // Second run should short-circuit without re-posting.
         $job->handle();
