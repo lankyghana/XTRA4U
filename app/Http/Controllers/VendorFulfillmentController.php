@@ -54,12 +54,23 @@ class VendorFulfillmentController extends Controller
             }
         }
 
+        if (in_array(self::EXTERNAL_API_NETWORK, $networks, true)) {
+            $networks = array_values(array_diff($networks, [self::EXTERNAL_API_NETWORK]));
+            array_unshift($networks, self::EXTERNAL_API_NETWORK);
+        }
+
         $limit = (int) $request->query('limit', 2000);
         $limit = max(1, min($limit, 10000));
 
         $availableByNetwork = [];
         $downloadedByNetwork = [];
         $downloadedOrdersPreview = [];
+
+        $externalApiOrders = $this->externalApiSentOrdersQuery($vendor)
+            ->with(['service'])
+            ->latest('external_fulfillment_completed_at')
+            ->paginate(25, ['*'], 'api_page')
+            ->withQueryString();
 
         $availableCounts = $this->manualFulfillmentCountsByNetwork($vendor, false);
         $downloadedCounts = $this->manualFulfillmentCountsByNetwork($vendor, true);
@@ -72,13 +83,7 @@ class VendorFulfillmentController extends Controller
                     $availableByNetwork[$network] = $this->externalApiSentOrdersQuery($vendor)->count();
                     $downloadedByNetwork[$network] = 0;
 
-                    $downloadedOrdersPreview[$network] = in_array($network, $previewNetworks, true)
-                        ? $this->externalApiSentOrdersQuery($vendor)
-                            ->with(['service'])
-                            ->latest('external_fulfillment_completed_at')
-                            ->limit(10)
-                            ->get()
-                        : collect();
+                    $downloadedOrdersPreview[$network] = collect();
                     continue;
                 }
 
@@ -111,6 +116,7 @@ class VendorFulfillmentController extends Controller
             'availableByNetwork',
             'downloadedByNetwork',
             'downloadedOrdersPreview',
+            'externalApiOrders',
             'limit'
         ));
     }
@@ -253,10 +259,26 @@ class VendorFulfillmentController extends Controller
                 return back()->with('status', 'Please tick the confirmation box before marking External API orders as completed.');
             }
 
+            $orderIds = $request->input('order_ids', []);
+            $orderIds = is_array($orderIds) ? $orderIds : [];
+            $orderIds = array_values(array_unique(array_filter(array_map(function ($value) {
+                $value = is_scalar($value) ? (string) $value : '';
+                return ctype_digit($value) ? (int) $value : null;
+            }, $orderIds))));
+
+            if (empty($orderIds)) {
+                return back()->with('status', 'Select at least one External API order to mark as completed.');
+            }
+
+            if (count($orderIds) > 500) {
+                return back()->with('status', 'Please select 500 orders or fewer at a time.');
+            }
+
             $smsService = app(SmsService::class);
             $updatedCount = 0;
 
             $this->externalApiSentOrdersQuery($vendor)
+                ->whereIn('id', $orderIds)
                 ->with(['service'])
                 ->orderBy('id')
                 ->chunkById(200, function ($orders) use (&$updatedCount, $smsService) {
@@ -301,7 +323,7 @@ class VendorFulfillmentController extends Controller
                 });
 
             if ($updatedCount === 0) {
-                return back()->with('status', 'No External API orders found to mark as completed.');
+                return back()->with('status', 'No selected External API orders were eligible to be marked completed.');
             }
 
             return back()->with('success', 'Marked ' . $updatedCount . ' External API orders as completed.');

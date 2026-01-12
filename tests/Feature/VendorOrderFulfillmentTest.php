@@ -152,6 +152,7 @@ class VendorOrderFulfillmentTest extends TestCase
 
         $response = $this->post(route('vendor.fulfillment.complete', ['network' => 'External API']), [
             'confirm_external_api_completed' => '1',
+            'order_ids' => [$order->id],
         ]);
         $response->assertRedirect();
 

@@ -201,9 +201,15 @@ class VendorDashboardController extends Controller
 		};
 	}
 
-	public function orders()
+	public function orders(Request $request)
 	{
 		$vendor = $this->resolveVendor();
+		$search = trim((string) $request->query('q', ''));
+		$search = ltrim($search, "# \t\n\r\0\x0B");
+		$search = mb_substr($search, 0, 100);
+		$isNumericSearch = $search !== '' && ctype_digit($search);
+		$like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $search) . '%';
+
 		$orders = Order::query()
 			->where(function ($q) use ($vendor) {
 				// Selling vendor always sees their orders.
@@ -225,9 +231,25 @@ class VendorDashboardController extends Controller
 			->whereIn('payment_status', ['paid', 'completed'])
 			->whereIn('status', ['Processing', 'Completed'])
 			->whereHas('transactions', fn ($q) => $q->whereIn('payment_status', ['successful', 'completed']))
+			->when($search !== '', function ($q) use ($search, $isNumericSearch, $like) {
+				$q->where(function ($q2) use ($search, $isNumericSearch, $like) {
+					if ($isNumericSearch) {
+						$q2->orWhere('id', (int) $search);
+					}
+
+					$q2->orWhere('recipient_phone_number', 'like', $like)
+						->orWhere('mobile_money_number', 'like', $like)
+						->orWhere('payment_reference', 'like', $like)
+						->orWhere('service_purchased', 'like', $like)
+						->orWhereHas('service', function ($q3) use ($like) {
+							$q3->where('name', 'like', $like);
+						});
+				});
+			})
 			->with(['service'])
 			->latest()
-			->paginate(20);
+			->paginate(20)
+			->withQueryString();
 
 		return view('vendor.orders.index', compact('vendor', 'orders'));
 	}
@@ -236,9 +258,14 @@ class VendorDashboardController extends Controller
 	 * Show affiliate orders - orders where this vendor is the product owner
 	 * but the product was sold by a reseller
 	 */
-	public function affiliateOrders()
+	public function affiliateOrders(Request $request)
 	{
 		$vendor = $this->resolveVendor();
+		$search = trim((string) $request->query('q', ''));
+		$search = ltrim($search, "# \t\n\r\0\x0B");
+		$search = mb_substr($search, 0, 100);
+		$isNumericSearch = $search !== '' && ctype_digit($search);
+		$like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $search) . '%';
 
 		// Affiliate Orders tab is for the selling vendor (reseller) to track
 		// affiliate sales they must fulfill.
@@ -248,9 +275,25 @@ class VendorDashboardController extends Controller
 			->whereIn('payment_status', ['paid', 'completed'])
 			->whereIn('status', ['Processing', 'Completed'])
 			->whereHas('transactions', fn ($q) => $q->whereIn('payment_status', ['successful', 'completed']))
+			->when($search !== '', function ($q) use ($search, $isNumericSearch, $like) {
+				$q->where(function ($q2) use ($search, $isNumericSearch, $like) {
+					if ($isNumericSearch) {
+						$q2->orWhere('id', (int) $search);
+					}
+
+					$q2->orWhere('recipient_phone_number', 'like', $like)
+						->orWhere('mobile_money_number', 'like', $like)
+						->orWhere('payment_reference', 'like', $like)
+						->orWhere('service_purchased', 'like', $like)
+						->orWhereHas('service', function ($q3) use ($like) {
+							$q3->where('name', 'like', $like);
+						});
+				});
+			})
 			->with(['ownerVendor', 'service', 'resellerProduct.ownerVendor'])
 			->latest()
-			->paginate(20);
+			->paginate(20)
+			->withQueryString();
 
 		return view('vendor.orders.affiliate', compact('vendor', 'orders'));
 	}

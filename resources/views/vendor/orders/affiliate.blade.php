@@ -60,6 +60,51 @@
                     <p class="text-sm text-gray-500">Showing <span class="font-semibold text-purple-600">{{ $orders->count() }}</span> of <span class="font-semibold text-purple-600">{{ $orders->total() }}</span> orders</p>
                 </div>
 
+                <!-- Search -->
+                <form method="GET" action="{{ route('vendor.orders.affiliate') }}" class="mb-6">
+                    @foreach(request()->except(['page', 'q']) as $key => $value)
+                        @if(is_array($value))
+                            @foreach($value as $arrayValue)
+                                <input type="hidden" name="{{ $key }}[]" value="{{ $arrayValue }}">
+                            @endforeach
+                        @else
+                            <input type="hidden" name="{{ $key }}" value="{{ $value }}">
+                        @endif
+                    @endforeach
+
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="flex-1">
+                            <label for="affiliate-orders-search" class="sr-only">Search affiliate orders</label>
+                            <div class="relative">
+                                <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                    <svg class="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M9 3a6 6 0 104.472 10.03l2.249 2.25a1 1 0 001.414-1.415l-2.25-2.249A6 6 0 009 3zm-4 6a4 4 0 118 0 4 4 0 01-8 0z" clip-rule="evenodd" />
+                                    </svg>
+                                </div>
+                                <input
+                                    id="affiliate-orders-search"
+                                    name="q"
+                                    value="{{ request('q') }}"
+                                    placeholder="Search by Order ID, phone number, or product"
+                                    class="block w-full rounded-lg border border-gray-300 bg-white pl-10 pr-3 py-2 text-sm shadow-sm focus:border-purple-500 focus:ring-purple-500"
+                                />
+                            </div>
+                        </div>
+
+                        <div class="flex gap-2">
+                            <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-purple-700">
+                                Search
+                            </button>
+
+                            @if((string) request('q') !== '')
+                                <a href="{{ route('vendor.orders.affiliate') }}" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50">
+                                    Clear
+                                </a>
+                            @endif
+                        </div>
+                    </div>
+                </form>
+
                 <div class="overflow-hidden rounded-lg border border-gray-200">
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200">

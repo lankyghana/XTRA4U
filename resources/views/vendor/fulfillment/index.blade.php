@@ -175,32 +175,57 @@
                                     {{ $isExternalApi ? ((int)($availableByNetwork[$network] ?? 0)) . ' sent via API' : ($downloadedCount . ' downloaded') }}
                                 </p>
                             </div>
-                            <form method="POST" action="{{ route('vendor.fulfillment.complete', ['network' => $network]) }}">
-                                @csrf
-                                @if($isExternalApi)
-                                    <div class="flex flex-col sm:flex-row sm:items-center gap-2">
-                                        <label class="inline-flex items-center text-xs font-semibold text-emerald-900 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-                                            <input type="checkbox" name="confirm_external_api_completed" value="1" class="mr-2 rounded border-gray-300">
-                                            I confirm these API orders were delivered
-                                        </label>
-                                        <button type="submit"
-                                                class="inline-flex items-center justify-center px-3 py-2 rounded-lg text-sm font-semibold text-white bg-emerald-700 hover:bg-emerald-800 transition-colors {{ (int)($availableByNetwork[$network] ?? 0) === 0 ? 'opacity-50 pointer-events-none' : '' }}">
-                                            Mark API Orders as Completed
-                                        </button>
-                                    </div>
-                                @else
+                            @if(!$isExternalApi)
+                                <form method="POST" action="{{ route('vendor.fulfillment.complete', ['network' => $network]) }}">
+                                    @csrf
                                     <button type="submit"
                                             class="inline-flex items-center px-3 py-2 rounded-lg text-sm font-semibold text-white bg-green-600 hover:bg-green-700 transition-colors {{ $downloadedCount === 0 ? 'opacity-50 pointer-events-none' : '' }}">
                                         Mark Downloaded Orders as Completed
                                     </button>
-                                @endif
-                            </form>
+                                </form>
+                            @endif
                         </div>
 
-                        <div class="overflow-x-auto">
+                        @if($isExternalApi)
+                            @php
+                                $apiOrders = $externalApiOrders ?? collect();
+                                $apiOrderIds = $apiOrders instanceof \Illuminate\Pagination\Paginator || $apiOrders instanceof \Illuminate\Pagination\LengthAwarePaginator
+                                    ? $apiOrders->getCollection()->pluck('id')->values()->all()
+                                    : collect($apiOrders)->pluck('id')->values()->all();
+                            @endphp
+                            <div class="overflow-x-auto"
+                                x-data="{
+                                    confirm: false,
+                                    selectedOrderIds: [],
+                                    pageOrderIds: @json($apiOrderIds),
+                                    toggleAll(event) {
+                                        const checked = !!event.target.checked;
+                                        this.selectedOrderIds = checked ? [...this.pageOrderIds] : [];
+                                    },
+                                    isAllSelected() {
+                                        return this.pageOrderIds.length > 0 && this.selectedOrderIds.length === this.pageOrderIds.length;
+                                    },
+                                    selectionLabel() {
+                                        const count = this.selectedOrderIds.length;
+                                        if (count === 0) return 'No orders selected';
+                                        return count + ' order' + (count === 1 ? '' : 's') + ' selected';
+                                    }
+                                }">
+                        @else
+                            <div class="overflow-x-auto">
+                        @endif
                             <table class="min-w-full divide-y divide-gray-200">
                                 <thead class="bg-white">
                                     <tr>
+                                        @if($isExternalApi)
+                                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider w-10">
+                                                <label class="inline-flex items-center" title="Select all on this page">
+                                                    <input type="checkbox" class="h-4 w-4 rounded border-gray-300 text-emerald-700 focus:ring-emerald-600"
+                                                        @change="toggleAll($event)" :checked="isAllSelected()">
+                                                    <span class="sr-only">Select all</span>
+                                                </label>
+                                            </th>
+                                        @endif
                                         <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Order ID</th>
                                         <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Number</th>
                                         <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Package</th>
@@ -208,28 +233,92 @@
                                     </tr>
                                 </thead>
                                 <tbody class="bg-white divide-y divide-gray-100">
-                                    @forelse($preview as $order)
-                                        <tr class="hover:bg-gray-50">
-                                            <td class="px-4 py-3 text-sm font-semibold text-gray-900">#{{ $order->id }}</td>
-                                            <td class="px-4 py-3 text-sm text-gray-900">{{ $order->recipient_phone_number }}</td>
-                                            <td class="px-4 py-3 text-sm text-gray-900">{{ $order->display_product_label }}</td>
-                                            <td class="px-4 py-3 text-sm text-gray-500">
-                                                {{ $isExternalApi
-                                                    ? $formatDateTime($order->external_fulfillment_completed_at)
-                                                    : $formatDateTime($order->downloaded_at)
-                                                }}
-                                            </td>
-                                        </tr>
-                                    @empty
+                                    @if($isExternalApi)
                                         <tr>
-                                            <td colspan="4" class="px-4 py-6 text-center text-sm text-gray-500">
-                                                {{ $isExternalApi ? 'No External API orders awaiting confirmation.' : ('No downloaded orders for ' . $network . '.') }}
+                                            <td colspan="5" class="px-4 py-4 bg-gradient-to-r from-emerald-50 to-white border-b border-emerald-100">
+                                                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                                    <div>
+                                                        <p class="text-sm font-semibold text-emerald-900">External API completion</p>
+                                                        <p class="text-xs text-emerald-800 mt-1">Select the specific API orders you have confirmed as delivered in your provider dashboard, then mark only those as completed.</p>
+                                                    </div>
+
+                                                    <form id="external-api-complete-form" method="POST" action="{{ route('vendor.fulfillment.complete', ['network' => $network]) }}" class="w-full sm:w-auto">
+                                                        @csrf
+                                                        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                                                            <div class="flex items-center gap-2">
+                                                                <label class="inline-flex items-center text-xs font-semibold text-emerald-900 bg-white border border-emerald-200 rounded-lg px-3 py-2 shadow-sm">
+                                                                    <input type="checkbox" class="mr-2 rounded border-gray-300" x-model="confirm" name="confirm_external_api_completed" value="1">
+                                                                    I confirm selected orders were delivered
+                                                                </label>
+
+                                                                <span class="text-xs font-semibold text-gray-700" x-text="selectionLabel()"></span>
+                                                            </div>
+
+                                                            <button type="submit"
+                                                                    :disabled="!confirm || selectedOrderIds.length === 0"
+                                                                    class="inline-flex items-center justify-center px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors"
+                                                                    :class="(!confirm || selectedOrderIds.length === 0) ? 'bg-emerald-700/40 cursor-not-allowed' : 'bg-emerald-700 hover:bg-emerald-800'">
+                                                                Mark Selected as Completed
+                                                            </button>
+                                                        </div>
+                                                    </form>
+                                                </div>
                                             </td>
                                         </tr>
-                                    @endforelse
+
+                                        @forelse(($externalApiOrders ?? collect()) as $order)
+                                            <tr class="hover:bg-emerald-50/40">
+                                                <td class="px-4 py-3">
+                                                    <input
+                                                        type="checkbox"
+                                                        class="h-4 w-4 rounded border-gray-300 text-emerald-700 focus:ring-emerald-600"
+                                                        value="{{ (int) $order->id }}"
+                                                        name="order_ids[]"
+                                                        form="external-api-complete-form"
+                                                        x-model="selectedOrderIds"
+                                                    />
+                                                </td>
+                                                <td class="px-4 py-3 text-sm font-semibold text-gray-900">#{{ $order->id }}</td>
+                                                <td class="px-4 py-3 text-sm text-gray-900">{{ $order->recipient_phone_number }}</td>
+                                                <td class="px-4 py-3 text-sm text-gray-900">{{ $order->display_product_label }}</td>
+                                                <td class="px-4 py-3 text-sm text-gray-600">
+                                                    {{ $formatDateTime($order->external_fulfillment_completed_at) }}
+                                                </td>
+                                            </tr>
+                                        @empty
+                                            <tr>
+                                                <td colspan="5" class="px-4 py-6 text-center text-sm text-gray-500">
+                                                    No External API orders awaiting confirmation.
+                                                </td>
+                                            </tr>
+                                        @endforelse
+                                    @else
+                                        @forelse($preview as $order)
+                                            <tr class="hover:bg-gray-50">
+                                                <td class="px-4 py-3 text-sm font-semibold text-gray-900">#{{ $order->id }}</td>
+                                                <td class="px-4 py-3 text-sm text-gray-900">{{ $order->recipient_phone_number }}</td>
+                                                <td class="px-4 py-3 text-sm text-gray-900">{{ $order->display_product_label }}</td>
+                                                <td class="px-4 py-3 text-sm text-gray-500">
+                                                    {{ $formatDateTime($order->downloaded_at) }}
+                                                </td>
+                                            </tr>
+                                        @empty
+                                            <tr>
+                                                <td colspan="4" class="px-4 py-6 text-center text-sm text-gray-500">
+                                                    {{ 'No downloaded orders for ' . $network . '.' }}
+                                                </td>
+                                            </tr>
+                                        @endforelse
+                                    @endif
                                 </tbody>
                             </table>
                         </div>
+
+                        @if($isExternalApi && isset($externalApiOrders) && method_exists($externalApiOrders, 'hasPages') && $externalApiOrders->hasPages())
+                            <div class="px-4 py-4 bg-white border-t border-gray-100">
+                                {{ $externalApiOrders->links() }}
+                            </div>
+                        @endif
 
                         @if(!$isExternalApi && $downloadedCount > $preview->count())
                             <div class="px-4 py-3 bg-gray-50 text-xs text-gray-500">
