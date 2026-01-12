@@ -13,6 +13,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class VendorFulfillmentController extends Controller
@@ -36,26 +37,38 @@ class VendorFulfillmentController extends Controller
         $downloadedOrdersPreview = [];
 
         foreach ($networks as $network) {
-            if ($network === self::EXTERNAL_API_NETWORK) {
-                $availableByNetwork[$network] = $this->externalApiSentOrdersQuery($vendor)->count();
-                $downloadedByNetwork[$network] = 0;
+            try {
+                if ($network === self::EXTERNAL_API_NETWORK) {
+                    $availableByNetwork[$network] = $this->externalApiSentOrdersQuery($vendor)->count();
+                    $downloadedByNetwork[$network] = 0;
 
-                $downloadedOrdersPreview[$network] = $this->externalApiSentOrdersQuery($vendor)
+                    $downloadedOrdersPreview[$network] = $this->externalApiSentOrdersQuery($vendor)
+                        ->with(['service'])
+                        ->latest('external_fulfillment_completed_at')
+                        ->limit(20)
+                        ->get();
+                    continue;
+                }
+
+                $availableByNetwork[$network] = $this->availableOrdersQuery($vendor, $network)->count();
+                $downloadedByNetwork[$network] = $this->downloadedOrdersQuery($vendor, $network)->count();
+
+                $downloadedOrdersPreview[$network] = $this->downloadedOrdersQuery($vendor, $network)
                     ->with(['service'])
-                    ->latest('external_fulfillment_completed_at')
+                    ->latest('downloaded_at')
                     ->limit(20)
                     ->get();
-                continue;
+            } catch (\Throwable $e) {
+                Log::error('Vendor fulfillment page failed for network', [
+                    'vendor_id' => (int) $vendor->id,
+                    'network' => (string) $network,
+                    'error' => $e->getMessage(),
+                ]);
+
+                $availableByNetwork[$network] = 0;
+                $downloadedByNetwork[$network] = 0;
+                $downloadedOrdersPreview[$network] = collect();
             }
-
-            $availableByNetwork[$network] = $this->availableOrdersQuery($vendor, $network)->count();
-            $downloadedByNetwork[$network] = $this->downloadedOrdersQuery($vendor, $network)->count();
-
-            $downloadedOrdersPreview[$network] = $this->downloadedOrdersQuery($vendor, $network)
-                ->with(['service'])
-                ->latest('downloaded_at')
-                ->limit(20)
-                ->get();
         }
 
         return view('vendor.fulfillment.index', compact(
