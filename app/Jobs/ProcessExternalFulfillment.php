@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Order;
+use App\Models\Transaction;
 use App\Models\Vendor;
 use App\Services\ExternalFulfillment\ExternalFulfillmentClient;
 use App\Services\ExternalFulfillment\ExternalFulfillmentConfig;
@@ -12,6 +13,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class ProcessExternalFulfillment implements ShouldQueue
@@ -92,12 +94,39 @@ class ProcessExternalFulfillment implements ShouldQueue
                     }
                 }
 
-                Order::whereKey($order->id)->update([
-                    'external_fulfillment_status' => 'succeeded',
-                    'external_fulfillment_completed_at' => now(),
-                    'external_fulfillment_remote_reference' => $remoteReference,
-                    'external_fulfillment_last_error' => null,
-                ]);
+                DB::transaction(function () use ($order, $remoteReference) {
+                    $fresh = Order::query()
+                        ->whereKey($order->id)
+                        ->lockForUpdate()
+                        ->first();
+
+                    if (! $fresh) {
+                        return;
+                    }
+
+                    $previousStatus = (string) ($fresh->status ?? '');
+
+                    $fresh->forceFill([
+                        'external_fulfillment_status' => 'succeeded',
+                        'external_fulfillment_completed_at' => now(),
+                        'external_fulfillment_remote_reference' => $remoteReference,
+                        'external_fulfillment_last_error' => null,
+                    ]);
+
+                    $didMarkCompleted = false;
+                    if (! in_array($previousStatus, ['Completed', 'Cancelled'], true)) {
+                        $fresh->status = 'Completed';
+                        $didMarkCompleted = true;
+                    }
+
+                    $fresh->save();
+
+                    if ($didMarkCompleted) {
+                        Transaction::where('order_id', $fresh->id)->update([
+                            'payment_status' => 'completed',
+                        ]);
+                    }
+                });
 
                 return;
             }
