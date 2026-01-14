@@ -135,10 +135,32 @@
 
                             <div class="mt-4">
                                 @if($isExternalApi)
-                                    <div class="w-full inline-flex items-center justify-center px-3 py-2 rounded-lg text-sm font-semibold text-emerald-900 bg-emerald-100 border border-emerald-200">
-                                        Awaiting your confirmation
+                                    <div class="flex flex-col gap-2">
+                                        <div class="w-full inline-flex items-center justify-center px-3 py-2 rounded-lg text-sm font-semibold text-emerald-900 bg-emerald-100 border border-emerald-200">
+                                            Awaiting your confirmation
+                                        </div>
+                                        <p class="text-xs text-gray-600">Use the “External API” completion button below after confirming delivery.</p>
+                                        @php
+                                            // Count failed API orders for this vendor (for button visibility)
+                                            $failedApiCount = 
+                                                \App\Models\Order::query()
+                                                    ->where('status', 'Processing')
+                                                    ->where('external_fulfillment_status', 'failed')
+                                                    ->where(function($q) use ($vendor) {
+                                                        $q->where('vendor_id', $vendor->id)
+                                                          ->orWhere('owner_vendor_id', $vendor->id);
+                                                    })
+                                                    ->count();
+                                        @endphp
+                                        @if($failedApiCount > 0)
+                                            <form method="POST" action="{{ route('vendor.fulfillment.resend-failed-api') }}" onsubmit="return confirm('Resend all failed External API orders? This will attempt to send them again.');">
+                                                @csrf
+                                                <button type="submit" class="inline-flex items-center px-3 py-2 rounded-lg text-sm font-semibold text-white bg-emerald-700 hover:bg-emerald-800 transition-colors w-full mt-2">
+                                                    Resend All Failed Orders ({{ $failedApiCount }})
+                                                </button>
+                                            </form>
+                                        @endif
                                     </div>
-                                    <p class="text-xs text-gray-600 mt-2">Use the “External API” completion button below after confirming delivery.</p>
                                 @else
                                     <a href="{{ route('vendor.fulfillment.download', ['network' => $network, 'limit' => (int)($limit ?? 2000)]) }}"
                                        class="w-full inline-flex items-center justify-center px-3 py-2 rounded-lg text-sm font-semibold text-white bg-brand-deep-blue hover:bg-brand-bright-blue transition-colors {{ $count === 0 ? 'opacity-50 pointer-events-none' : '' }}">

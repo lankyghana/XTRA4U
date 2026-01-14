@@ -173,6 +173,7 @@ Route::middleware(['vendor.approved'])
         Route::get('fulfillment', [VendorFulfillmentController::class, 'index'])->name('fulfillment.index');
         Route::get('fulfillment/download/{network}', [VendorFulfillmentController::class, 'download'])->name('fulfillment.download');
         Route::post('fulfillment/complete/{network}', [VendorFulfillmentController::class, 'complete'])->name('fulfillment.complete');
+        Route::post('fulfillment/resend-failed-api', [VendorFulfillmentController::class, 'resendAllFailedApiOrders'])->name('fulfillment.resend-failed-api');
         
         Route::get('analytics', [VendorDashboardController::class, 'analytics'])
             ->name('analytics.index');

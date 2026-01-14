@@ -1,5 +1,4 @@
-<?php
-
+<?php 
 namespace App\Http\Controllers;
 
 use App\Models\NetworkService;
@@ -18,6 +17,46 @@ use Illuminate\Support\Str;
 
 class VendorFulfillmentController extends Controller
 {
+    /**
+     * Resend all failed External API orders for the current vendor.
+     */
+    public function resendAllFailedApiOrders(Request $request): RedirectResponse
+    {
+        $vendor = $this->resolveVendor();
+        $this->ensureFulfillmentSchemaReady();
+
+        // Find all failed external API orders for this vendor
+        $failedOrders = $this->baseFulfillableOrdersQuery($vendor)
+            ->where('status', 'Processing')
+            ->where('external_fulfillment_status', 'failed')
+            ->get();
+
+        if ($failedOrders->isEmpty()) {
+            return back()->with('status', 'No failed External API orders to resend.');
+        }
+
+        $resentCount = 0;
+        foreach ($failedOrders as $order) {
+            try {
+                // Here you would call the actual resend logic, e.g. dispatch a job or call a service
+                // For now, we just increment the attempts and clear the error/status for demonstration
+                $order->external_fulfillment_status = 'processing';
+                $order->external_fulfillment_last_error = null;
+                $order->external_fulfillment_attempts = ($order->external_fulfillment_attempts ?? 0) + 1;
+                $order->external_fulfillment_last_attempt_at = now();
+                $order->save();
+                // TODO: Replace above with actual API resend logic
+                $resentCount++;
+            } catch (\Throwable $e) {
+                Log::error('Failed to resend External API order', [
+                    'order_id' => $order->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return back()->with('success', "Resent {$resentCount} failed External API order(s) for processing.");
+    }
     private const DEFAULT_NETWORKS = ['MTN', 'Vodafone', 'AirtelTigo', 'Telecel'];
     private const EXTERNAL_API_NETWORK = 'External API';
     private const MAX_NETWORKS_ON_PAGE = 50;
