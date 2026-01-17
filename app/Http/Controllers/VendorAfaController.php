@@ -81,11 +81,14 @@ class VendorAfaController extends Controller
         $vendor = $this->vendor();
 
         // Authorization:
-        // - Reseller orders: only reseller can view
+        // - Reseller orders: provider and reseller can view
         // - Direct orders: only provider can view
         $isResellerOrder = (bool) $registration->is_reseller_order;
         $canView = $isResellerOrder
-            ? ((int) $registration->reseller_vendor_id === (int) $vendor->id)
+            ? (
+                ((int) $registration->reseller_vendor_id === (int) $vendor->id) ||
+                ((int) $registration->vendor_id === (int) $vendor->id)
+            )
             : ((int) $registration->vendor_id === (int) $vendor->id);
 
         if (!$canView) {
@@ -106,19 +109,12 @@ class VendorAfaController extends Controller
         $vendor = $this->vendor();
 
         // Fulfillment ownership rule:
-        // - Reseller orders: reseller fulfills and can update
-        // - Direct orders: provider fulfills and can update
-        $isResellerOrder = (bool) $registration->is_reseller_order;
-        $canManage = $isResellerOrder
-            ? ((int) $registration->reseller_vendor_id === (int) $vendor->id)
-            : ((int) $registration->vendor_id === (int) $vendor->id);
+        // Only the provider (main vendor) can manage fulfillment status for both direct and reseller orders
+        $canManage = ((int) $registration->vendor_id === (int) $vendor->id);
 
         if (!$canManage) {
             // Friendly message instead of harsh 403 error
-            $errorMessage = $isResellerOrder
-                ? 'This registration is a reseller sale. Only the reseller can manage its fulfillment status.'
-                : 'You do not have permission to manage this registration.';
-            
+            $errorMessage = 'Only the provider can manage this registration\'s fulfillment status.';
             return back()->with('error', $errorMessage);
         }
 
