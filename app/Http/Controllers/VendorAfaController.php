@@ -27,19 +27,12 @@ class VendorAfaController extends Controller
 
         // Show registrations where vendor is either:
         // - Reseller (reseller_vendor_id = me): Reseller who sold the service
-        // - Provider (vendor_id = me) ONLY for direct registrations (non-reseller orders)
+        // - Provider (vendor_id = me): Provider who must process the registration (regardless of reseller)
         $baseQuery = AfaRegistration::query()
             ->where('payment_status', AfaRegistration::PAYMENT_COMPLETED)
             ->where(function ($q) use ($vendor) {
-                $q->where(function ($q2) use ($vendor) {
-                    $q2->where('is_reseller_order', true)
-                        ->where('reseller_vendor_id', $vendor->id);
-                })->orWhere(function ($q2) use ($vendor) {
-                    $q2->where(function ($q3) {
-                        $q3->whereNull('is_reseller_order')
-                            ->orWhere('is_reseller_order', false);
-                    })->where('vendor_id', $vendor->id);
-                });
+                $q->where('reseller_vendor_id', $vendor->id)
+                  ->orWhere('vendor_id', $vendor->id);
             });
 
         $query = clone $baseQuery;
