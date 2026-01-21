@@ -320,6 +320,7 @@
                     <input type="tel" id="recipient_phone" name="recipient_phone" x-model="recipientPhone" required
                         x-ref="recipientPhoneInput"
                         autocomplete="tel"
+                        placeholder="e.g. 0244123456"
                         class="w-full border border-gray-200 rounded-lg p-3 focus:ring-2 focus:ring-purple-300">
                 </div>
 
