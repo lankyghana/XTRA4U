@@ -19,6 +19,7 @@ class Order extends Model
         'vendor_service_id',
         'status',
         'payment_status',
+        'payment_source',
         'payment_reference',
         'payment_gateway',
         'payment_completed_at',
