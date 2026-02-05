@@ -25,14 +25,17 @@ class VendorAfaController extends Controller
     {
         $vendor = $this->vendor();
 
-        // Show registrations where vendor is either:
-        // - Reseller (reseller_vendor_id = me): Reseller who sold the service
-        // - Provider (vendor_id = me): Provider who must process the registration (regardless of reseller)
+        // Show registrations with enforcement:
+        // - Reseller orders visible to the reseller who sold them (`reseller_vendor_id`)
+        // - Direct orders visible to the provider (`vendor_id`) when not a reseller order
         $baseQuery = AfaRegistration::query()
             ->where('payment_status', AfaRegistration::PAYMENT_COMPLETED)
             ->where(function ($q) use ($vendor) {
                 $q->where('reseller_vendor_id', $vendor->id)
-                  ->orWhere('vendor_id', $vendor->id);
+                  ->orWhere(function ($qq) use ($vendor) {
+                      $qq->where('vendor_id', $vendor->id)
+                         ->where('is_reseller_order', false);
+                  });
             });
 
         $query = clone $baseQuery;
@@ -81,14 +84,11 @@ class VendorAfaController extends Controller
         $vendor = $this->vendor();
 
         // Authorization:
-        // - Reseller orders: provider and reseller can view
-        // - Direct orders: only provider can view
+        // - Reseller orders: only the reseller who sold it may view
+        // - Direct orders: only the provider may view
         $isResellerOrder = (bool) $registration->is_reseller_order;
         $canView = $isResellerOrder
-            ? (
-                ((int) $registration->reseller_vendor_id === (int) $vendor->id) ||
-                ((int) $registration->vendor_id === (int) $vendor->id)
-            )
+            ? ((int) $registration->reseller_vendor_id === (int) $vendor->id)
             : ((int) $registration->vendor_id === (int) $vendor->id);
 
         if (!$canView) {
@@ -108,13 +108,17 @@ class VendorAfaController extends Controller
     {
         $vendor = $this->vendor();
 
+        $isResellerOrder = (bool) $registration->is_reseller_order;
+
         // Fulfillment ownership rule:
-        // Only the provider (main vendor) can manage fulfillment status for both direct and reseller orders
-        $canManage = ((int) $registration->vendor_id === (int) $vendor->id);
+        // - If this is a reseller order, only the reseller may manage it
+        // - Otherwise (direct order), only the provider may manage it
+        $canManage = $isResellerOrder
+            ? ((int) $registration->reseller_vendor_id === (int) $vendor->id)
+            : ((int) $registration->vendor_id === (int) $vendor->id);
 
         if (!$canManage) {
-            // Friendly message instead of harsh 403 error
-            $errorMessage = 'Only the provider can manage this registration\'s fulfillment status.';
+            $errorMessage = 'You are not authorized to manage this registration.';
             return back()->with('error', $errorMessage);
         }
 
