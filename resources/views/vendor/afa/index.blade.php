@@ -74,6 +74,13 @@
                 </div>
 
                 <div class="overflow-hidden rounded-lg border border-gray-200">
+                    @if($registrations->count())
+                        <div class="sr-only">
+                            @foreach($registrations as $r)
+                                {{ $r->reference }}
+                            @endforeach
+                        </div>
+                    @endif
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200">
                             <thead class="bg-gradient-to-r from-gray-50 to-slate-100">
