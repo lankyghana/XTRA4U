@@ -710,7 +710,14 @@ class VendorDashboardController extends Controller
 	{
 		$vendor = $this->resolveVendor();
 		$vendorId = $vendor->id;
-		$withdrawableBalance = (float) $vendor->wallet_balance;
+
+		$walletService = app(\App\Services\WalletService::class);
+		// Total wallet balance (spendable for orders) remains the vendor wallet balance
+		$totalBalance = (float) $vendor->wallet_balance;
+		// Withdrawable balance should include only sales earnings (order_earning) minus processed withdrawal debits
+		$withdrawableBalance = $walletService->getWithdrawableBalance($vendorId);
+		// Vendor top-ups total (display-only)
+		$vendorTopupsTotal = $walletService->getVendorTopupsTotal($vendorId);
 		$withdrawals = VendorWithdrawal::where('vendor_id', $vendorId)
 			->latest()
 			->paginate(10);
@@ -721,12 +728,64 @@ class VendorDashboardController extends Controller
 			->where('status', VendorWithdrawal::STATUS_APPROVED)
 			->sum('amount');
 
+		// Also prepare unified wallet history for the UI (read-only view).
+		$ledgerEntries = \App\Models\WalletLedger::where('vendor_id', $vendorId)->orderByDesc('created_at')->get();
+
+		// Top-ups metrics for the Top Ups tab (display-only)
+		$totalTopups = \App\Models\WalletTopup::where('vendor_id', $vendorId)
+			->where('status', 'completed')
+			->sum('amount');
+
+		$topupsSpent = \App\Models\WalletLedger::where('vendor_id', $vendorId)
+			->where('type', 'debit')
+			->where('metadata->purpose', 'order_payment')
+			->sum('amount');
+
+		$topupOrdersCount = \App\Models\Order::where('vendor_id', $vendorId)
+			->where('payment_source', 'wallet')
+			->count();
+
+		$topupOrdersTotal = \App\Models\Order::where('vendor_id', $vendorId)
+			->where('payment_source', 'wallet')
+			->sum('amount_paid');
+
+		// Normalize ledger entries
+		$ledgerItems = $ledgerEntries->map(function ($e) {
+			return (object) [
+				'type' => $e->type === 'credit' ? ($e->metadata['purpose'] ?? 'Top-up') : 'Withdrawal',
+				'amount' => $e->amount,
+				'status' => 'completed',
+				'reference' => $e->metadata['reference'] ?? null,
+				'date' => $e->created_at,
+			];
+		});
+
+		// Normalize withdrawal records
+		$withdrawalItems = $withdrawals->getCollection()->map(function ($w) {
+			return (object) [
+				'type' => 'Withdrawal',
+				'amount' => $w->amount,
+				'status' => $w->status,
+				'reference' => $w->reference,
+				'date' => $w->created_at,
+			];
+		});
+
+		$history = $ledgerItems->concat($withdrawalItems)->sortByDesc('date')->values();
+
 		return view('vendor.withdrawals.index', compact(
 			'vendor',
 			'withdrawals',
+			'totalBalance',
 			'withdrawableBalance',
+			'vendorTopupsTotal',
 			'pendingTotal',
-			'approvedTotal'
+			'approvedTotal',
+			'history',
+			'totalTopups',
+			'topupsSpent',
+			'topupOrdersCount',
+			'topupOrdersTotal'
 		));
 	}
 
