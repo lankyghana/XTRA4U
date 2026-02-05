@@ -4,10 +4,12 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AdminLoginController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AdminAuthController;
+use App\Http\Controllers\AdminWalletTopupController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\VendorRequestController;
 use App\Http\Controllers\VendorAuthController;
 use App\Http\Controllers\VendorDashboardController;
+use App\Http\Controllers\VendorQuickBuyController;
 use App\Http\Controllers\VendorFulfillmentController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\OrderController;
@@ -199,11 +201,13 @@ Route::middleware(['vendor.approved'])
         Route::get('transactions', fn () => redirect()->route('vendor.dashboard'))
             ->name('transactions.index');
 
-        Route::get('withdrawals', [VendorDashboardController::class, 'withdrawals'])
+        // Vendor wallet/withdrawal routes. Path changed to 'wallet' for clarity
+        // Route names are preserved for backwards compatibility.
+        Route::get('wallet', [VendorDashboardController::class, 'withdrawals'])
             ->name('withdrawals.index');
-        Route::post('withdrawals/name-query', [VendorDashboardController::class, 'lookupWithdrawalAccountName'])
+        Route::post('wallet/name-query', [VendorDashboardController::class, 'lookupWithdrawalAccountName'])
             ->name('withdrawals.name-query');
-        Route::post('withdrawals', [VendorDashboardController::class, 'requestWithdrawal'])
+        Route::post('wallet', [VendorDashboardController::class, 'requestWithdrawal'])
             ->name('withdrawals.store');
 
 
@@ -237,12 +241,41 @@ Route::middleware(['vendor.approved'])
             ->name('settings.external-fulfillment');
         Route::put('settings/external-fulfillment', [\App\Http\Controllers\Vendor\ExternalFulfillmentSettingsController::class, 'update'])
             ->name('settings.external-fulfillment.update');
+
+        // Vendor wallet top-up and ledger
+        Route::post('wallet/topup', [\App\Http\Controllers\VendorWalletController::class, 'initiateTopup'])
+            ->name('wallet.topup');
+        Route::get('wallet/{vendor}', [\App\Http\Controllers\VendorWalletController::class, 'ledger'])
+            ->name('wallet.ledger');
+        
+        // Vendor Quick Buy (dashboard shortcut)
+        Route::get('quick-buy', [VendorQuickBuyController::class, 'show'])->name('quick-buy.show');
+        Route::post('quick-buy', [VendorQuickBuyController::class, 'store'])->name('quick-buy.store');
+        
+        // NOTE: the actual payment gateway callback for top-ups should be public
+        // and not require vendor authentication. The topup callback route is
+        // defined outside the `vendor.approved` group below as `vendor.wallet.topup.callback`.
+        Route::get('wallet/{vendor}', [\App\Http\Controllers\VendorWalletController::class, 'ledger'])
+            ->name('wallet.ledger');
     });
 Route::get('/checkout', [CheckoutController::class, 'show'])->name('checkout.show');
 Route::post('/checkout', [CheckoutController::class, 'process'])->name('checkout.process');
 Route::post('/checkout/verify', [CheckoutController::class, 'verify'])->name('checkout.verify');
+// Public wallet top-up callback (payment gateway will call/redirect here)
+Route::match(['GET','POST'], '/vendor/wallet/topup/callback/{reference}', [\App\Http\Controllers\VendorWalletController::class, 'topupCallback'])
+    ->name('vendor.wallet.topup.callback');
+// Backwards-compatibility: preserve existing external bookmarks and old links.
+// Requests to the old path `/vendor/withdrawals` are permanently redirected
+// to `/vendor/wallet`. We keep route names unchanged so internal `route(...)`
+// calls and emails continue to work.
+Route::permanentRedirect('/vendor/withdrawals', '/vendor/wallet');
 Route::get('/checkout/success/{order}', [CheckoutController::class, 'success'])->name('checkout.success');
 Route::get('/checkout/receipt/{order}', [CheckoutController::class, 'receipt'])->name('checkout.receipt');
+// Serve legacy browser requests for /favicon.ico using the existing 32x32 PNG.
+// This avoids 404 noise when browsers automatically request /favicon.ico.
+Route::get('/favicon.ico', function () {
+    return response()->file(public_path('favicon-32x32.png'));
+})->name('favicon');
 Route::middleware('prune.purchase.tokens')->group(function () {
     Route::post('/purchase', [\App\Http\Controllers\PurchaseController::class, 'store'])->name('purchase');
     Route::get('/purchase/callback/{token}', [\App\Http\Controllers\PurchaseController::class, 'paymentCallback'])->name('purchase.callback');
@@ -273,6 +306,7 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
         Route::resource('transactions', AdminTransactionController::class)->only(['index']);
     Route::post('transactions/{transaction}/confirm-payment', [AdminTransactionController::class, 'confirmPayment'])
         ->name('transactions.confirm-payment');
+    Route::get('wallet-topups', [AdminWalletTopupController::class, 'index'])->name('wallet-topups.index');
     Route::get('withdrawals', [AdminWithdrawalController::class, 'index'])->name('withdrawals.index');
     Route::post('withdrawals/{withdrawal}/refresh', [AdminWithdrawalController::class, 'refresh'])->name('withdrawals.refresh');
 
