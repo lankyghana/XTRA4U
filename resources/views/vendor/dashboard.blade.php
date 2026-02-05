@@ -22,6 +22,9 @@
                 <span x-text="copied ? 'Link Copied!' : 'Share Store Link'"></span>
             </button>
         </div>
+        <div class="ml-2">
+            <a href="{{ route('vendor.quick-buy.show') }}" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-full bg-green-600 text-white hover:bg-green-700">Quick Buy</a>
+        </div>
         @endif
     </x-slot>
 
@@ -109,7 +112,7 @@
                         {{ session('status') }}
                     </div>
                 @endif
-
+                
                 <form method="POST" action="{{ route('vendor.withdrawals.store') }}" class="space-y-4">
                     @csrf
                     <div>
@@ -219,7 +222,7 @@
 
         <div class="bg-gradient-to-br from-gray-50 to-slate-100 rounded-xl shadow-lg border border-gray-200">
             <div class="px-6 py-6">
-                <h3 class="text-lg leading-6 font-bold text-gray-900 mb-4">Recent Withdrawals</h3>
+                <h3 class="text-lg leading-6 font-bold text-gray-900 mb-4">Recent Wallet Activity</h3>
                 <div class="space-y-3">
                     @forelse ($recentWithdrawals as $withdrawal)
                         <div class="p-4 rounded-lg bg-white border border-gray-200 hover:shadow-md transition-shadow duration-200">
