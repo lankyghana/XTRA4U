@@ -5,7 +5,7 @@
 
 @section('content')
 <div
-    class="min-h-screen bg-gradient-to-br from-slate-50 via-white to-purple-50 py-6 lg:py-10"
+    <div class="min-h-screen bg-gradient-to-br from-slate-50 via-white to-purple-50 py-6 lg:py-10" 
     x-data="{
         networkGradients: @json(collect(config('momo.product_networks', []))->mapWithKeys(fn ($n, $k) => [$k => ($n['gradient'] ?? null)])->filter()->all()),
         allProducts: [],
@@ -16,11 +16,25 @@
         recipientPhone: '',
         momoNumber: '',
         isSubmitting: false,
+        currentVendor: @json($currentVendor ?? null),
+        paymentMethod: 'gateway',
         
         init() {
             this.allProducts = JSON.parse(document.getElementById('products-data').textContent);
+            if (this.currentVendor) {
+                // default to wallet if vendor has sufficient balance for first product
+                this.paymentMethod = 'wallet';
+            }
         },
-        
+
+        selectedBasePrice() {
+            return this.selectedProduct ? parseFloat(this.selectedProduct.price || 0) : 0;
+        },
+
+        vendorBalance() {
+            return this.currentVendor ? parseFloat(this.currentVendor.wallet_balance || 0) : 0;
+        },
+
         get filteredProducts() {
             let filtered = [...this.allProducts];
 
@@ -375,9 +389,23 @@
                             class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all text-sm"
                         >
                     </div>
+                    <template x-if="currentVendor">
+                        <div class="w-full sm:w-auto flex items-center gap-4">
+                            <label class="inline-flex items-center text-sm">
+                                <input type="radio" name="payment_method" value="wallet" x-model="paymentMethod" class="form-radio" />
+                                <span class="ml-2">Wallet (Balance: GHS <span x-text="vendorBalance().toFixed(2)"></span>)</span>
+                            </label>
+                            <label class="inline-flex items-center text-sm">
+                                <input type="radio" name="payment_method" value="gateway" x-model="paymentMethod" class="form-radio" />
+                                <span class="ml-2">Payment Gateway</span>
+                            </label>
+                        </div>
+                    </template>
+
+                    <input type="hidden" name="pay_with_wallet" :value="paymentMethod === 'wallet' ? 1 : 0">
                     <button 
                         type="submit"
-                        :disabled="isSubmitting || !selectedProduct"
+                        :disabled="isSubmitting || !selectedProduct || (paymentMethod === 'wallet' && selectedBasePrice() > vendorBalance())"
                         class="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-indigo-700 focus:ring-4 focus:ring-purple-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
                     >
                         <template x-if="!isSubmitting">
