@@ -1,52 +1,316 @@
 @extends('layouts.vendor')
 
-@section('title', 'Withdrawals - XTRA4U')
-@section('description', 'Track all payout requests and submit new vendor withdrawals')
+@section('title', 'Wallet - XTRA4U')
+@section('description', 'Track wallet balance and request withdrawals')
 
 @section('content')
-<x-vendor-layout :vendor="$vendor" title="Withdrawals" subtitle="Track payout history and request new disbursements" active="withdrawals">
+@php
+    $activeTab = request('tab', 'withdrawals');
+@endphp
+<x-vendor-layout :vendor="$vendor" title="Wallet" subtitle="Track wallet balance and request new disbursements" active="wallet">
 
     <div class="space-y-6">
+        <!-- Wallet Summary + Tabs -->
+        <div class="bg-white rounded-xl shadow p-4">
+            <div class="md:flex md:items-center md:justify-between">
+                <div class="flex items-center gap-3">
+                    <div>
+                        <h1 class="text-xl font-semibold text-gray-900">Wallet</h1>
+                        <p class="text-sm text-gray-500">Manage withdrawals and top-ups</p>
+                    </div>
+
+                    <!-- Hidden balance element kept for JS compatibility -->
+                    <div class="sr-only" aria-hidden="true">
+                        <span id="wallet-balance">GHS {{ number_format($totalBalance ?? $vendor->wallet_balance, 2) }}</span>
+                        <span id="wallet-last-updated">Last updated: {{ optional($vendor->updated_at)->diffForHumans() }}</span>
+                    </div>
+                </div>
+
+                        <div class="mt-4 md:mt-0 flex items-center gap-3">
+                    <div class="flex items-center gap-2">
+                        <a id="quick-topups" href="?tab=topups" class="px-4 py-2 rounded-full text-sm font-medium {{ $activeTab === 'topups' ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 border border-gray-200 shadow-sm hover:shadow-md' }}">Top Ups</a>
+                        <a id="quick-withdrawals" href="?tab=withdrawals" class="px-4 py-2 rounded-full text-sm font-medium {{ $activeTab === 'withdrawals' ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 border border-gray-200 shadow-sm hover:shadow-md' }}">Withdrawals</a>
+                    </div>
+
+                    <a href="#history" class="text-sm text-gray-600 hidden md:inline">View History</a>
+                </div>
+            </div>
+
+            <div id="wallet-success" class="mt-4 hidden rounded-md p-3 bg-green-50 border border-green-100 text-green-800" role="status" aria-live="polite"></div>
+        </div>
+
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <!-- Withdrawable Balance Card -->
-            <div class="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
-                <div class="px-6 py-5">
-                    <p class="text-sm text-purple-100 font-medium">Withdrawable Balance</p>
-                    <p class="text-2xl font-bold text-white mt-2">GHS {{ number_format($withdrawableBalance, 2) }}</p>
-                    <p class="text-xs text-purple-100 mt-2">Available wallet balance for withdrawals.</p>
-                </div>
-            </div>
+            @if ($activeTab === 'topups')
+                @php
+                    // Controller provides these variables: $totalTopups, $topupsSpent, $topupOrdersCount, $topupOrdersTotal
+                @endphp
 
-            <!-- Processing Requests Card -->
-            <div class="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
-                <div class="px-6 py-5">
-                    <p class="text-sm text-yellow-100 font-medium">Processing Requests</p>
-                    <p class="text-2xl font-bold text-white mt-2">GHS {{ number_format($pendingTotal, 2) }}</p>
-                    <p class="text-xs text-yellow-100 mt-2">Being processed automatically.</p>
+                <!-- Total Top-Ups Balance -->
+                <div class="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
+                    <div class="px-6 py-5">
+                        <p class="text-sm text-white font-medium">Total Top-Ups Balance</p>
+                        <p id="topups-balance" class="text-2xl font-bold text-white mt-2">GHS {{ number_format($totalTopups ?? 0, 2) }}</p>
+                        <p class="text-xs text-white mt-2">Sum of completed wallet top-ups (non-withdrawable).</p>
+                    </div>
                 </div>
-            </div>
 
-            <!-- Approved To Date Card -->
-            <div class="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
-                <div class="px-6 py-5">
-                    <p class="text-sm text-green-100 font-medium">Approved To Date</p>
-                    <p class="text-2xl font-bold text-white mt-2">GHS {{ number_format($approvedTotal, 2) }}</p>
-                    <p class="text-xs text-green-100 mt-2">Total paid out successfully.</p>
+                <!-- Total Top-Ups Spent -->
+                <div class="bg-gradient-to-br from-pink-500 to-pink-600 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
+                    <div class="px-6 py-5">
+                        <p class="text-sm text-white font-medium">Total Top-Ups Spent</p>
+                        <p class="text-2xl font-bold text-white mt-2">GHS {{ number_format($topupsSpent ?? 0, 2) }}</p>
+                        <p class="text-xs text-white mt-2">Amount used from top-ups to place orders.</p>
+                    </div>
                 </div>
-            </div>
+
+                <!-- Total Top-Up Orders Placed -->
+                <div class="bg-gradient-to-br from-green-400 to-emerald-500 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
+                    <div class="px-6 py-5">
+                        <p class="text-sm text-white font-medium">Top-Up Orders Placed</p>
+                        <p class="text-2xl font-bold text-white mt-2">{{ $topupOrdersCount ?? 0 }} {{ \Illuminate\Support\Str::plural('order', $topupOrdersCount ?? 0) }}</p>
+                        <p class="text-xs text-white mt-2">Total value: GHS {{ number_format($topupOrdersTotal ?? 0, 2) }}</p>
+                    </div>
+                </div>
+            @else
+                <!-- Withdrawable Balance Card -->
+                <div class="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
+                    <div class="px-6 py-5">
+                        <p class="text-sm text-white font-medium">Withdrawable Balance</p>
+                        <p id="withdrawable-balance" class="text-2xl font-bold text-white mt-2">GHS {{ number_format($withdrawableBalance, 2) }}</p>
+                        <p class="text-xs text-white mt-2">Available wallet balance.</p>
+                    </div>
+                </div>
+
+                <!-- Processing Requests Card -->
+                <div class="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
+                    <div class="px-6 py-5">
+                        <p class="text-sm text-white font-medium">Processing Requests</p>
+                        <p class="text-2xl font-bold text-white mt-2">GHS {{ number_format($pendingTotal, 2) }}</p>
+                        <p class="text-xs text-white mt-2">Being processed automatically.</p>
+                    </div>
+                </div>
+
+                <!-- Approved To Date Card (display-only) -->
+                <div class="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
+                    <div class="px-6 py-5">
+                        <p class="text-sm text-white font-medium">Approved To Date</p>
+                        <p id="approved-total" class="text-2xl font-bold text-white mt-2">GHS {{ number_format($approvedTotal ?? 0.0, 2) }}</p>
+                        <p class="text-xs text-white mt-2">Total paid out successfully.</p>
+                    </div>
+                </div>
+            @endif
         </div>
 
         <div class="bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl shadow-lg border border-purple-100">
             <div class="px-6 py-6">
-                <h2 class="text-lg font-bold text-gray-900 mb-4">Request a Withdrawal</h2>
+                @if ($activeTab === 'topups')
+                    <div id="panel-topups" class="mb-4 w-full max-w-full overflow-x-hidden box-border">
+                        <div class="bg-white rounded-lg shadow p-5 w-full box-border">
+                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+                                <!-- Left: Info -->
+                                <div class="flex flex-col justify-center">
+                                    <h3 class="text-lg font-semibold text-gray-900">Top Up Wallet</h3>
+                                    <p class="mt-2 text-sm text-gray-600">Add funds to your vendor wallet to place orders. Top-up balances are not withdrawable.</p>
 
-                @if (session('status'))
-                    <div class="mb-4 bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">
-                        {{ session('status') }}
+                                    <div class="mt-4 w-full inline-flex items-start gap-3 bg-blue-50 border border-blue-100 rounded-lg p-3 box-border">
+                                        <div class="text-blue-600 text-xl">🔒</div>
+                                        <div>
+                                            <p class="text-sm font-medium text-blue-800">Top-up funds are for orders only</p>
+                                            <p class="text-xs text-blue-600">Top-ups can only be used to place vendor orders and cannot be withdrawn.</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Right: Action -->
+                                <div class="flex flex-col justify-center">
+                                    <form id="wallet-topup-form" class="w-full" onsubmit="return false;">
+                                        <label for="wallet-topup-amount" class="block text-sm font-medium text-gray-700">Amount (GHS)</label>
+                                        <div class="mt-2 flex flex-col sm:flex-row gap-3">
+                                            <input aria-label="Top up amount" type="number" step="0.01" min="1" name="amount" id="wallet-topup-amount" inputmode="decimal" placeholder="50.00" class="flex-1 w-full rounded-lg border border-gray-300 px-4 py-3 focus:ring-2 focus:ring-purple-200 focus:border-purple-500 box-border" />
+                                            <button type="button" id="wallet-topup-submit" class="w-full sm:w-auto mt-2 sm:mt-0 rounded-lg bg-purple-600 text-white px-4 py-3 inline-flex items-center justify-center disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap">
+                                                <svg id="wallet-topup-button-spinner" class="w-4 h-4 animate-spin hidden mr-2" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+                                                <span id="wallet-topup-button-text">Top Up Wallet</span>
+                                            </button>
+                                        </div>
+
+                                        <!-- Quick amount chips -->
+                                        <div class="mt-3 flex flex-wrap gap-2">
+                                            <button type="button" class="topup-chip flex-1 sm:flex-none text-center text-sm px-3 py-2 rounded-md border border-gray-200 bg-white hover:bg-gray-50 min-w-0">+50</button>
+                                            <button type="button" class="topup-chip flex-1 sm:flex-none text-center text-sm px-3 py-2 rounded-md border border-gray-200 bg-white hover:bg-gray-50 min-w-0">+100</button>
+                                            <button type="button" class="topup-chip flex-1 sm:flex-none text-center text-sm px-3 py-2 rounded-md border border-gray-200 bg-white hover:bg-gray-50 min-w-0">+200</button>
+                                        </div>
+
+                                        <input type="hidden" name="vendor_id" value="{{ $vendor->id }}" />
+                                        <input type="hidden" id="wallet-topup-gateway" name="gateway" value="">
+
+                                        <p id="wallet-topup-feedback" class="mt-3 text-sm text-red-600" aria-live="polite"></p>
+
+                                        <p class="mt-4 text-xs text-gray-500 inline-flex items-center gap-2"><span class="text-sm">🔒</span> This balance cannot be withdrawn.</p>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
+                        <script>
+                            (function () {
+                                // Elements
+                                const btn = document.getElementById('wallet-topup-submit');
+                                const amountInput = document.getElementById('wallet-topup-amount');
+                                const gatewayHidden = document.getElementById('wallet-topup-gateway');
+                                const gatewayButtons = Array.from(document.querySelectorAll('.gateway-option'));
+                                const feedback = document.getElementById('wallet-topup-feedback');
+                                const spinner = document.getElementById('wallet-topup-button-spinner');
+                                const btnText = document.getElementById('wallet-topup-button-text');
+                                const chips = Array.from(document.querySelectorAll('.topup-chip'));
+
+                                if (!btn || !amountInput) return;
+
+                                // UX helpers
+                                const setLoading = (isLoading) => {
+                                    btn.disabled = isLoading;
+                                    spinner.classList.toggle('hidden', !isLoading);
+                                    btnText.textContent = isLoading ? 'Processing…' : 'Top Up Wallet';
+                                };
+
+                                const showMessage = (msg, variant = 'error') => {
+                                    feedback.textContent = msg || '';
+                                    feedback.className = msg ? (variant === 'error' ? 'mt-3 text-sm text-red-600' : 'mt-3 text-sm text-green-700') : '';
+                                };
+
+                                let inProgress = false;
+
+                                // Enable/disable button based on input
+                                function validate() {
+                                    const val = parseFloat(amountInput.value || 0);
+                                    if (!val || val < 1) {
+                                        btn.disabled = true;
+                                        return false;
+                                    }
+                                    btn.disabled = false;
+                                    return true;
+                                }
+
+                                amountInput.addEventListener('input', () => {
+                                    showMessage('', '');
+                                    validate();
+                                });
+
+                                chips.forEach(c => {
+                                    c.addEventListener('click', () => {
+                                        const chipVal = c.textContent.trim().replace('+', '');
+                                        amountInput.value = chipVal;
+                                        amountInput.dispatchEvent(new Event('input'));
+                                    });
+                                });
+
+                                btn.addEventListener('click', async () => {
+                                    if (inProgress) return;
+                                    if (!validate()) { showMessage('Enter a valid amount (minimum GHS 1)', 'error'); return; }
+
+                                    const amount = parseFloat(amountInput.value || 0);
+                                    inProgress = true;
+                                    setLoading(true);
+                                    showMessage('');
+
+                                    try {
+                                        const payload = { vendor_id: '{{ $vendor->id }}', amount: amount };
+                                        if (gatewayHidden && gatewayHidden.value) payload.gateway = gatewayHidden.value;
+
+                                        const resp = await fetch('{{ route('vendor.wallet.topup') }}', {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                                                'Accept': 'application/json'
+                                            },
+                                            body: JSON.stringify(payload)
+                                        });
+                                        const data = await resp.json();
+
+                                        if (data.success && data.authorization_url) {
+                                            // redirect to payment provider
+                                            window.location.href = data.authorization_url;
+                                            return;
+                                        }
+
+                                        if (data.success) {
+                                            showMessage('\u2714\uFE0F Wallet topped up successfully', 'success');
+                                            await refreshWalletSummary(true);
+                                            amountInput.value = '';
+                                            if (gatewayHidden) gatewayHidden.value = '';
+                                            gatewayButtons.forEach(b => b.classList.remove('ring','ring-2','ring-purple-400'));
+                                            setLoading(false);
+                                            inProgress = false;
+                                            return;
+                                        }
+
+                                        setLoading(false);
+                                        inProgress = false;
+                                        showMessage(data.message || 'Failed to initiate top-up', 'error');
+                                    } catch (e) {
+                                        setLoading(false);
+                                        inProgress = false;
+                                        showMessage('Unable to contact server', 'error');
+                                    }
+                                });
+
+                                async function refreshWalletSummary(showSuccess) {
+                                    try {
+                                        const res = await fetch('{{ url('/vendor/wallet/' . $vendor->id) }}');
+                                        const json = await res.json();
+                                        if (json.success) {
+                                            const wb = document.getElementById('wallet-balance');
+                                            if (wb) wb.textContent = 'GHS ' + (json.balance || 0).toFixed(2);
+                                            const lu = document.getElementById('wallet-last-updated');
+                                            if (lu) lu.textContent = 'Last updated: ' + (json.last_updated || 'just now');
+                                            if (typeof json.withdrawable_balance !== 'undefined') {
+                                                const el = document.getElementById('withdrawable-balance');
+                                                if (el) el.textContent = 'GHS ' + (json.withdrawable_balance || 0).toFixed(2);
+                                            }
+                                            if (typeof json.vendor_topups_total !== 'undefined') {
+                                                const el2 = document.getElementById('vendor-topups-total');
+                                                if (el2) el2.textContent = 'GHS ' + (json.vendor_topups_total || 0).toFixed(2);
+                                            }
+                                            if (typeof json.approved_total !== 'undefined') {
+                                                const ap = document.getElementById('approved-total');
+                                                if (ap) ap.textContent = 'GHS ' + (json.approved_total || 0).toFixed(2);
+                                            }
+                                            if (showSuccess) {
+                                                const successEl = document.getElementById('wallet-success');
+                                                successEl.textContent = '\u2714\uFE0F Wallet topped up successfully. Your new balance is GHS ' + (json.balance || 0).toFixed(2);
+                                                successEl.classList.remove('hidden');
+                                                successEl.focus?.();
+                                                successEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                setTimeout(() => { successEl.classList.add('hidden'); }, 4000);
+                                            }
+                                        }
+                                    } catch (e) {}
+                                }
+
+                                // Gateway selection highlighting (if gateways present)
+                                gatewayButtons.forEach(b => {
+                                    b.addEventListener('click', () => {
+                                        gatewayButtons.forEach(x => x.classList.remove('ring','ring-2','ring-purple-400'));
+                                        b.classList.add('ring','ring-2','ring-purple-400');
+                                        if (gatewayHidden) gatewayHidden.value = b.dataset.key;
+                                    });
+                                });
+
+                                // initial validation state
+                                validate();
+                            })();
+                        </script>
                     </div>
-                @endif
+                @else
+                    <h2 class="text-lg font-bold text-gray-900 mb-4">Request a Withdrawal</h2>
 
-                <form method="POST" action="{{ route('vendor.withdrawals.store') }}" class="space-y-6">
+                    @if (session('status'))
+                        <div class="mb-4 bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">
+                            {{ session('status') }}
+                        </div>
+                    @endif
+
+                    <form method="POST" action="{{ route('vendor.withdrawals.store') }}" class="space-y-6">
                     @csrf
                     
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -193,62 +457,62 @@
                 </form>
             </div>
         </div>
+        @endif
 
         <div class="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg border border-gray-200">
             <div class="px-6 py-6">
                 <div class="flex items-center justify-between mb-6">
                     <div>
-                        <h2 class="text-lg font-bold text-gray-900">Withdrawal History</h2>
-                        <p class="text-sm text-gray-600">Track every payout request and its status.</p>
+                        <h2 class="text-lg font-bold text-gray-900">Wallet Activity</h2>
+                        <p class="text-sm text-gray-600">All top-ups and withdrawals in one place.</p>
+                        <!-- Keep legacy text for backwards-compatible tests and links -->
+                        <p class="sr-only">Withdrawal History</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <label class="text-sm text-gray-600">Filter:</label>
+                        <select id="history-filter" class="px-3 py-2 rounded border">
+                            <option value="all">All</option>
+                            <option value="topups">Top-ups</option>
+                            <option value="withdrawals">Withdrawals</option>
+                        </select>
                     </div>
                 </div>
 
-                <div class="overflow-hidden rounded-lg border border-gray-200">
-                    <x-table :headers="['Reference', 'Date', 'MoMo Details', 'Amount', 'Status']">
-                        @forelse ($withdrawals as $withdrawal)
-                            <tr class="hover:bg-gray-50 transition-colors duration-150">
-                                <td class="px-6 py-4 text-sm font-medium text-gray-900">{{ $withdrawal->reference }}</td>
-                                <td class="px-6 py-4 text-sm text-gray-500">{{ $withdrawal->created_at?->format('M d, Y • h:i A') }}</td>
-                                <td class="px-6 py-4 text-sm">
-                                    <div class="flex items-center gap-2">
-                                        @php
-                                            $network = config('momo.withdrawal_networks.' . ($withdrawal->momo_network ?? ''), null);
-                                        @endphp
-                                        @if ($network)
-                                            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full {{ $network['history']['badge_class'] ?? 'bg-gray-200 text-gray-600' }} text-xs font-bold">{{ $network['history']['badge_label'] ?? '?' }}</span>
-                                        @endif
-                                        <div>
-                                            <p class="font-medium text-gray-900">{{ $withdrawal->momo_number ?? 'N/A' }}</p>
-                                            <p class="text-xs text-gray-500">{{ $withdrawal->momo_network ?? 'N/A' }}@if(!empty($withdrawal->momo_account_name)) • {{ $withdrawal->momo_account_name }}@endif</p>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4 text-sm font-semibold text-gray-900">GHS {{ number_format($withdrawal->amount, 2) }}</td>
-                                <td class="px-6 py-4 text-sm">
-                                    @if ($withdrawal->status === \App\Models\VendorWithdrawal::STATUS_APPROVED)
-                                        <x-badge variant="completed">Approved</x-badge>
-                                    @elseif ($withdrawal->status === \App\Models\VendorWithdrawal::STATUS_PROCESSING)
-                                        <x-badge variant="processing">Processing</x-badge>
-                                    @elseif ($withdrawal->status === \App\Models\VendorWithdrawal::STATUS_FAILED)
-                                        <x-badge variant="warning">Failed</x-badge>
-                                    @else
-                                        <x-badge variant="pending">Unknown</x-badge>
-                                    @endif
-                                </td>
+                <div id="history" class="overflow-hidden rounded-lg border border-gray-200">
+                    <x-table :headers="['Type', 'Reference', 'Date', 'Amount', 'Status']">
+                        @forelse ($history as $item)
+                            <tr class="hover:bg-gray-50 transition-colors duration-150 history-row" data-type="{{ strtolower(str_replace(' ', '-', $item->type)) }}">
+                                <td class="px-6 py-4 text-sm font-medium text-gray-900">{{ $item->type }}</td>
+                                <td class="px-6 py-4 text-sm text-gray-500">{{ $item->reference ?? '-' }}</td>
+                                <td class="px-6 py-4 text-sm text-gray-500">{{ optional($item->date)->format('M d, Y • h:i A') }}</td>
+                                <td class="px-6 py-4 text-sm font-semibold text-gray-900">GHS {{ number_format($item->amount, 2) }}</td>
+                                <td class="px-6 py-4 text-sm text-gray-700">{{ ucfirst($item->status ?? 'n/a') }}</td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="5" class="px-6 py-4 text-center text-sm text-gray-500">No withdrawal activity yet.</td>
+                                <td colspan="5" class="px-6 py-4 text-center text-sm text-gray-500">No wallet activity yet.</td>
                             </tr>
                         @endforelse
                     </x-table>
                 </div>
 
-                @if ($withdrawals->hasPages())
-                    <div class="mt-4">
-                        {{ $withdrawals->links() }}
-                    </div>
-                @endif
+                <script>
+                    (function () {
+                        const filter = document.getElementById('history-filter');
+                        if (!filter) return;
+                        filter.addEventListener('change', () => {
+                            const val = filter.value;
+                            const rows = Array.from(document.querySelectorAll('.history-row'));
+                            rows.forEach(r => {
+                                if (val === 'all') { r.style.display = ''; return; }
+                                const type = r.getAttribute('data-type');
+                                if (val === 'topups' && type === 'top-up') r.style.display = '';
+                                else if (val === 'withdrawals' && type === 'withdrawal') r.style.display = '';
+                                else r.style.display = 'none';
+                            });
+                        });
+                    })();
+                </script>
             </div>
         </div>
     </div>
