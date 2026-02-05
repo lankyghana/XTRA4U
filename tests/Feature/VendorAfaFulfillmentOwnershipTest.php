@@ -40,9 +40,10 @@ class VendorAfaFulfillmentOwnershipTest extends TestCase
 
         $this->actingAs($reseller, 'vendor');
 
-        $this->get(route('vendor.afa.index'))
-            ->assertOk()
-            ->assertSee($registration->reference);
+        $response = $this->get(route('vendor.afa.index'));
+        // Debug: persist rendered HTML to inspect why assertSee fails in full-suite runs
+        file_put_contents(storage_path('logs/afa_index_debug.html'), $response->getContent());
+        $response->assertOk()->assertSee($registration->reference);
 
         $this->patch(route('vendor.afa.update-status', $registration), [
             'status' => 'processing',
