@@ -8,6 +8,7 @@ use App\Models\ResellerProduct;
 use App\Models\NetworkService;
 use App\Models\PaymentGatewayConfig;
 use App\Services\PaymentService;
+use Illuminate\Support\Facades\Auth;
 use App\Services\GatewayManager;
 use Illuminate\Http\Request;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -133,7 +134,9 @@ class CheckoutController extends Controller
 			'validity' => $p->validity ?? null,
 		])->values();
 
-		return view('checkout', compact('products'));
+		$currentVendor = Auth::guard('vendor')->user();
+
+		return view('checkout', compact('products', 'currentVendor'));
 	}
 
     public function success($orderId)
