@@ -212,6 +212,102 @@ class PaymentService
     }
 
     /**
+     * Complete an order that was paid with a vendor wallet.
+     *
+     * This is a vendor-only, isolated flow that MUST NOT call reseller/affiliate
+     * logic or credit vendor wallets. It records transactions/notifications and
+     * marks the order as paid. It is intentionally separate from
+     * `completeRegularOrder` to avoid accidental reuse for customer flows.
+     *
+     * Preconditions:
+     * - Order->payment_source is 'wallet'
+     * - The paying vendor already had their wallet debited for the total
+     *   (base_price + platform_commission).
+     */
+    public function completeVendorWalletOrder(Order $order): bool
+    {
+        if (in_array($order->payment_status, ['paid', 'completed'], true)) {
+            return true;
+        }
+
+        $postCommit = [];
+
+        $didComplete = DB::transaction(function () use ($order, &$postCommit) {
+            $locked = Order::whereKey($order->id)->lockForUpdate()->firstOrFail();
+
+            if (in_array($locked->payment_status, ['paid', 'completed'], true)) {
+                return true;
+            }
+
+            // We intentionally DO NOT run reseller or affiliate payout logic here.
+            // Vendor wallet purchases from the dashboard are charged the base
+            // price + platform fee up-front. The platform retains the fee and
+            // vendor earnings are recorded via transactions but are NOT credited
+            // to vendor wallets here to avoid automated credit loops.
+
+            $basePrice = (float) ($locked->base_price ?? $locked->amount_paid ?? 0);
+            $platformFee = (float) ($locked->platform_commission ?? round($basePrice * 0.02, 2));
+            $vendorEarning = round(max(0, $basePrice - $platformFee), 2);
+
+            // Create or update a transaction row so accounting can reconcile.
+            $this->upsertOrderTransaction($locked, $locked->vendor_id, [
+                'recipient_phone' => $locked->recipient_phone_number,
+                'amount' => $basePrice,
+                'commission_amount' => $platformFee,
+                'vendor_earning' => $vendorEarning,
+                'payment_status' => 'successful',
+            ]);
+
+            // Mark order as paid/processing.
+            $locked->update([
+                'status' => 'Processing',
+                'payment_status' => 'paid',
+                'payment_completed_at' => now(),
+            ]);
+
+            // Notify product owner (vendor) and admin. We do NOT credit wallets here.
+            if ($locked->vendor_id) {
+                VendorNotification::create([
+                    'vendor_id' => $locked->vendor_id,
+                    'type' => VendorNotification::TYPE_NEW_ORDER,
+                    'title' => 'New Order Received',
+                    'message' => "You have a new order for '{$locked->service_purchased}'. Earning recorded: GHS " . number_format($vendorEarning, 2),
+                    'order_id' => $locked->id,
+                    'data' => [
+                        'product_name' => $locked->service_purchased,
+                        'amount' => $basePrice,
+                        'earning' => $vendorEarning,
+                    ],
+                ]);
+
+                $postCommit[] = [
+                    'type' => 'communications',
+                    'order_id' => $locked->id,
+                    'vendor_id' => $locked->vendor_id,
+                    'role' => 'owner',
+                    'earning' => $vendorEarning,
+                    'sms_type' => 'order',
+                ];
+            }
+
+            AdminNotification::notifyNewOrder($locked);
+
+            $postCommit[] = [
+                'type' => 'event',
+                'order_id' => $locked->id,
+            ];
+
+            return true;
+        });
+
+        if ($didComplete && ! empty($postCommit)) {
+            $this->dispatchPostCommitActions($postCommit);
+        }
+
+        return $didComplete;
+    }
+
+    /**
      * Complete a reseller order with split payment
      */
     protected function completeResellerOrder(Order $order, array &$postCommit = []): bool
