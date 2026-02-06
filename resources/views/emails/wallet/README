@@ -1,0 +1,4 @@
+Templates for wallet topup emails live here.
+
+Vendor: topup_vendor.blade.php
+Admin: topup_admin.blade.php
