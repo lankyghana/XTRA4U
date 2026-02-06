@@ -74,61 +74,65 @@ class WalletService
      */
     public function debitVendorFromTopups(int $vendorId, float $amount, array $metadata = []): bool
     {
-        $vendor = Vendor::find($vendorId);
-        if (! $vendor) {
-            return false;
-        }
+        // Use a transaction and lock the vendor row to avoid race conditions
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($vendorId, $amount, $metadata) {
+            $vendor = Vendor::whereKey($vendorId)->lockForUpdate()->first();
+            if (! $vendor) {
+                return false;
+            }
 
-        // Load completed top-ups ordered by oldest first (FIFO consumption)
-        $topups = \App\Models\WalletTopup::where('vendor_id', $vendorId)
-            ->where('status', 'completed')
-            ->orderBy('created_at')
-            ->get();
+            // Load only top-ups that still have available amount (amount > consumed)
+            // Limit to 50 rows to keep memory bounded
+            $topups = \App\Models\WalletTopup::where('vendor_id', $vendorId)
+                ->where('status', 'completed')
+                ->whereColumn('amount', '>', 'consumed')
+                ->orderBy('created_at')
+                ->limit(50)
+                ->get();
 
-        $available = 0.0;
-        foreach ($topups as $t) {
-            $consumed = (float) data_get($t->metadata, 'consumed', 0.0);
-            $available += max(0.0, $t->amount - $consumed);
-        }
+            $available = 0.0;
+            foreach ($topups as $t) {
+                $consumed = (float) ($t->consumed ?? 0.0);
+                $available += max(0.0, $t->amount - $consumed);
+            }
 
-        if (round($available, 2) < round($amount, 2)) {
-            return false;
-        }
+            if (round($available, 2) < round($amount, 2)) {
+                return false;
+            }
 
-        $remaining = $amount;
-        $consumptions = [];
+            $remaining = $amount;
+            $consumptions = [];
 
-        foreach ($topups as $t) {
-            if ($remaining <= 0) break;
-            $consumedSoFar = (float) data_get($t->metadata, 'consumed', 0.0);
-            $topupAvailable = max(0.0, $t->amount - $consumedSoFar);
-            if ($topupAvailable <= 0) continue;
-            $take = min($topupAvailable, $remaining);
-            $newConsumed = $consumedSoFar + $take;
-            $meta = $t->metadata ?? [];
-            $meta['consumed'] = $newConsumed;
-            $t->metadata = $meta;
-            $t->save();
+            foreach ($topups as $t) {
+                if ($remaining <= 0) break;
+                $consumedSoFar = (float) ($t->consumed ?? 0.0);
+                $topupAvailable = max(0.0, $t->amount - $consumedSoFar);
+                if ($topupAvailable <= 0) continue;
+                $take = min($topupAvailable, $remaining);
+                $newConsumed = round($consumedSoFar + $take, 2);
+                $t->consumed = $newConsumed;
+                $t->save();
 
-            $consumptions[] = ['topup_id' => $t->id, 'amount' => round($take, 2)];
-            $remaining = round(max(0.0, $remaining - $take), 2);
-        }
+                $consumptions[] = ['topup_id' => $t->id, 'amount' => round($take, 2)];
+                $remaining = round(max(0.0, $remaining - $take), 2);
+            }
 
-        // Decrement vendor wallet balance and write ledger entry
-        $vendor->decrement('wallet_balance', $amount);
-        $balance = (float) $vendor->wallet_balance;
+            // Decrement vendor wallet balance and write ledger entry
+            $vendor->decrement('wallet_balance', $amount);
+            $balance = (float) $vendor->wallet_balance;
 
-        $ledgerMeta = array_merge($metadata, ['topup_consumptions' => $consumptions, 'from_topups' => true]);
+            $ledgerMeta = array_merge($metadata, ['topup_consumptions' => $consumptions, 'from_topups' => true]);
 
-        WalletLedger::create([
-            'vendor_id' => $vendorId,
-            'type' => 'debit',
-            'amount' => $amount,
-            'balance_after' => $balance,
-            'metadata' => $ledgerMeta,
-        ]);
+            WalletLedger::create([
+                'vendor_id' => $vendorId,
+                'type' => 'debit',
+                'amount' => $amount,
+                'balance_after' => $balance,
+                'metadata' => $ledgerMeta,
+            ]);
 
-        return true;
+            return true;
+        });
     }
 
     /**
