@@ -38,7 +38,10 @@ class PurchaseController extends Controller
     {
         $validated = $request->validate([
             'recipient_phone_number' => 'required|string',
-            'mobile_money_number' => 'required|string',
+            // Make payer MoMo optional for vendor wallet purchases. The quick-buy
+            // flow posts `pay_with_wallet=1` so we use `required_unless` to keep
+            // it mandatory for gateway flows but optional for wallet flows.
+            'mobile_money_number' => 'required_unless:pay_with_wallet,1|string',
             'vendor_id' => 'required|exists:vendors,id',
             'vendor_service_id' => 'required|exists:products,id',
             'is_reseller_product' => 'nullable|boolean',
@@ -90,108 +93,127 @@ class PurchaseController extends Controller
         if ($payWithWallet && auth('vendor')->check()) {
             $walletService = new WalletService();
 
-            // Resolve the authoritative base price. If this is a reseller product,
-            // we intentionally IGNORE reseller markup and treat the owner vendor's
-            // base price as canonical for wallet purchases initiated by vendors.
-            if ($isResellerOrder && isset($validated['reseller_product_id'])) {
-                $resellerProduct = ResellerProduct::with(['product', 'ownerVendor'])
-                    ->where('id', $validated['reseller_product_id'])
-                    ->where('is_active', true)
-                    ->first();
+            // Wrap the vendor wallet purchase in a DB transaction and lock the vendor row
+            return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $validated, $isResellerOrder, $resellerProduct, $walletService) {
+                $payingVendor = auth('vendor')->user();
+                $lockedVendor = \App\Models\Vendor::whereKey($payingVendor->id)->lockForUpdate()->first();
 
-                if (! $resellerProduct || ! $resellerProduct->product || ! $resellerProduct->product->is_active) {
-                    throw ValidationException::withMessages([
-                        'vendor_service_id' => 'The selected reseller product is unavailable.',
-                    ]);
+                if (! $lockedVendor) {
+                    throw \Illuminate\Validation\ValidationException::withMessages(['vendor' => 'Vendor authentication required']);
                 }
 
-                $basePrice = (float) $resellerProduct->base_price;
-                $ownerVendorId = $resellerProduct->owner_vendor_id;
-                $product = $resellerProduct->product;
-            } else {
-                $product = Product::query()
-                    ->where('id', $validated['vendor_service_id'])
-                    ->where('vendor_id', $validated['vendor_id'])
-                    ->where('is_active', true)
-                    ->first();
+                // Resolve the authoritative base price. If this is a reseller product,
+                // we intentionally IGNORE reseller markup and treat the owner vendor's
+                // base price as canonical for wallet purchases initiated by vendors.
+                if ($isResellerOrder && isset($validated['reseller_product_id'])) {
+                    $resellerProduct = ResellerProduct::with(['product', 'ownerVendor'])
+                        ->where('id', $validated['reseller_product_id'])
+                        ->where('is_active', true)
+                        ->first();
 
-                if (! $product) {
-                    throw ValidationException::withMessages([
-                        'vendor_service_id' => 'The selected vendor service is unavailable.',
-                    ]);
+                    if (! $resellerProduct || ! $resellerProduct->product || ! $resellerProduct->product->is_active) {
+                        throw \Illuminate\Validation\ValidationException::withMessages([
+                            'vendor_service_id' => 'The selected reseller product is unavailable.',
+                        ]);
+                    }
+
+                    $basePrice = (float) $resellerProduct->base_price;
+                    $ownerVendorId = $resellerProduct->owner_vendor_id;
+                    $product = $resellerProduct->product;
+                } else {
+                    $product = Product::query()
+                        ->where('id', $validated['vendor_service_id'])
+                        ->where('vendor_id', $validated['vendor_id'])
+                        ->where('is_active', true)
+                        ->first();
+
+                    if (! $product) {
+                        throw \Illuminate\Validation\ValidationException::withMessages([
+                            'vendor_service_id' => 'The selected vendor service is unavailable.',
+                        ]);
+                    }
+
+                    $basePrice = (float) $product->price;
+                    $ownerVendorId = $product->vendor_id;
                 }
 
-                $basePrice = (float) $product->price;
-                $ownerVendorId = $product->vendor_id;
-            }
+                // Platform fee is charged upfront as 2% of base price.
+                $platformFee = round($basePrice * 0.02, 2);
+                $walletCharge = round($basePrice + $platformFee, 2);
 
-            // Platform fee is charged upfront as 2% of base price.
-            $platformFee = round($basePrice * 0.02, 2);
-            $walletCharge = round($basePrice + $platformFee, 2);
+                // Create the order record first (Pending). We set fields so the
+                // vendor-wallet-specific completion flow can operate without invoking
+                // reseller/affiliate pipelines.
+                // Build order attributes. For reseller (affiliate) listings, the
+                // paying vendor (reseller) should be the `vendor_id` so the order
+                // appears on their dashboard. The owner vendor (product owner)
+                // is recorded in `owner_vendor_id` so accounting records earnings
+                // against them.
+                $orderAttrs = [
+                    'recipient_phone_number' => $validated['recipient_phone_number'],
+                    'mobile_money_number' => $validated['mobile_money_number'] ?? $validated['recipient_phone_number'],
+                    'service_purchased' => $product->name,
+                    'amount_paid' => $walletCharge,
+                    'base_price' => $basePrice,
+                    'platform_commission' => $platformFee,
+                    'vendor_service_id' => $product->id,
+                    'status' => 'Pending',
+                    'payment_status' => 'unpaid',
+                    'payment_source' => 'wallet',
+                ];
 
-            // Create the order record first (Pending). We set fields so the
-            // vendor-wallet-specific completion flow can operate without invoking
-            // reseller/affiliate pipelines.
-            $order = Order::create([
-                'recipient_phone_number' => $validated['recipient_phone_number'],
-                'mobile_money_number' => $validated['mobile_money_number'],
-                'service_purchased' => $product->name,
-                'amount_paid' => $walletCharge,
-                'base_price' => $basePrice,
-                'platform_commission' => $platformFee,
-                'vendor_id' => $ownerVendorId,
-                'vendor_service_id' => $product->id,
-                'status' => 'Pending',
-                'payment_status' => 'unpaid',
-                'payment_source' => 'wallet',
-                // Explicitly mark as non-reseller order to avoid reseller completion
-                // paths; we still record owner/reseller fields where helpful.
-                'is_reseller_order' => false,
-            ]);
-
-            // Debit the paying vendor (must be authenticated via vendor guard).
-            $payingVendor = auth('vendor')->user();
-            if (! $payingVendor) {
-                throw ValidationException::withMessages(['vendor' => 'Vendor authentication required']);
-            }
-
-            // Prefer consuming vendor top-up balance first for Quick Buy flows.
-            $debited = $walletService->debitVendorFromTopups($payingVendor->id, $walletCharge, [
-                'type' => 'vendor_wallet_order',
-                'base_price' => $basePrice,
-                'platform_fee' => $platformFee,
-                'order_id' => $order->id,
-            ]);
-
-            if (! $debited) {
-                // Mark order failed and return an error response.
-                $order->update(['status' => 'Failed', 'payment_status' => 'failed']);
-                if ($request->expectsJson()) {
-                    return response()->json(['success' => false, 'message' => 'Insufficient wallet balance'], 400);
+                if ($isResellerOrder && isset($resellerProduct)) {
+                    // Paying vendor is the reseller (the authenticated vendor)
+                    $orderAttrs['vendor_id'] = $lockedVendor->id;
+                    $orderAttrs['is_reseller_order'] = true;
+                    $orderAttrs['reseller_vendor_id'] = $lockedVendor->id;
+                    $orderAttrs['owner_vendor_id'] = $ownerVendorId;
+                    $orderAttrs['reseller_product_id'] = $resellerProduct->id;
+                } else {
+                    // Regular direct order - vendor is the product owner
+                    $orderAttrs['vendor_id'] = $ownerVendorId;
+                    $orderAttrs['is_reseller_order'] = false;
                 }
-                return back()->withErrors(['wallet' => 'Insufficient wallet balance']);
-            }
 
-            // Complete the order using the vendor-wallet-specific completion
-            // flow which DOES NOT credit any wallets or run reseller commission logic.
-            $this->paymentService->completeVendorWalletOrder($order);
+                $order = Order::create($orderAttrs);
 
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Order paid with wallet and processed',
+                // Debit using WalletService (which itself uses transactions/locks)
+                $debited = $walletService->debitVendorFromTopups($lockedVendor->id, $walletCharge, [
+                    'type' => 'vendor_wallet_order',
+                    'base_price' => $basePrice,
+                    'platform_fee' => $platformFee,
                     'order_id' => $order->id,
                 ]);
-            }
 
-            return redirect()->route('checkout.success', ['order' => $order->id])
-                ->with('success', 'Order paid with wallet and processed');
+                if (! $debited) {
+                    $order->update(['status' => 'Failed', 'payment_status' => 'failed']);
+                    if ($request->expectsJson()) {
+                        return response()->json(['success' => false, 'message' => 'Insufficient wallet balance'], 400);
+                    }
+                    return back()->withErrors(['wallet' => 'Insufficient wallet balance']);
+                }
+
+                // Complete the order using the vendor-wallet-specific completion
+                // flow which DOES NOT credit any wallets or run reseller commission logic.
+                $this->paymentService->completeVendorWalletOrder($order);
+
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Order paid with wallet and processed',
+                        'order_id' => $order->id,
+                    ]);
+                }
+
+                return redirect()->route('checkout.success', ['order' => $order->id])
+                    ->with('success', 'Order paid with wallet and processed');
+            });
         }
 
         // Create order with pending status first
         $order = Order::create([
             'recipient_phone_number' => $validated['recipient_phone_number'],
-            'mobile_money_number' => $validated['mobile_money_number'],
+            'mobile_money_number' => $validated['mobile_money_number'] ?? $validated['recipient_phone_number'],
             'service_purchased' => $product->name,
             'amount_paid' => (float) $price,
             'vendor_id' => $validated['vendor_id'],
@@ -349,7 +371,7 @@ class PurchaseController extends Controller
                 // Create order with reseller info
                 $order = Order::create([
                     'recipient_phone_number' => $validated['recipient_phone_number'],
-                    'mobile_money_number' => $validated['mobile_money_number'],
+                    'mobile_money_number' => $validated['mobile_money_number'] ?? $validated['recipient_phone_number'],
                     'service_purchased' => $product->name,
                     'amount_paid' => $amountPaid,
                     'vendor_id' => $resellerProduct->reseller_vendor_id, // The reseller is the primary vendor
@@ -451,7 +473,7 @@ class PurchaseController extends Controller
 
                 $order = Order::create([
                     'recipient_phone_number' => $validated['recipient_phone_number'],
-                    'mobile_money_number' => $validated['mobile_money_number'],
+                    'mobile_money_number' => $validated['mobile_money_number'] ?? $validated['recipient_phone_number'],
                     'service_purchased' => $product->name,
                     'amount_paid' => $amountPaid,
                     'vendor_id' => $product->vendor_id,
