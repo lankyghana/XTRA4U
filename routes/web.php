@@ -246,7 +246,11 @@ Route::middleware(['vendor.approved'])
         Route::post('wallet/topup', [\App\Http\Controllers\VendorWalletController::class, 'initiateTopup'])
             ->name('wallet.topup');
         Route::get('wallet/{vendor}', [\App\Http\Controllers\VendorWalletController::class, 'ledger'])
+            ->whereNumber('vendor')
             ->name('wallet.ledger');
+        // Lightweight balance endpoint (used by quick-buy UI polling)
+        Route::get('wallet/balance', [\App\Http\Controllers\VendorWalletController::class, 'balance'])
+            ->name('wallet.balance');
         
         // Vendor Quick Buy (dashboard shortcut)
         Route::get('quick-buy', [VendorQuickBuyController::class, 'show'])->name('quick-buy.show');
@@ -256,6 +260,7 @@ Route::middleware(['vendor.approved'])
         // and not require vendor authentication. The topup callback route is
         // defined outside the `vendor.approved` group below as `vendor.wallet.topup.callback`.
         Route::get('wallet/{vendor}', [\App\Http\Controllers\VendorWalletController::class, 'ledger'])
+            ->whereNumber('vendor')
             ->name('wallet.ledger');
     });
 Route::get('/checkout', [CheckoutController::class, 'show'])->name('checkout.show');
