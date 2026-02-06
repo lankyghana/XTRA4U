@@ -273,4 +273,31 @@ class VendorWalletController extends Controller
             'last_updated' => $vendor?->updated_at?->toDateTimeString() ?? null,
         ]);
     }
+
+    // Return a small JSON payload with current topup total and wallet balance (cached briefly)
+    public function balance(Request $request)
+    {
+        $vendor = auth('vendor')->user();
+        if (! $vendor) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+        }
+
+        $vendorId = $vendor->id;
+
+        $topupsTotal = \Illuminate\Support\Facades\Cache::remember("vendor:{$vendorId}:topups_available", 10, function () use ($vendorId) {
+            $available = WalletTopup::where('vendor_id', $vendorId)
+                ->where('status', 'completed')
+                ->selectRaw('SUM(amount - COALESCE(consumed, 0)) as available')
+                ->value('available');
+
+            return max(0.0, (float) $available);
+        });
+
+        return response()->json([
+            'success' => true,
+            'vendor_id' => $vendorId,
+            'wallet_balance' => (float) $vendor->wallet_balance,
+            'vendor_topups_total' => (float) $topupsTotal,
+        ]);
+    }
 }
