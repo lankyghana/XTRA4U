@@ -21,6 +21,8 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class VendorDashboardController extends Controller
 {
@@ -577,7 +579,8 @@ class VendorDashboardController extends Controller
 	{
 		$vendor = $this->resolveVendor();
 		$vendorId = $vendor->id;
-		$withdrawableBalance = (float) $vendor->wallet_balance;
+		$walletService = app(\App\Services\WalletService::class);
+		$withdrawableBalance = $walletService->getWithdrawableBalance($vendor->id);
 
 		$withdrawalNetworks = array_keys((array) config('momo.withdrawal_networks', []));
 		$withdrawalNetworkLabels = collect((array) config('momo.withdrawal_networks', []))
@@ -603,9 +606,10 @@ class VendorDashboardController extends Controller
 			])->withInput();
 		}
 
-		$withdrawal = \Illuminate\Support\Facades\DB::transaction(function () use ($vendorId, $data) {
+		$amount = (float) $data['withdraw_amount'];
+
+		$withdrawal = DB::transaction(function () use ($vendor, $vendorId, $data, $amount, $walletService) {
 			$lockedVendor = Vendor::whereKey($vendorId)->lockForUpdate()->firstOrFail();
-			$amount = (float) $data['withdraw_amount'];
 
 			$gatewayManager = app(\App\Services\GatewayManager::class);
 			$gateway = $gatewayManager->getDefaultConfig(\App\Models\PaymentGatewayConfig::TYPE_PAYOUT);
@@ -616,9 +620,10 @@ class VendorDashboardController extends Controller
 				]);
 			}
 
-			if ((float) $lockedVendor->wallet_balance < $amount) {
-				throw \Illuminate\Validation\ValidationException::withMessages([
-					'withdraw_amount' => 'Requested amount exceeds your withdrawable balance.',
+			$lockedWithdrawable = $walletService->getWithdrawableBalance($lockedVendor->id);
+			if (round($lockedWithdrawable, 2) < round($amount, 2)) {
+				throw ValidationException::withMessages([
+					'withdraw_amount' => 'Insufficient withdrawable balance.',
 				]);
 			}
 
@@ -734,11 +739,13 @@ class VendorDashboardController extends Controller
 		// Top-ups metrics for the Top Ups tab (display-only)
 		$totalTopups = \App\Models\WalletTopup::where('vendor_id', $vendorId)
 			->where('status', 'completed')
-			->sum('amount');
+			->selectRaw('SUM(amount - COALESCE(consumed, 0)) as available')
+			->value('available');
+		$totalTopups = max(0.0, (float) $totalTopups);
 
 		$topupsSpent = \App\Models\WalletLedger::where('vendor_id', $vendorId)
 			->where('type', 'debit')
-			->where('metadata->purpose', 'order_payment')
+			->where('metadata->from_topups', true)
 			->sum('amount');
 
 		$topupOrdersCount = \App\Models\Order::where('vendor_id', $vendorId)
