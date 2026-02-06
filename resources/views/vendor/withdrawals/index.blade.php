@@ -45,12 +45,12 @@
                     // Controller provides these variables: $totalTopups, $topupsSpent, $topupOrdersCount, $topupOrdersTotal
                 @endphp
 
-                <!-- Total Top-Ups Balance -->
+                <!-- Available Top-Ups Balance -->
                 <div class="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
                     <div class="px-6 py-5">
-                        <p class="text-sm text-white font-medium">Total Top-Ups Balance</p>
+                        <p class="text-sm text-white font-medium">Available Top-Ups Balance</p>
                         <p id="topups-balance" class="text-2xl font-bold text-white mt-2">GHS {{ number_format($totalTopups ?? 0, 2) }}</p>
-                        <p class="text-xs text-white mt-2">Sum of completed wallet top-ups (non-withdrawable).</p>
+                        <p class="text-xs text-white mt-2">Unspent wallet top-ups (non-withdrawable).</p>
                     </div>
                 </div>
 
