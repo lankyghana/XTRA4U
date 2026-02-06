@@ -12,13 +12,14 @@ class WalletTopup extends Model
     protected $table = 'wallet_topups';
 
     protected $fillable = [
-        'reference', 'vendor_id', 'amount', 'status', 'metadata', 'gateway_response'
+        'reference', 'vendor_id', 'amount', 'status', 'metadata', 'gateway_response', 'consumed'
     ];
 
     protected $casts = [
         'metadata' => 'array',
         'gateway_response' => 'array',
         'amount' => 'float',
+        'consumed' => 'float',
     ];
 
     public function vendor()
