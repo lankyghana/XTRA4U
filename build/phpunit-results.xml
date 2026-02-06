@@ -1,0 +1,299 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="C:\Users\dktakyi001\Desktop\XTRA4U\phpunit.xml" tests="60" assertions="232" errors="0" failures="0" skipped="0" time="36.303963">
+    <testsuite name="Feature" tests="60" assertions="232" errors="0" failures="0" skipped="0" time="36.303963">
+      <testsuite name="Tests\Feature\AdminConfirmPaymentTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\AdminConfirmPaymentTest.php" tests="2" assertions="11" errors="0" failures="0" skipped="0" time="4.292011">
+        <testcase name="test_admin_can_confirm_payment_for_unpaid_order" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\AdminConfirmPaymentTest.php" line="28" class="Tests\Feature\AdminConfirmPaymentTest" classname="Tests.Feature.AdminConfirmPaymentTest" assertions="8" time="4.197553">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_confirm_payment_is_idempotent_when_order_already_paid" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\AdminConfirmPaymentTest.php" line="90" class="Tests\Feature\AdminConfirmPaymentTest" classname="Tests.Feature.AdminConfirmPaymentTest" assertions="3" time="0.094458">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\AdminManualQueueRunTriggerTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\AdminManualQueueRunTriggerTest.php" tests="1" assertions="4" errors="0" failures="0" skipped="0" time="0.113054">
+        <testcase name="test_admin_can_request_manual_queue_run" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\AdminManualQueueRunTriggerTest.php" line="14" class="Tests\Feature\AdminManualQueueRunTriggerTest" classname="Tests.Feature.AdminManualQueueRunTriggerTest" assertions="4" time="0.113054">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\AdminTransactionsSearchTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\AdminTransactionsSearchTest.php" tests="2" assertions="6" errors="0" failures="0" skipped="0" time="0.262095">
+        <testcase name="test_admin_transactions_can_be_searched_by_gateway_reference" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\AdminTransactionsSearchTest.php" line="27" class="Tests\Feature\AdminTransactionsSearchTest" classname="Tests.Feature.AdminTransactionsSearchTest" assertions="3" time="0.131925">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_admin_transactions_can_be_searched_by_gateway_transaction_id" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\AdminTransactionsSearchTest.php" line="86" class="Tests\Feature\AdminTransactionsSearchTest" classname="Tests.Feature.AdminTransactionsSearchTest" assertions="3" time="0.130171">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\AdminVendorAffiliateManagementTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\AdminVendorAffiliateManagementTest.php" tests="2" assertions="6" errors="0" failures="0" skipped="0" time="0.209126">
+        <testcase name="test_admin_can_see_vendor_affiliate_mapping_on_vendors_page" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\AdminVendorAffiliateManagementTest.php" line="25" class="Tests\Feature\AdminVendorAffiliateManagementTest" classname="Tests.Feature.AdminVendorAffiliateManagementTest" assertions="4" time="0.112920">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_admin_can_disable_affiliate_relationship_between_two_vendors" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\AdminVendorAffiliateManagementTest.php" line="46" class="Tests\Feature\AdminVendorAffiliateManagementTest" classname="Tests.Feature.AdminVendorAffiliateManagementTest" assertions="2" time="0.096205">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\AdminVendorsSearchTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\AdminVendorsSearchTest.php" tests="2" assertions="6" errors="0" failures="0" skipped="0" time="0.184169">
+        <testcase name="test_admin_vendors_can_be_searched_by_name" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\AdminVendorsSearchTest.php" line="25" class="Tests\Feature\AdminVendorsSearchTest" classname="Tests.Feature.AdminVendorsSearchTest" assertions="3" time="0.088520">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_admin_vendors_search_works_with_status_filter" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\AdminVendorsSearchTest.php" line="50" class="Tests\Feature\AdminVendorsSearchTest" classname="Tests.Feature.AdminVendorsSearchTest" assertions="3" time="0.095649">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\AdminWithdrawalControllerTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\AdminWithdrawalControllerTest.php" tests="1" assertions="3" errors="0" failures="0" skipped="0" time="0.115026">
+        <testcase name="test_admin_can_view_withdrawal_queue" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\AdminWithdrawalControllerTest.php" line="27" class="Tests\Feature\AdminWithdrawalControllerTest" classname="Tests.Feature.AdminWithdrawalControllerTest" assertions="3" time="0.115026">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\AfaRegistrationPurchaseTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\AfaRegistrationPurchaseTest.php" tests="1" assertions="4" errors="0" failures="0" skipped="0" time="0.123659">
+        <testcase name="test_afa_registration_can_initiate_payment_without_vendor_email" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\AfaRegistrationPurchaseTest.php" line="16" class="Tests\Feature\AfaRegistrationPurchaseTest" classname="Tests.Feature.AfaRegistrationPurchaseTest" assertions="4" time="0.123659">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\AfaVendorEmailNotificationTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\AfaVendorEmailNotificationTest.php" tests="1" assertions="3" errors="0" failures="0" skipped="0" time="0.125788">
+        <testcase name="test_paid_afa_registration_sends_email_to_source_vendor" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\AfaVendorEmailNotificationTest.php" line="18" class="Tests\Feature\AfaVendorEmailNotificationTest" classname="Tests.Feature.AfaVendorEmailNotificationTest" assertions="3" time="0.125788">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\BulkClixPaymentCollectionTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\BulkClixPaymentCollectionTest.php" tests="1" assertions="4" errors="0" failures="0" skipped="0" time="0.088391">
+        <testcase name="test_bulkclix_can_initiate_momo_collection_and_verify_status" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\BulkClixPaymentCollectionTest.php" line="17" class="Tests\Feature\BulkClixPaymentCollectionTest" classname="Tests.Feature.BulkClixPaymentCollectionTest" assertions="4" time="0.088391">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\CancelStaleWithdrawalsCommandTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\CancelStaleWithdrawalsCommandTest.php" tests="4" assertions="17" errors="0" failures="0" skipped="0" time="0.405148">
+        <testcase name="test_cancel_stale_withdrawals_marks_failed_and_refunds_once" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\CancelStaleWithdrawalsCommandTest.php" line="14" class="Tests\Feature\CancelStaleWithdrawalsCommandTest" classname="Tests.Feature.CancelStaleWithdrawalsCommandTest" assertions="7" time="0.103102">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_cancel_stale_withdrawals_skips_when_payout_reference_present" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\CancelStaleWithdrawalsCommandTest.php" line="55" class="Tests\Feature\CancelStaleWithdrawalsCommandTest" classname="Tests.Feature.CancelStaleWithdrawalsCommandTest" assertions="4" time="0.120281">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_cancel_stale_withdrawals_refuses_unsafe_flags_without_force" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\CancelStaleWithdrawalsCommandTest.php" line="87" class="Tests\Feature\CancelStaleWithdrawalsCommandTest" classname="Tests.Feature.CancelStaleWithdrawalsCommandTest" assertions="2" time="0.095968">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_cancel_stale_withdrawals_can_force_cancel_referenced_when_forced" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\CancelStaleWithdrawalsCommandTest.php" line="96" class="Tests\Feature\CancelStaleWithdrawalsCommandTest" classname="Tests.Feature.CancelStaleWithdrawalsCommandTest" assertions="4" time="0.085798">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\CheckoutPayerPhoneRequirementsTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\CheckoutPayerPhoneRequirementsTest.php" tests="2" assertions="8" errors="0" failures="0" skipped="0" time="0.293083">
+        <testcase name="test_checkout_allows_missing_payer_phone_for_redirect_gateways" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\CheckoutPayerPhoneRequirementsTest.php" line="15" class="Tests\Feature\CheckoutPayerPhoneRequirementsTest" classname="Tests.Feature.CheckoutPayerPhoneRequirementsTest" assertions="2" time="0.102656">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_checkout_allows_missing_payer_phone_for_inline_gateways_and_uses_recipient_phone" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\CheckoutPayerPhoneRequirementsTest.php" line="79" class="Tests\Feature\CheckoutPayerPhoneRequirementsTest" classname="Tests.Feature.CheckoutPayerPhoneRequirementsTest" assertions="6" time="0.190427">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\ExampleTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\ExampleTest.php" tests="1" assertions="1" errors="0" failures="0" skipped="0" time="0.120776">
+        <testcase name="test_the_application_returns_a_successful_response" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\ExampleTest.php" line="13" class="Tests\Feature\ExampleTest" classname="Tests.Feature.ExampleTest" assertions="1" time="0.120776">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\ExternalFulfillmentIntegrationTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\ExternalFulfillmentIntegrationTest.php" tests="7" assertions="10" errors="0" failures="0" skipped="0" time="0.632185">
+        <testcase name="test_order_completed_dispatches_external_fulfillment_job_when_enabled" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\ExternalFulfillmentIntegrationTest.php" line="33" class="Tests\Feature\ExternalFulfillmentIntegrationTest" classname="Tests.Feature.ExternalFulfillmentIntegrationTest" assertions="1" time="0.085082">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_order_completed_does_not_dispatch_when_disabled" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\ExternalFulfillmentIntegrationTest.php" line="67" class="Tests\Feature\ExternalFulfillmentIntegrationTest" classname="Tests.Feature.ExternalFulfillmentIntegrationTest" assertions="1" time="0.092315">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_job_posts_to_external_api_and_marks_order_succeeded_idempotently" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\ExternalFulfillmentIntegrationTest.php" line="101" class="Tests\Feature\ExternalFulfillmentIntegrationTest" classname="Tests.Feature.ExternalFulfillmentIntegrationTest" assertions="4" time="0.119583">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_job_maps_airteltigo_products_to_datafyhub_ishare_and_capacity_from_size" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\ExternalFulfillmentIntegrationTest.php" line="155" class="Tests\Feature\ExternalFulfillmentIntegrationTest" classname="Tests.Feature.ExternalFulfillmentIntegrationTest" assertions="1" time="0.085859">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_job_prefers_explicit_datafyhub_network_metadata_over_heuristics" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\ExternalFulfillmentIntegrationTest.php" line="208" class="Tests\Feature\ExternalFulfillmentIntegrationTest" classname="Tests.Feature.ExternalFulfillmentIntegrationTest" assertions="1" time="0.082167">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_affiliate_order_dispatches_external_fulfillment_for_owner_vendor_when_enabled" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\ExternalFulfillmentIntegrationTest.php" line="262" class="Tests\Feature\ExternalFulfillmentIntegrationTest" classname="Tests.Feature.ExternalFulfillmentIntegrationTest" assertions="1" time="0.085362">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_order_completed_does_not_dispatch_for_reseller_vendor_even_if_configured" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\ExternalFulfillmentIntegrationTest.php" line="303" class="Tests\Feature\ExternalFulfillmentIntegrationTest" classname="Tests.Feature.ExternalFulfillmentIntegrationTest" assertions="1" time="0.081817">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\MultiLevelAffiliatePayoutTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\MultiLevelAffiliatePayoutTest.php" tests="2" assertions="22" errors="0" failures="0" skipped="0" time="10.878334">
+        <testcase name="test_multi_level_product_reseller_order_splits_across_chain" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\MultiLevelAffiliatePayoutTest.php" line="21" class="Tests\Feature\MultiLevelAffiliatePayoutTest" classname="Tests.Feature.MultiLevelAffiliatePayoutTest" assertions="14" time="8.527992">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_multi_level_afa_registration_splits_across_chain" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\MultiLevelAffiliatePayoutTest.php" line="100" class="Tests\Feature\MultiLevelAffiliatePayoutTest" classname="Tests.Feature.MultiLevelAffiliatePayoutTest" assertions="8" time="2.350342">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\PurchaseControllerTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\PurchaseControllerTest.php" tests="3" assertions="24" errors="0" failures="0" skipped="0" time="1.997837">
+        <testcase name="test_purchase_route_creates_order_and_initiates_payment" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\PurchaseControllerTest.php" line="19" class="Tests\Feature\PurchaseControllerTest" classname="Tests.Feature.PurchaseControllerTest" assertions="8" time="0.123096">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_purchase_fails_gracefully_when_payment_gateway_error" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\PurchaseControllerTest.php" line="72" class="Tests\Feature\PurchaseControllerTest" classname="Tests.Feature.PurchaseControllerTest" assertions="5" time="0.092373">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_purchase_route_uses_product_price" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\PurchaseControllerTest.php" line="115" class="Tests\Feature\PurchaseControllerTest" classname="Tests.Feature.PurchaseControllerTest" assertions="11" time="1.782368">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\RecipientNumberLoggingDedupTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\RecipientNumberLoggingDedupTest.php" tests="1" assertions="1" errors="0" failures="0" skipped="0" time="0.066069">
+        <testcase name="test_recipient_number_logging_does_not_duplicate_rows_for_same_vendor_and_service" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\RecipientNumberLoggingDedupTest.php" line="16" class="Tests\Feature\RecipientNumberLoggingDedupTest" classname="Tests.Feature.RecipientNumberLoggingDedupTest" assertions="1" time="0.066069">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\VendorAfaFulfillmentOwnershipTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorAfaFulfillmentOwnershipTest.php" tests="2" assertions="7" errors="0" failures="0" skipped="0" time="0.273613">
+        <testcase name="test_reseller_sees_and_can_manage_reseller_registrations" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorAfaFulfillmentOwnershipTest.php" line="14" class="Tests\Feature\VendorAfaFulfillmentOwnershipTest" classname="Tests.Feature.VendorAfaFulfillmentOwnershipTest" assertions="4" time="0.117886">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_source_vendor_does_not_manage_reseller_registrations" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorAfaFulfillmentOwnershipTest.php" line="56" class="Tests\Feature\VendorAfaFulfillmentOwnershipTest" classname="Tests.Feature.VendorAfaFulfillmentOwnershipTest" assertions="3" time="0.155728">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\VendorAfaResellerProviderRestrictionTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorAfaResellerProviderRestrictionTest.php" tests="2" assertions="4" errors="0" failures="0" skipped="0" time="0.286100">
+        <testcase name="test_vendor_can_only_select_affiliate_parent_as_afa_provider" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorAfaResellerProviderRestrictionTest.php" line="13" class="Tests\Feature\VendorAfaResellerProviderRestrictionTest" classname="Tests.Feature.VendorAfaResellerProviderRestrictionTest" assertions="2" time="0.152076">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_vendor_without_affiliate_parent_cannot_enable_reseller_mode" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorAfaResellerProviderRestrictionTest.php" line="46" class="Tests\Feature\VendorAfaResellerProviderRestrictionTest" classname="Tests.Feature.VendorAfaResellerProviderRestrictionTest" assertions="2" time="0.134024">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\VendorAffiliateOrdersFulfillmentTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorAffiliateOrdersFulfillmentTest.php" tests="2" assertions="17" errors="0" failures="0" skipped="0" time="2.329685">
+        <testcase name="test_owner_sees_affiliate_order_in_orders_only_and_can_update_status" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorAffiliateOrdersFulfillmentTest.php" line="15" class="Tests\Feature\VendorAffiliateOrdersFulfillmentTest" classname="Tests.Feature.VendorAffiliateOrdersFulfillmentTest" assertions="9" time="2.131603">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_reseller_sees_affiliate_order_in_both_lists_but_cannot_update_status" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorAffiliateOrdersFulfillmentTest.php" line="95" class="Tests\Feature\VendorAffiliateOrdersFulfillmentTest" classname="Tests.Feature.VendorAffiliateOrdersFulfillmentTest" assertions="8" time="0.198082">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\VendorApprovalMiddlewareRedirectTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorApprovalMiddlewareRedirectTest.php" tests="2" assertions="5" errors="0" failures="0" skipped="0" time="0.160028">
+        <testcase name="test_guest_is_redirected_to_vendor_login_when_accessing_vendor_routes" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorApprovalMiddlewareRedirectTest.php" line="13" class="Tests\Feature\VendorApprovalMiddlewareRedirectTest" classname="Tests.Feature.VendorApprovalMiddlewareRedirectTest" assertions="2" time="0.046886">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_unapproved_vendor_is_logged_out_and_redirected_to_vendor_login" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorApprovalMiddlewareRedirectTest.php" line="20" class="Tests\Feature\VendorApprovalMiddlewareRedirectTest" classname="Tests.Feature.VendorApprovalMiddlewareRedirectTest" assertions="3" time="0.113142">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\VendorDashboardTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorDashboardTest.php" tests="5" assertions="16" errors="0" failures="0" skipped="0" time="0.933399">
+        <testcase name="test_vendor_dashboard_loads_for_approved_vendor" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorDashboardTest.php" line="20" class="Tests\Feature\VendorDashboardTest" classname="Tests.Feature.VendorDashboardTest" assertions="6" time="0.174886">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_vendor_withdrawals_page_loads" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorDashboardTest.php" line="39" class="Tests\Feature\VendorDashboardTest" classname="Tests.Feature.VendorDashboardTest" assertions="4" time="0.179235">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_vendor_dashboard_sales_stats_includes_afa_earnings" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorDashboardTest.php" line="66" class="Tests\Feature\VendorDashboardTest" classname="Tests.Feature.VendorDashboardTest" assertions="2" time="0.176698">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_vendor_dashboard_does_not_show_unpaid_orders" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorDashboardTest.php" line="110" class="Tests\Feature\VendorDashboardTest" classname="Tests.Feature.VendorDashboardTest" assertions="2" time="0.189343">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_vendor_dashboard_shows_paid_orders_in_processing_or_completed" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorDashboardTest.php" line="144" class="Tests\Feature\VendorDashboardTest" classname="Tests.Feature.VendorDashboardTest" assertions="2" time="0.213237">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\VendorOrderFulfillmentTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorOrderFulfillmentTest.php" tests="7" assertions="25" errors="0" failures="0" skipped="0" time="4.229797">
+        <testcase name="test_vendor_fulfillment_page_does_not_crash_when_product_description_is_not_json" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorOrderFulfillmentTest.php" line="16" class="Tests\Feature\VendorOrderFulfillmentTest" classname="Tests.Feature.VendorOrderFulfillmentTest" assertions="1" time="0.161467">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_vendor_fulfillment_download_excludes_orders_being_handled_by_external_api" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorOrderFulfillmentTest.php" line="59" class="Tests\Feature\VendorOrderFulfillmentTest" classname="Tests.Feature.VendorOrderFulfillmentTest" assertions="2" time="0.086811">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_vendor_can_manually_mark_external_api_sent_orders_as_completed_with_confirmation" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorOrderFulfillmentTest.php" line="109" class="Tests\Feature\VendorOrderFulfillmentTest" classname="Tests.Feature.VendorOrderFulfillmentTest" assertions="3" time="1.805498">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_vendor_cannot_bulk_complete_external_api_orders_without_confirmation" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorOrderFulfillmentTest.php" line="166" class="Tests\Feature\VendorOrderFulfillmentTest" classname="Tests.Feature.VendorOrderFulfillmentTest" assertions="2" time="0.157597">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_vendor_can_download_processing_orders_per_network_and_prevent_duplicates" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorOrderFulfillmentTest.php" line="217" class="Tests\Feature\VendorOrderFulfillmentTest" classname="Tests.Feature.VendorOrderFulfillmentTest" assertions="10" time="0.146579">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_vendor_can_mark_downloaded_orders_as_completed_and_transactions_update" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorOrderFulfillmentTest.php" line="275" class="Tests\Feature\VendorOrderFulfillmentTest" classname="Tests.Feature.VendorOrderFulfillmentTest" assertions="3" time="1.769938">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_reseller_cannot_download_affiliate_orders_but_owner_can" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorOrderFulfillmentTest.php" line="325" class="Tests\Feature\VendorOrderFulfillmentTest" classname="Tests.Feature.VendorOrderFulfillmentTest" assertions="4" time="0.101907">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\VendorWalletPaymentTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorWalletPaymentTest.php" tests="1" assertions="4" errors="0" failures="0" skipped="0" time="3.873738">
+        <testcase name="test_vendor_can_pay_for_order_with_wallet_and_order_is_processed" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorWalletPaymentTest.php" line="15" class="Tests\Feature\VendorWalletPaymentTest" classname="Tests.Feature.VendorWalletPaymentTest" assertions="4" time="3.873738">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\VendorWalletTopUpTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorWalletTopUpTest.php" tests="1" assertions="3" errors="0" failures="0" skipped="0" time="0.132898">
+        <testcase name="test_wallet_topup_callback_credits_vendor_wallet_and_creates_ledger" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorWalletTopUpTest.php" line="13" class="Tests\Feature\VendorWalletTopUpTest" classname="Tests.Feature.VendorWalletTopUpTest" assertions="3" time="0.132898">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\VendorWithdrawalAutoPayoutTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorWithdrawalAutoPayoutTest.php" tests="3" assertions="16" errors="0" failures="0" skipped="0" time="3.999274">
+        <testcase name="test_vendor_withdrawal_request_deducts_wallet_and_dispatches_job" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorWithdrawalAutoPayoutTest.php" line="42" class="Tests\Feature\VendorWithdrawalAutoPayoutTest" classname="Tests.Feature.VendorWithdrawalAutoPayoutTest" assertions="4" time="0.166834">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_payout_failure_marks_failed_and_refunds_wallet_idempotently" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorWithdrawalAutoPayoutTest.php" line="74" class="Tests\Feature\VendorWithdrawalAutoPayoutTest" classname="Tests.Feature.VendorWithdrawalAutoPayoutTest" assertions="7" time="1.988916">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_payout_success_marks_approved_idempotently" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorWithdrawalAutoPayoutTest.php" line="122" class="Tests\Feature\VendorWithdrawalAutoPayoutTest" classname="Tests.Feature.VendorWithdrawalAutoPayoutTest" assertions="5" time="1.843523">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+      <testsuite name="Tests\Feature\VendorWithdrawalNameQueryTest" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorWithdrawalNameQueryTest.php" tests="2" assertions="5" errors="0" failures="0" skipped="0" time="0.178682">
+        <testcase name="test_withdrawal_name_query_returns_account_name_when_bulkclix_returns_name" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorWithdrawalNameQueryTest.php" line="41" class="Tests\Feature\VendorWithdrawalNameQueryTest" classname="Tests.Feature.VendorWithdrawalNameQueryTest" assertions="2" time="0.127131">
+          <system-out>
+</system-out>
+        </testcase>
+        <testcase name="test_vendor_withdrawal_request_persists_momo_account_name_and_type" file="C:\Users\dktakyi001\Desktop\XTRA4U\tests\Feature\VendorWithdrawalNameQueryTest.php" line="72" class="Tests\Feature\VendorWithdrawalNameQueryTest" classname="Tests.Feature.VendorWithdrawalNameQueryTest" assertions="3" time="0.051551">
+          <system-out>
+</system-out>
+        </testcase>
+      </testsuite>
+    </testsuite>
+  </testsuite>
+</testsuites>
