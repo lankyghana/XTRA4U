@@ -55,24 +55,34 @@
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10" x-data='quickBuy(@json($catalog), @json($categories))'>
     {{-- Hero section --}}
-    <div class="bg-gradient-to-r from-purple-50 via-white to-blue-50 border border-purple-100 rounded-[32px] px-8 py-10 shadow-sm">
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-8">
-            <div>
-                <p class="text-xs uppercase tracking-[0.35em] text-purple-500">Vendor Storefront</p>
-                <h1 class="mt-4 text-4xl font-semibold text-gray-900">Shop with {{ $vendor->name }}</h1>
-                <div class="inline-flex items-center gap-3 bg-purple-100 text-purple-700 px-4 py-2 rounded-full mt-4 text-sm font-medium">
-                    Agent: {{ $vendor->name }} ({{ $vendor->vendor_code ?? 'N/A' }})
+    <div class="sticky top-0 z-30 bg-white/80 backdrop-blur-sm border-b border-gray-100">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-6">
+            <div class="flex items-center justify-between gap-4">
+                <div>
+                    <p class="text-xs uppercase tracking-[0.35em] text-purple-500">Quick Buy (Wallet)</p>
+                    <h1 class="mt-1 text-xl sm:text-2xl font-semibold text-gray-900">Fast wallet-only orders</h1>
+                    <p class="text-xs text-gray-500 mt-1">Base price + 2% platform fee • Internal vendor flow</p>
                 </div>
-                <p class="mt-4 text-gray-600">Deliver instant bundles, electricity tokens, results checkers and more directly from your vendor wallet.</p>
-            </div>
-            <div class="flex flex-col gap-3 min-w-[220px]">
-                <div class="rounded-3xl border border-gray-200 bg-white px-5 py-4">
-                    <p class="text-xs uppercase tracking-wide text-gray-500">Top-up Balance</p>
-                    <p class="text-3xl font-semibold text-gray-900 mt-2">GHS {{ number_format($totalTopups ?? $vendor->wallet_balance, 2) }}</p>
-                </div>
-                <div class="grid grid-cols-2 gap-3 text-sm">
-                    <a href="{{ route('vendor.withdrawals.index', ['tab' => 'topups']) }}" class="inline-flex items-center justify-center rounded-2xl border border-purple-200 text-purple-700 font-semibold py-3">Top Up</a>
-                    <a href="{{ route('vendor.withdrawals.index') }}" class="inline-flex items-center justify-center rounded-2xl bg-purple-600 text-white font-semibold py-3">Wallet</a>
+
+                <div class="flex items-center gap-4">
+                    <div x-data class="hidden sm:block">
+                        <a href="{{ route('vendor.withdrawals.index', ['tab' => 'topups']) }}" class="inline-flex items-center gap-2 rounded-full border border-purple-200 text-purple-700 font-semibold px-4 py-2">Top Up</a>
+                    </div>
+
+                    <div x-data="{ }" class="min-w-[180px]">
+                        <div x-data="{ }" x-init="$el.closest('[x-data]').__balance = true">
+                            <div class="rounded-2xl px-4 py-3 flex items-center justify-between shadow-sm bg-white">
+                                <div>
+                                    <p class="text-xs text-gray-500">Available Wallet Balance</p>
+                                    <p class="text-lg font-semibold mt-1 transition-colors duration-200" :class="balanceColorClass()" x-text="formatPrice(vendorBalance)">GHS 0.00</p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-xs text-gray-400">Status</p>
+                                    <div class="mt-1 text-sm font-medium" :class="balanceColorClass(true)"> <span x-text="balanceLabel()">—</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -120,33 +130,50 @@
                 </div>
                 <div class="flex items-center gap-4">
                     <p class="text-xs text-gray-500 hidden sm:block">Tap a card to prefill the checkout</p>
-                    <button type="button" @click="toggleSort()" class="inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm text-gray-700 bg-white hover:bg-gray-50">
-                        <svg class="w-4 h-4 text-gray-500" viewBox="0 0 20 20" fill="currentColor"><path d="M3 6h14v2H3V6zm2 6h10v2H5v-2z"/></svg>
-                        <span x-text="sortDirection === 'asc' ? 'Price: Low → High' : 'Price: High → Low'"></span>
-                    </button>
                 </div>
             </div>
 
-            <div class="grid sm:grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
                 <template x-if="filteredProducts().length === 0">
                     <div class="col-span-full text-center text-gray-500 border border-dashed border-gray-200 rounded-3xl py-10">No products yet under this category.</div>
                 </template>
                 <template x-for="product in filteredProducts()" :key="product.id">
-                    <button type="button" class="text-left bg-white border rounded-3xl p-5 shadow-sm hover:shadow-md transition" :class="String(productId) === String(product.id) ? 'border-purple-400 ring-2 ring-purple-200' : 'border-gray-100'" @click="selectProduct(product.id)">
-                        <p class="text-xs uppercase tracking-wide text-gray-500" x-text="product.category"></p>
-                        <h4 class="text-lg font-semibold text-gray-900 mt-1" x-text="product.name"></h4>
-                        <p class="text-sm text-gray-500 mt-2" x-text="product.description"></p>
-                        <div class="flex items-center justify-between mt-5 text-sm text-gray-500">
+                    <div class="relative">
+                        <button type="button" class="w-full text-left bg-white border rounded-3xl p-5 shadow-sm hover:shadow-md transition flex flex-col h-full justify-between" :class="String(productId) === String(product.id) ? 'border-purple-400 ring-2 ring-purple-200' : 'border-gray-100'" @click="selectProduct(product.id)">
                             <div>
-                                <p>Base price</p>
-                                <p class="text-xl font-semibold text-purple-600" x-text="formatPrice(product.base_price)"></p>
+                                <div class="flex items-start justify-between">
+                                    <div>
+                                        <p class="text-xs uppercase tracking-wide text-gray-500 truncate" x-text="product.category"></p>
+                                        <h4 class="text-lg font-semibold text-gray-900 mt-1" x-text="product.name"></h4>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-xs text-gray-400">Base</p>
+                                        <p class="text-xl font-semibold text-purple-600" x-text="formatPrice(product.base_price)"></p>
+                                    </div>
+                                </div>
+
+                                <p class="text-sm text-gray-500 mt-3 max-h-16 overflow-hidden" x-text="product.display_description || product.description"></p>
                             </div>
-                            <span class="inline-flex items-center gap-1 text-purple-600 font-medium">
-                                Select
-                                <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.293 3.293a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L14 6.414V17a1 1 0 11-2 0V6.414L9.707 8.707A1 1 0 018.293 7.293l4-4z" clip-rule="evenodd"/></svg>
-                            </span>
+
+                            <div class="mt-4 flex items-center justify-between">
+                                <div class="inline-flex items-center gap-2">
+                                    <span class="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full" x-text="product.tag || ''" x-show="product.tag"></span>
+                                    <span class="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full" x-text="product.category || ''"></span>
+                                </div>
+                                <div>
+                                    <span class="inline-flex items-center gap-1 text-purple-600 font-medium">
+                                        <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                            <path d="M6 10l2 2 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                                        </svg>
+                                        <span class="hidden sm:inline">Select</span>
+                                    </span>
+                                </div>
+                            </div>
+                        </button>
+                        <div class="absolute top-3 left-3">
+                            <span class="inline-flex items-center text-xs px-2 py-1 rounded bg-white/70 text-gray-700">Tap to select</span>
                         </div>
-                    </button>
+                    </div>
                 </template>
             </div>
         </div>
@@ -156,48 +183,70 @@
             <h3 class="text-2xl font-semibold text-gray-900 mt-2">Quick Buy order</h3>
             <p class="text-sm text-gray-500 mt-2">Wallet-only purchases debit the base price plus 2% platform fee.</p>
 
-            <dl class="mt-6 space-y-2 bg-gray-50 rounded-3xl p-4 text-sm text-gray-600">
-                <div class="flex justify-between">
-                    <span>Selected product</span>
-                    <span class="font-medium text-gray-900" x-text="selectedProduct()?.name || 'None'">None</span>
+            <div class="mt-6 bg-gray-50 rounded-2xl p-4 text-sm text-gray-700">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs text-gray-500">Selected product</p>
+                        <p class="font-medium text-gray-900" x-text="selectedProduct()?.name || 'None'">None</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-xs text-gray-500">Base</p>
+                        <p class="font-semibold text-purple-600" x-text="formatPrice(selectedBasePrice())">GHS 0.00</p>
+                    </div>
                 </div>
-                <div class="flex justify-between">
-                    <span>Base price</span>
-                    <span class="font-medium" x-text="formatPrice(selectedBasePrice())">GHS 0.00</span>
-                </div>
-                <div class="flex justify-between">
-                    <span>Wallet balance</span>
-                    <span class="font-medium">GHS {{ number_format($vendor->wallet_balance, 2) }}</span>
-                </div>
-            </dl>
 
-            <form method="POST" action="{{ route('vendor.quick-buy.store') }}" class="mt-6 space-y-4">
+                <div class="mt-3 flex items-center justify-between">
+                    <div class="text-sm text-gray-500">Platform fee (2%)</div>
+                    <div class="font-medium" x-text="formatPrice((selectedBasePrice() * 0.02).toFixed(2))">GHS 0.00</div>
+                </div>
+
+                <div class="mt-3 border-t pt-3 flex items-center justify-between">
+                    <div class="text-sm font-medium">Total wallet charge</div>
+                    <div class="text-lg font-bold text-gray-900" x-text="formatPrice(selectedTotalCharge())">GHS 0.00</div>
+                </div>
+
+                <p class="mt-2 text-xs text-gray-500">Wallet orders do not generate earnings for the buyer.</p>
+            </div>
+
+            <form method="POST" action="{{ route('vendor.quick-buy.store') }}" class="mt-6 space-y-4" x-on:submit="submitting = true">
                 @csrf
                 <input type="hidden" name="product_id" :value="productId">
-                <input type="hidden" name="payment_method" value="wallet">
+                <input type="hidden" name="payment_method" x-model="paymentMethod">
 
                 <div>
                     <label class="text-sm font-medium text-gray-700">Recipient phone</label>
-                    <input type="tel" name="recipient_phone_number" x-model="recipient" required placeholder="e.g. 0244 123 456" class="mt-2 w-full rounded-2xl border-gray-200 focus:ring-2 focus:ring-purple-500" />
+                    <input type="tel" name="recipient_phone_number" x-model="recipient" required placeholder="e.g. 0244 123 456" class="mt-2 w-full rounded-2xl border-gray-200 focus:ring-2 focus:ring-purple-500 px-3 py-2" />
                 </div>
 
-                <div>
+                <div x-cloak x-show="paymentMethod !== 'wallet'">
                     <label class="text-sm font-medium text-gray-700">Payer MoMo number</label>
-                    <input type="tel" name="mobile_money_number" x-model="momo" required placeholder="Same or alternate MoMo" class="mt-2 w-full rounded-2xl border-gray-200 focus:ring-2 focus:ring-purple-500" />
+                    <input type="tel" name="mobile_money_number" x-model="momo" placeholder="Same or alternate MoMo" class="mt-2 w-full rounded-2xl border-gray-200 focus:ring-2 focus:ring-purple-500 px-3 py-2" />
                 </div>
 
-                <div class="rounded-2xl border border-dashed border-amber-300 bg-amber-50 text-amber-800 text-sm p-4">
-                    <p class="font-semibold">Wallet-only purchases</p>
-                    <p class="mt-1">Ensure your wallet top-ups cover the base price before placing the order.</p>
-                    <p class="mt-2 text-xs text-amber-700" x-show="selectedBasePrice() > vendorBalance">Balance too low. Add funds in Wallet → Top-Ups.</p>
+                <div class="flex gap-2 items-center">
+                    <label class="text-sm font-medium text-gray-700 mr-2">Payment</label>
+                    <div class="flex gap-2">
+                        <button type="button" @click.prevent="paymentMethod='wallet'" :class="paymentMethod==='wallet' ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 border'" class="px-3 py-2 rounded-2xl border">Wallet</button>                    </div>
                 </div>
 
-                <button type="submit" class="w-full rounded-2xl bg-purple-600 text-white font-semibold py-3 hover:bg-purple-700 disabled:opacity-60 disabled:cursor-not-allowed" :disabled="!productId || selectedBasePrice() > vendorBalance">
-                    <span x-text="productId ? 'Place wallet order' : 'Select a product'">Select a product</span>
+                <div class="rounded-2xl border border-blue-100 bg-blue-50 text-blue-800 text-sm p-4">
+                    <div class="flex items-start gap-3">
+                        <svg class="w-5 h-5 text-blue-600 mt-0.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 000 2h10a1 1 0 000-2h-1V6a4 4 0 00-4-4zM7 10a3 3 0 016 0v2H7v-2z"/></svg>
+                        <div>
+                            <p class="font-semibold text-gray-900">🔒 Wallet-only purchase</p>
+                            <p class="mt-1 text-gray-700">Uses wallet top-ups only. Top-ups are not withdrawable. Platform fee is charged upfront.</p>
+                            <p class="mt-1 text-xs text-blue-700" x-show="selectedTotalCharge() > vendorBalance">Balance insufficient for this product. Add top-ups.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full rounded-2xl bg-purple-600 text-white font-semibold py-3 hover:bg-purple-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-3" :disabled="!canPlaceOrder() || submitting">
+                    <svg x-show="submitting" class="w-5 h-5 animate-spin text-white" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.2" stroke-width="4"/><path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>
+                    <span x-text="submitting ? 'Processing…' : (productId ? (paymentMethod === 'wallet' ? 'Place wallet order' : 'Proceed to payment') : 'Select a product')">Select a product</span>
                 </button>
             </form>
 
-            <p class="mt-6 text-xs text-gray-500">Orders are fulfilled instantly. For escalations call {{ $vendor->support_phone ?? '+233 XX XXX XXXX' }}.</p>
+            
         </aside>
     </div>
 
@@ -226,8 +275,12 @@ document.addEventListener('alpine:init', () => {
         // flatten products for convenience (supports older browsers without flatMap)
         products: (catalog || []).flatMap ? (catalog || []).flatMap(c => c.products || []) : (catalog || []).reduce((acc, c) => acc.concat(c.products || []), []),
         vendorBalance: {{ json_encode((float) ($totalTopups ?? $vendor->wallet_balance)) }},
+        // current payment method for the quick-buy form. Default to wallet.
+        paymentMethod: 'wallet',
         recipient: '',
         momo: '',
+        // UI state
+        submitting: false,
 
         toggleSort() {
             this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
@@ -283,11 +336,89 @@ document.addEventListener('alpine:init', () => {
             return parseFloat(prod.base_price ?? prod.min_base_price ?? prod.price ?? 0);
         },
 
+        selectedTotalCharge() {
+            const base = this.selectedBasePrice();
+            const fee = base * 0.02;
+            return parseFloat((base + fee).toFixed(2));
+        },
+
+        // return a human label for balance vs required amount
+        balanceLabel() {
+            if (!this.productId) return '—';
+            const need = this.selectedTotalCharge();
+            if (this.vendorBalance >= need) {
+                // if remaining balance after order is small, mark as Low
+                const remaining = this.vendorBalance - need;
+                if (remaining <= Math.max(0.01, need * 0.2)) return 'Low';
+                return 'Sufficient';
+            }
+            return 'Insufficient';
+        },
+
+        // return css class based on balance status. If textOnly, return text color class
+        balanceColorClass(textOnly = false) {
+            const label = this.balanceLabel();
+            if (label === 'Sufficient') return textOnly ? 'text-green-600' : 'text-green-600';
+            if (label === 'Low') return textOnly ? 'text-amber-600' : 'text-amber-600';
+            if (label === 'Insufficient') return textOnly ? 'text-red-600' : 'text-red-600';
+            return textOnly ? 'text-gray-600' : 'text-gray-600';
+        },
+
+        // whether the form can be submitted
+        canPlaceOrder() {
+            if (!this.productId) return false;
+            if (!this.recipient || String(this.recipient).trim().length < 6) return false;
+            if (this.paymentMethod === 'wallet' && this.selectedTotalCharge() > this.vendorBalance) return false;
+            return true;
+        },
+
         formatPrice(v) {
             return 'GHS ' + parseFloat(v || 0).toFixed(2);
         }
     }));
 });
+</script>
+
+<script>
+// Poll vendor balance every 30 seconds to keep UI fresh
+(function () {
+    const pollInterval = 30000;
+    async function refreshBalance() {
+        try {
+            const resp = await fetch("{{ route('vendor.wallet.balance') }}", {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin'
+            });
+
+            // If the server redirected to login or returned unauthorized, skip update
+            if (resp.status === 401 || resp.status === 302) return;
+
+            if (!resp.ok) {
+                console.warn('Failed to refresh vendor balance, status:', resp.status);
+                return;
+            }
+
+            // Ensure we have JSON before parsing
+            const contentType = resp.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) return;
+
+            const data = await resp.json();
+            if (data.success && window.Alpine) {
+                // find the quickBuy Alpine component and update vendorBalance
+                const el = document.querySelector('[x-data^="quickBuy("]');
+                if (el && el.__x) {
+                    try { el.__x.$data.vendorBalance = parseFloat(data.vendor_topups_total || data.wallet_balance || 0); } catch (e) {}
+                }
+            }
+        } catch (e) {
+            console.warn('refreshBalance error', e);
+        }
+    }
+
+    setInterval(refreshBalance, pollInterval);
+    // initial refresh shortly after load
+    setTimeout(refreshBalance, 2000);
+})();
 </script>
 
 @endsection
