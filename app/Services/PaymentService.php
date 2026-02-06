@@ -249,8 +249,16 @@ class PaymentService
             $platformFee = (float) ($locked->platform_commission ?? round($basePrice * 0.02, 2));
             $vendorEarning = round(max(0, $basePrice - $platformFee), 2);
 
+            // Choose which vendor receives the accounting transaction.
+            // For reseller orders, the owner/vendor that should be credited
+            // for earnings is `owner_vendor_id`. For regular orders we use
+            // the order's `vendor_id`.
+            $transactionVendorId = $locked->is_reseller_order && $locked->owner_vendor_id
+                ? (int) $locked->owner_vendor_id
+                : $locked->vendor_id;
+
             // Create or update a transaction row so accounting can reconcile.
-            $this->upsertOrderTransaction($locked, $locked->vendor_id, [
+            $this->upsertOrderTransaction($locked, $transactionVendorId, [
                 'recipient_phone' => $locked->recipient_phone_number,
                 'amount' => $basePrice,
                 'commission_amount' => $platformFee,
@@ -265,29 +273,83 @@ class PaymentService
                 'payment_completed_at' => now(),
             ]);
 
-            // Notify product owner (vendor) and admin. We do NOT credit wallets here.
-            if ($locked->vendor_id) {
+            // Notify parties: owner vendor should be notified of earnings
+            // for reseller orders; the reseller (order.vendor_id) should
+            // also receive a basic order notification so it appears in
+            // their dashboard.
+            if ($locked->is_reseller_order && $locked->owner_vendor_id) {
+                // Notify owner vendor about affiliate sale and earning
                 VendorNotification::create([
-                    'vendor_id' => $locked->vendor_id,
-                    'type' => VendorNotification::TYPE_NEW_ORDER,
-                    'title' => 'New Order Received',
-                    'message' => "You have a new order for '{$locked->service_purchased}'. Earning recorded: GHS " . number_format($vendorEarning, 2),
+                    'vendor_id' => (int) $locked->owner_vendor_id,
+                    'type' => VendorNotification::TYPE_AFFILIATE_ORDER,
+                    'title' => 'New Affiliate Order',
+                    'message' => "A reseller made a sale of your product '{$locked->service_purchased}'. Your earning: GHS " . number_format($vendorEarning, 2),
                     'order_id' => $locked->id,
                     'data' => [
                         'product_name' => $locked->service_purchased,
                         'amount' => $basePrice,
                         'earning' => $vendorEarning,
+                        'reseller_vendor_id' => $locked->vendor_id,
                     ],
                 ]);
 
                 $postCommit[] = [
                     'type' => 'communications',
                     'order_id' => $locked->id,
-                    'vendor_id' => $locked->vendor_id,
+                    'vendor_id' => (int) $locked->owner_vendor_id,
                     'role' => 'owner',
                     'earning' => $vendorEarning,
-                    'sms_type' => 'order',
+                    'sms_type' => 'affiliate',
                 ];
+
+                // Also notify the reseller (so the order shows up in their UI)
+                if ($locked->vendor_id) {
+                    VendorNotification::create([
+                        'vendor_id' => $locked->vendor_id,
+                        'type' => VendorNotification::TYPE_NEW_ORDER,
+                        'title' => 'New Order Received',
+                        'message' => "You have a new reseller order for '{$locked->service_purchased}'.", 
+                        'order_id' => $locked->id,
+                        'data' => [
+                            'product_name' => $locked->service_purchased,
+                            'amount' => $basePrice,
+                        ],
+                    ]);
+
+                    $postCommit[] = [
+                        'type' => 'communications',
+                        'order_id' => $locked->id,
+                        'vendor_id' => $locked->vendor_id,
+                        'role' => 'reseller',
+                        'earning' => 0.0,
+                        'sms_type' => 'order',
+                    ];
+                }
+            } else {
+                // Regular order: notify the vendor (owner)
+                if ($locked->vendor_id) {
+                    VendorNotification::create([
+                        'vendor_id' => $locked->vendor_id,
+                        'type' => VendorNotification::TYPE_NEW_ORDER,
+                        'title' => 'New Order Received',
+                        'message' => "You have a new order for '{$locked->service_purchased}'. Earning recorded: GHS " . number_format($vendorEarning, 2),
+                        'order_id' => $locked->id,
+                        'data' => [
+                            'product_name' => $locked->service_purchased,
+                            'amount' => $basePrice,
+                            'earning' => $vendorEarning,
+                        ],
+                    ]);
+
+                    $postCommit[] = [
+                        'type' => 'communications',
+                        'order_id' => $locked->id,
+                        'vendor_id' => $locked->vendor_id,
+                        'role' => 'owner',
+                        'earning' => $vendorEarning,
+                        'sms_type' => 'order',
+                    ];
+                }
             }
 
             AdminNotification::notifyNewOrder($locked);
