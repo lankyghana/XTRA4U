@@ -36,6 +36,17 @@ class VendorQuickBuyController extends Controller
             ->get()
             ->map(function ($p) {
                 $p->base_price = (float) ($p->min_base_price ?? $p->price);
+
+                // Prefer decoded JSON description when available (keeps UI readable)
+                $decoded = $p->decoded_description ?? [];
+                if (is_array($decoded) && ! empty($decoded['description'])) {
+                    $p->display_description = (string) $decoded['description'];
+                } elseif (is_array($decoded) && ! empty($decoded['notes'])) {
+                    $p->display_description = (string) $decoded['notes'];
+                } else {
+                    $p->display_description = $p->description ?? 'Reliable top-up curated for your customers.';
+                }
+
                 return $p;
             });
 
@@ -64,10 +75,15 @@ class VendorQuickBuyController extends Controller
 
         $products = $products->concat($resellerListings);
 
-        // Calculate total completed top-ups for display on quick-buy
-        $totalTopups = (float) WalletTopup::where('vendor_id', $vendor->id)
-            ->where('status', 'completed')
-            ->sum('amount');
+        // Calculate available (unconsumed) top-ups for display on quick-buy (cached briefly)
+        $totalTopups = (float) \Illuminate\Support\Facades\Cache::remember("vendor:{$vendor->id}:topups_available", 10, function () use ($vendor) {
+            $available = WalletTopup::where('vendor_id', $vendor->id)
+                ->where('status', 'completed')
+                ->selectRaw('SUM(amount - COALESCE(consumed, 0)) as available')
+                ->value('available');
+
+            return max(0.0, (float) $available);
+        });
 
         return view('vendor.quick_buy', compact('vendor', 'products', 'totalTopups'));
     }
@@ -79,7 +95,9 @@ class VendorQuickBuyController extends Controller
         $validated = $request->validate([
             'product_id' => 'required|string',
             'recipient_phone_number' => 'required|string',
-            'mobile_money_number' => 'required|string',
+            // For quick-buy (vendor wallet) the payer MoMo is optional; keep it
+            // nullable here and only include it in the internal payload if present.
+            'mobile_money_number' => 'nullable|string',
             'payment_method' => 'required|in:wallet,gateway',
         ]);
 
@@ -97,26 +115,34 @@ class VendorQuickBuyController extends Controller
 
             $product = $resellerProduct->product;
             $isReseller = true;
-            $amount = (float) $resellerProduct->selling_price;
+            // For wallet purchases we charge against the base price (owner/vendor base),
+            // not the reseller markup. Use the reseller listing base_price as canonical.
+            $basePrice = (float) $resellerProduct->base_price;
         } else {
             $product = Product::where('id', $productId)
                 ->where('vendor_id', $vendor->id)
                 ->where('is_active', true)
                 ->firstOrFail();
-
-            $amount = (float) ($product->min_base_price ?? $product->price);
+            $basePrice = (float) ($product->min_base_price ?? $product->price);
         }
+
+        // Calculate platform fee and amount to charge for quick-buy (base + 2% fee)
+        $platformFee = round($basePrice * 0.02, 2);
+        $amountToCharge = round($basePrice + $platformFee, 2);
 
         // Build an internal request and reuse PurchaseController@store to avoid duplicating order logic
         $internalPayload = [
             'recipient_phone_number' => $validated['recipient_phone_number'],
-            'mobile_money_number' => $validated['mobile_money_number'],
             'vendor_id' => $vendor->id,
             'vendor_service_id' => $product->id,
-            // Use calculated amount
-            'amount_paid' => $amount,
+            // Use calculated amount (base + platform fee) for quick-buy orders
+            'amount_paid' => $amountToCharge,
             'pay_with_wallet' => $validated['payment_method'] === 'wallet' ? 1 : 0,
         ];
+
+        if (!empty($validated['mobile_money_number'])) {
+            $internalPayload['mobile_money_number'] = $validated['mobile_money_number'];
+        }
 
         if ($isReseller && $resellerProduct) {
             $internalPayload['is_reseller_product'] = true;
