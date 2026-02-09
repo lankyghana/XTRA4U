@@ -12,6 +12,7 @@ use App\Models\VendorWithdrawal;
 use App\Models\AdminNotification;
 use App\Models\AfaRegistration;
 use App\Mail\VendorWithdrawalMail;
+use App\Services\AffiliateChainService;
 use App\Services\SmsService;
 use App\Services\TransactionService;
 use Illuminate\Http\Request;
@@ -816,6 +817,7 @@ class VendorDashboardController extends Controller
 	public function marketplace()
 	{
 		$vendor = $this->resolveVendor();
+		$chainService = new AffiliateChainService();
 		
 		// Get products from the vendor's affiliate parent
 		if (!$vendor->affiliate_vendor_id) {
@@ -866,12 +868,10 @@ class VendorDashboardController extends Controller
 		foreach ($pageItems as $p) {
 			$p->setRelation('resellerProducts', $resellerProductsForVendor->get($p->id, collect()));
 
-			$parentListing = $parentResellerListings->firstWhere('product_id', $p->id);
-			if ($parentListing && (int) $p->vendor_id !== (int) $affiliateParent->id) {
-				$p->resell_base_price = (float) $parentListing->selling_price;
-			} else {
-				$p->resell_base_price = (float) ($p->min_base_price ?? $p->price);
-			}
+			$pricing = $chainService->resolveImmediateParentResellPricing($p, $vendor);
+			$p->resell_base_price = ($pricing['ok'] ?? false)
+				? (float) $pricing['base_price']
+				: (float) ($p->min_base_price ?? $p->price);
 		}
 
 		$products = new \Illuminate\Pagination\LengthAwarePaginator(
@@ -900,6 +900,7 @@ class VendorDashboardController extends Controller
 	public function addResellerProduct(Request $request)
 	{
 		$vendor = $this->resolveVendor();
+		$chainService = new AffiliateChainService();
 
 		$request->validate([
 			'product_id' => 'required|exists:products,id',
@@ -912,14 +913,8 @@ class VendorDashboardController extends Controller
 			return back()->with('error', 'You must have an affiliate parent to resell products.');
 		}
 
-		$affiliateParentId = (int) $vendor->affiliate_vendor_id;
-		$parentListing = ResellerProduct::where('product_id', $product->id)
-			->where('reseller_vendor_id', $affiliateParentId)
-			->where('is_active', true)
-			->first();
-
-		$parentOwnsProduct = ((int) $product->vendor_id === $affiliateParentId);
-		if (!$parentOwnsProduct && !$parentListing) {
+		$pricing = $chainService->resolveImmediateParentResellPricing($product, $vendor);
+		if (!($pricing['ok'] ?? false)) {
 			return back()->with('error', 'You can only resell products offered by your affiliate parent.');
 		}
 
@@ -932,9 +927,9 @@ class VendorDashboardController extends Controller
 			return back()->with('error', 'You are already reselling this product.');
 		}
 
-		$ownerVendorId = $parentListing ? (int) $parentListing->owner_vendor_id : (int) $product->vendor_id;
-		$basePrice = $parentListing ? (float) $parentListing->selling_price : (float) ($product->min_base_price ?? $product->price);
-		$sourceResellerProductId = $parentListing ? (int) $parentListing->id : null;
+		$ownerVendorId = (int) $pricing['owner_vendor_id'];
+		$basePrice = (float) $pricing['base_price'];
+		$sourceResellerProductId = $pricing['source_reseller_product_id'] ?? null;
 
 		ResellerProduct::create([
 			'product_id' => $product->id,
