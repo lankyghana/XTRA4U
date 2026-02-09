@@ -163,10 +163,12 @@ class WalletService
     public function getVendorTopupsTotal(int $vendorId): float
     {
         // Use the wallet_topups table as the authoritative source of top-ups.
+        // Sum only the remaining (unconsumed) portions of completed top-ups.
         $total = \App\Models\WalletTopup::where('vendor_id', $vendorId)
             ->where('status', 'completed')
-            ->sum('amount');
+            ->selectRaw('SUM(GREATEST(amount - COALESCE(consumed, 0), 0)) as available')
+            ->value('available');
 
-        return round((float) $total, 2);
+        return round(max(0.0, (float) $total), 2);
     }
 }
