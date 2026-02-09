@@ -31,8 +31,8 @@ class ContentSecurityPolicy
                 // Scripts: allow self, Vite dev server (in dev), and inline for Alpine.js
                 "script-src 'self' 'unsafe-inline' 'unsafe-eval'" . $this->getViteScriptSrc(),
                 
-                // Styles: allow self, inline styles (Tailwind), and Google Fonts
-                "style-src 'self' 'unsafe-inline' https://fonts.bunny.net https://fonts.googleapis.com",
+                // Styles: allow self, inline styles (Tailwind), Google Fonts, and Vite dev server in development
+                "style-src 'self' 'unsafe-inline' https://fonts.bunny.net https://fonts.googleapis.com" . $this->getViteStyleSrc(),
                 
                 // Fonts: allow self and trusted font CDNs
                 "font-src 'self' https://fonts.bunny.net https://fonts.gstatic.com https://r2cdn.perplexity.ai data:",
@@ -112,9 +112,7 @@ class ContentSecurityPolicy
         if (!app()->environment('local', 'development')) {
             return '';
         }
-
-        // Allow common dev ports on both loopback hostnames.
-        // CSP spec doesn't support port wildcards, so we list them explicitly.
+        // Allow common dev ports on localhost/127.0.0.1 only (avoid bracketed IPv6 literals)
         return ' http://localhost:8000 http://127.0.0.1:8000 http://localhost:8001 http://127.0.0.1:8001';
     }
 
@@ -167,6 +165,17 @@ class ContentSecurityPolicy
         }
 
         return $urls ? ' ' . implode(' ', array_unique($urls)) : '';
+    }
+
+    /**
+     * Allow Vite dev server origins for styles when in development.
+     */
+    private function getViteStyleSrc(): string
+    {
+        if (app()->environment('local', 'development')) {
+            return ' http://localhost:5173 http://127.0.0.1:5173';
+        }
+        return '';
     }
 
 }
