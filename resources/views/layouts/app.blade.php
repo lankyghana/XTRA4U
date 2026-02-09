@@ -172,7 +172,15 @@
                     this.selectedService = null;
                     this.selectedPackage = null;
                     this.showAllPackages = true;
-                    this.step = 2;
+                    // Reveal services for the selected category.
+                    // If there are matching services, auto-select the first one and show packages (step 3)
+                    const matches = this.filteredServices;
+                    if (matches && matches.length) {
+                        this.selectedService = matches[0];
+                        this.step = 3;
+                    } else {
+                        this.step = 2;
+                    }
                 },
 
                 selectService(svc) {
