@@ -10,4 +10,12 @@ export default defineConfig({
         }),
         tailwindcss(),
     ],
+    server: {
+        // Force dev server to bind to IPv4 localhost so CSP entries are valid
+        host: '127.0.0.1',
+        // Ensure HMR uses the IPv4 host when running in dev
+        hmr: {
+            host: '127.0.0.1'
+        }
+    }
 });
