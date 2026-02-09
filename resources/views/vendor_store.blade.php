@@ -20,7 +20,7 @@
         verifyRoute: '{{ route('checkout.verify') }}'
     };
 </script>
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-24 md:pb-0"
+<div class="w-full max-w-full md:max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-24 md:pb-0"
      x-data="typeof vendorStore === 'function' ? vendorStore(window.vendorStoreData) : {}"
      x-init="typeof init === 'function' && init()">
 
@@ -147,16 +147,18 @@
 
         <div class="mt-4">
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 mt-3">
-                @forelse($categories as $category)
-                    <button type="button"
-                        class="flex flex-col items-center justify-center p-6 rounded-2xl border text-lg shadow-md transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 min-h-[110px]"
-                        :class="selectedCategory && selectedCategory.value === '{{ $category['value'] }}' ? 'bg-purple-100 border-purple-400 text-purple-700 font-semibold ring-2 ring-purple-300' : 'bg-white border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-200'"
-                        @click='selectCategory(@json($category))'>
-                        <span class="text-center font-medium">{{ $category['label'] }}</span>
-                    </button>
-                @empty
+                @if(count($categories))
+                    @foreach($categories as $index => $category)
+                        <button type="button"
+                            class="flex flex-col items-center justify-center p-6 rounded-2xl border text-lg shadow-md transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 min-h-[110px]"
+                            :class="selectedCategory && selectedCategory.value === '{{ $category['value'] }}' ? 'bg-purple-100 border-purple-400 text-purple-700 font-semibold ring-2 ring-purple-300' : 'bg-white border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-200'"
+                            @click="selectCategory({{ $index }})">
+                            <span class="text-center font-medium">{{ $category['label'] }}</span>
+                        </button>
+                    @endforeach
+                @else
                     <div class="col-span-full text-sm text-gray-500">No categories available. Please contact the vendor.</div>
-                @endforelse
+                @endif
             </div>
         </div>
     </div>
@@ -164,8 +166,8 @@
     {{-- 3-column area (columns revealed progressively) --}}
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 
-        {{-- 1) CHOOSE SERVICE (hidden after package selection) --}}
-        <div x-show="step >= 2 && !isCheckoutOnlyMode" x-cloak x-transition class="bg-white rounded-xl shadow-md p-6">
+        {{-- 1) CHOOSE SERVICE (revealed after selecting a category) --}}
+        <div class="bg-white rounded-xl shadow-md p-6" x-show="step >= 2 && !isCheckoutOnlyMode" x-cloak x-transition>
             <h3 class="text-xl font-semibold mb-4">Choose Service</h3>
 
             <template x-if="loadingServices">
