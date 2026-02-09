@@ -1,8 +1,8 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="min-h-screen flex items-center justify-center bg-gray-100">
-    <div class="w-full max-w-2xl bg-white rounded-lg shadow-md p-8">
+<div class="min-h-screen bg-gray-100 py-6">
+    <div class="w-full max-w-2xl mx-auto bg-white rounded-lg shadow-md p-8">
         <h2 class="text-2xl font-bold mb-6 text-center">Vendor Dashboard</h2>
         <div class="mb-4">
             <p class="font-semibold">Welcome, {{ $vendor->name }}!</p>
