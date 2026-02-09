@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Product;
 use App\Models\ResellerProduct;
 use App\Models\Vendor;
 use Illuminate\Support\Facades\Log;
@@ -9,6 +10,57 @@ use Illuminate\Support\Facades\Log;
 class AffiliateChainService
 {
     public const DEFAULT_MAX_DEPTH = 7;
+
+    /**
+     * Resolve the immediate parent affiliate's resell price for a given product.
+     * - If the parent owns the product, return the owner's base/min price.
+     * - If the parent is reselling, return the parent listing's selling_price (base + markup).
+     * - If no parent affiliate or parent does not offer the product, return a failure reason.
+     */
+    public function resolveImmediateParentResellPricing(Product $product, Vendor $childVendor): array
+    {
+        $parentVendorId = (int) $childVendor->affiliate_vendor_id;
+        if ($parentVendorId <= 0) {
+            return ['ok' => false, 'reason' => 'missing_affiliate_parent'];
+        }
+
+        $parentVendor = Vendor::find($parentVendorId);
+        if (! $parentVendor) {
+            return ['ok' => false, 'reason' => 'missing_parent_vendor'];
+        }
+
+        $parentListing = ResellerProduct::query()
+            ->where('product_id', $product->id)
+            ->where('reseller_vendor_id', $parentVendor->id)
+            ->where('is_active', true)
+            ->first();
+
+        $parentOwnsProduct = ((int) $product->vendor_id === (int) $parentVendor->id);
+
+        if (! $parentOwnsProduct && ! $parentListing) {
+            return ['ok' => false, 'reason' => 'parent_not_offering_product'];
+        }
+
+        $basePrice = $parentListing
+            ? (float) $parentListing->selling_price // immediate parent selling price (base + markup)
+            : (float) ($product->min_base_price ?? $product->price); // owner base price
+
+        $ownerVendorId = $parentListing
+            ? (int) $parentListing->owner_vendor_id
+            : (int) $product->vendor_id;
+
+        $sourceResellerProductId = $parentListing ? (int) $parentListing->id : null;
+
+        return [
+            'ok' => true,
+            'base_price' => $basePrice,
+            'owner_vendor_id' => $ownerVendorId,
+            'source_reseller_product_id' => $sourceResellerProductId,
+            'parent_listing' => $parentListing,
+            'parent_vendor' => $parentVendor,
+            'parent_owns_product' => $parentOwnsProduct,
+        ];
+    }
 
     /**
      * Build an upline chain (vendor -> parent -> ... -> root) using affiliate_vendor_id.
