@@ -13,13 +13,25 @@
                 'name' => $category,
                 'products' => $group->map(function ($product) {
                     $base = (float) ($product->base_price ?? $product->min_base_price ?? $product->price);
+                    $size = $product->package_size ?? data_get($product, 'decoded_description.size');
+                    $validity = $product->validity ?? data_get($product, 'decoded_description.validity');
+                    $network = $product->network ?? data_get($product, 'decoded_description.network');
+                    $tag = $product->tag ?? data_get($product, 'decoded_description.tag');
+                    $categoryLabel = $product->category ?? data_get($product, 'decoded_description.category') ?? 'Wallet Favorites';
+                    $displayDescription = $product->display_description ?? $product->description ?? 'Reliable top-up curated for your customers.';
+                    $logo = $product->network_logo ?? null;
                     return [
                         'id' => $product->id,
                         'name' => $product->name,
-                        'description' => $product->description ?? 'Reliable top-up curated for your customers.',
+                        'description' => $displayDescription,
+                        'display_description' => $displayDescription,
                         'base_price' => $base,
-                        'tag' => $product->tag ?? null,
-                        'category' => $product->category ?? 'Wallet Favorites',
+                        'size' => is_string($size) ? trim($size) : null,
+                        'validity' => is_string($validity) ? trim($validity) : null,
+                        'network' => is_string($network) ? trim($network) : null,
+                        'tag' => is_string($tag) ? trim($tag) : null,
+                        'category' => is_string($categoryLabel) ? trim($categoryLabel) : 'Wallet Favorites',
+                        'logo' => $logo,
                     ];
                 })->values(),
             ];
@@ -130,7 +142,7 @@
             <template x-for="(category, index) in categories" :key="category.value">
                 <button type="button" class="w-full rounded-3xl border px-4 py-4 text-left font-medium text-gray-700 transition" :class="index === categoryIndex ? 'bg-purple-50 border-purple-300 text-purple-700 shadow' : 'border-gray-100 hover:border-purple-100 hover:text-purple-600'" @click="selectCategory(index)">
                     <span x-text="category.label"></span>
-                    <p class="mt-2 text-xs text-gray-500" x-text="productsCountForCategory(category.value) + ' products'"></p>
+                    <p class="mt-2 text-xs text-gray-400">&nbsp;</p>
                 </button>
             </template>
         </div>
@@ -143,49 +155,90 @@
                 <div>
                     <p class="text-xs uppercase tracking-wide text-gray-500">Products</p>
                     <h3 class="text-xl font-semibold text-gray-900" x-text="selectedCategory()?.label"></h3>
+                    <p class="text-xs text-gray-500 mt-1" x-show="selectedCategory()">Choose a service first to see matching products.</p>
                 </div>
                 <div class="flex items-center gap-4">
                     <p class="text-xs text-gray-500 hidden sm:block">Tap a card to prefill the checkout</p>
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <template x-if="filteredProducts().length === 0">
-                    <div class="col-span-full text-center text-gray-500 border border-dashed border-gray-200 rounded-3xl py-10">No products yet under this category.</div>
-                </template>
-                <template x-for="product in filteredProducts()" :key="product.id">
-                    <div>
-                        <button type="button" role="button" :aria-pressed="String(productId) === String(product.id) ? 'true' : 'false'" class="w-full text-left bg-white border rounded-2xl p-5 shadow-sm hover:shadow-md transition flex flex-col h-full justify-between focus:outline-none focus:ring-4 focus:ring-purple-100" :class="String(productId) === String(product.id) ? 'border-purple-400 ring-2 ring-purple-200' : 'border-gray-100'" @click="selectProduct(product.id)">
-                            <div>
-                                <div class="flex items-start justify-between">
-                                    <div>
-                                        <p class="text-xs uppercase tracking-wide text-gray-500 truncate" x-text="product.category"></p>
-                                        <h4 class="text-lg font-semibold text-gray-900 mt-1" x-text="product.name"></h4>
-                                    </div>
-                                    <div class="text-right">
-                                        <p class="text-xs text-gray-400">Base</p>
-                                        <p class="text-xl font-semibold text-purple-600" x-text="formatPrice(product.base_price)"></p>
-                                    </div>
-                                </div>
-                                <p class="text-sm text-gray-500 mt-3 line-clamp-3" x-text="displayDescription(product)"></p>
-                            </div>
-                                <div class="mt-4 flex items-center justify-between">
-                                    <div class="inline-flex items-center gap-2">
-                                        <template x-if="product.tag">
-                                            <span class="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full" x-text="product.tag"></span>
-                                        </template>
-                                        <span class="text-xs bg-gray-50 text-gray-600 px-2 py-1 rounded-full" x-text="product.category"></span>
-                                    </div>
-                                    <div>
-                                        <span class="inline-flex items-center gap-1 text-purple-600 font-medium">
-                                            <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                                <path d="M6 10l2 2 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-                                            </svg>
-                                            <span class="hidden sm:inline">Select</span>
-                                        </span>
-                                    </div>
-                                </div>
+            {{-- Service chooser --}}
+            <div class="bg-white border border-gray-100 rounded-3xl shadow-sm p-4" x-show="selectedCategory()" x-cloak>
+                <p class="text-xs uppercase tracking-wide text-gray-500">Choose Service</p>
+                <div class="mt-3 space-y-3">
+                    <template x-for="service in servicesForSelectedCategory()" :key="service.value">
+                        <button type="button" @click="selectService(service.value)" :class="serviceSelected(service.value) ? 'border-purple-400 bg-purple-50 text-purple-800 shadow-sm' : 'border-gray-200 bg-white text-gray-800 hover:border-purple-100'" class="w-full rounded-2xl border px-4 py-3 text-left font-medium flex items-center gap-3">
+                            <img :src="service.logo || '/images/default-provider.png'" alt="" class="w-12 h-12 rounded-md object-cover">
+                            <span class="text-lg" x-text="service.label"></span>
                         </button>
+                    </template>
+                    <template x-if="servicesForSelectedCategory().length === 0">
+                        <div class="text-sm text-gray-500">No services available for this category.</div>
+                    </template>
+                </div>
+            </div>
+
+            <div class="space-y-3">
+                <template x-if="!serviceFilter">
+                    <div class="text-center text-gray-500 border border-dashed border-gray-200 rounded-3xl py-10">Select a service to view products.</div>
+                </template>
+                <template x-if="serviceFilter && filteredProducts().length === 0">
+                    <div class="text-center text-gray-500 border border-dashed border-gray-200 rounded-3xl py-10">No products yet under this service.</div>
+                </template>
+
+                <template x-if="packageLocked && selectedProduct()">
+                    <div class="flex flex-col gap-3">
+                        <div class="flex items-center justify-between">
+                            <h4 class="text-sm font-semibold text-gray-700">Selected package</h4>
+                            <button type="button" class="text-sm font-medium text-purple-700 hover:text-purple-800" @click="unlockPackageSelection()">Change package</button>
+                        </div>
+                        <div>
+                            <button type="button" role="button" aria-pressed="true" class="w-full text-left bg-purple-50 border border-purple-300 rounded-2xl p-5 shadow-sm flex flex-col gap-3 focus:outline-none focus:ring-4 focus:ring-purple-100">
+                                <div class="flex items-start gap-4">
+                                    <img :src="selectedProduct().logo || '/images/default-provider.png'" alt="" class="w-12 h-12 rounded-md object-cover flex-shrink-0">
+                                    <div class="flex-1 flex justify-between items-start">
+                                        <div class="flex-1">
+                                            <div class="flex items-center gap-2">
+                                                <div class="font-semibold text-gray-900" x-text="selectedProduct().name"></div>
+                                                <span class="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded-full" x-show="selectedProduct().tag" x-text="selectedProduct().tag"></span>
+                                            </div>
+                                            <div class="text-sm text-gray-500 mt-1" x-text="sizeLabel(selectedProduct())"></div>
+                                        </div>
+                                        <div class="text-right ml-4">
+                                            <div class="text-lg font-bold text-purple-600" x-text="formatPrice(selectedProduct().base_price)"></div>
+                                            <div class="text-sm text-green-600 mt-1" x-text="selectedProduct().validity || ''"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                </template>
+
+                <template x-if="!packageLocked">
+                    <div class="space-y-3">
+                        <template x-for="product in filteredProducts()" :key="product.id">
+                            <div>
+                                <button type="button" role="button" :aria-pressed="String(productId) === String(product.id) ? 'true' : 'false'" class="w-full text-left bg-white border rounded-2xl p-5 shadow-sm hover:shadow-md transition flex flex-col gap-3 focus:outline-none focus:ring-4 focus:ring-purple-100" :class="String(productId) === String(product.id) ? 'border-purple-400 ring-2 ring-purple-200 bg-purple-50' : 'border-gray-100'" @click="selectProduct(product.id)">
+                                    <div class="flex items-start gap-4">
+                                        <img :src="product.logo || '/images/default-provider.png'" alt="" class="w-12 h-12 rounded-md object-cover flex-shrink-0">
+                                        <div class="flex-1 flex justify-between items-start">
+                                            <div class="flex-1">
+                                                <div class="flex items-center gap-2">
+                                                    <div class="font-semibold text-gray-900" x-text="product.name"></div>
+                                                    <span class="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded-full" x-show="product.tag" x-text="product.tag"></span>
+                                                </div>
+                                                <div class="text-sm text-gray-500 mt-1" x-text="sizeLabel(product)"></div>
+                                            </div>
+                                            <div class="text-right ml-4">
+                                                <div class="text-lg font-bold text-purple-600" x-text="formatPrice(product.base_price)"></div>
+                                                <div class="text-sm text-green-600 mt-1" x-text="product.validity || ''"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </button>
+                            </div>
+                        </template>
                     </div>
                 </template>
             </div>
@@ -200,7 +253,7 @@
                 <div class="grid grid-cols-2 gap-2 items-center">
                     <div>
                         <p class="text-xs text-gray-500">Selected product</p>
-                        <p class="font-medium text-gray-900" x-text="selectedProduct()?.name || 'None'">None</p>
+                        <p class="font-medium text-gray-900" x-text="selectedProductLabel()">None</p>
                     </div>
                     <div class="text-right">
                         <p class="text-xs text-gray-500">Base</p>
@@ -290,6 +343,10 @@ document.addEventListener('alpine:init', () => {
         sortDirection: 'asc',
         // currently selected category index (used by the template)
         categoryIndex: 0,
+        // selected service/network within the chosen category
+        serviceFilter: null,
+        // when true, hide other packages after one is chosen
+        packageLocked: false,
         // flatten products for convenience (supports older browsers without flatMap)
         products: (catalog || []).flatMap ? (catalog || []).flatMap(c => c.products || []) : (catalog || []).reduce((acc, c) => acc.concat(c.products || []), []),
         vendorBalance: {{ json_encode((float) ($totalTopups ?? $vendor->wallet_balance)) }},
@@ -300,12 +357,19 @@ document.addEventListener('alpine:init', () => {
         // UI state
         submitting: false,
 
+        init() {
+            this.autoSelectDefaultService();
+        },
+
         toggleSort() {
             this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
         },
 
         selectCategory(index) {
             this.categoryIndex = index;
+            this.productId = null;
+            this.packageLocked = false;
+            this.autoSelectDefaultService();
         },
 
         selectedCategory() {
@@ -319,13 +383,65 @@ document.addEventListener('alpine:init', () => {
             return (cat && cat.serviceCount) ? cat.serviceCount : 0;
         },
 
+        servicesForSelectedCategory() {
+            const sel = this.selectedCategory();
+            if (!sel) return [];
+            const group = (this.catalog || []).find(c => String(c.name) === String(sel.value));
+            const products = (group && Array.isArray(group.products)) ? group.products : [];
+
+            const byService = {};
+            products.forEach(p => {
+                const key = (p.network && String(p.network).trim()) ? String(p.network).trim() : 'Other';
+                if (!byService[key]) {
+                    byService[key] = { value: key, label: key, count: 0, logo: p.logo || null };
+                }
+                byService[key].count += 1;
+                if (!byService[key].logo && p.logo) {
+                    byService[key].logo = p.logo;
+                }
+            });
+
+            return Object.values(byService);
+        },
+
+        selectService(value) {
+            this.serviceFilter = value;
+            this.productId = null;
+            this.packageLocked = false;
+        },
+
+        serviceSelected(value) {
+            return String(this.serviceFilter) === String(value);
+        },
+
+        unlockPackageSelection() {
+            this.packageLocked = false;
+            this.productId = null;
+        },
+
+        autoSelectDefaultService() {
+            const services = this.servicesForSelectedCategory();
+            const mtn = services.find(s => String(s.label || s.value || '').toLowerCase() === 'mtn');
+            this.serviceFilter = mtn ? mtn.value : null;
+            this.productId = null;
+            this.packageLocked = false;
+        },
+
         selectProduct(id) {
             this.productId = id;
+            this.packageLocked = true;
         },
 
         selectedProduct() {
             if (!this.productId) return null;
             return (this.products || []).find(pr => String(pr.id) === String(this.productId)) || null;
+        },
+
+        selectedProductLabel() {
+            const prod = this.selectedProduct();
+            if (!prod) return 'None';
+            const size = this.sizeLabel(prod);
+            return size ? `${prod.name} — ${size}` : prod.name;
         },
 
         filteredProducts() {
@@ -336,6 +452,17 @@ document.addEventListener('alpine:init', () => {
                 list = (group && group.products) ? (group.products.slice ? group.products.slice() : [].concat(group.products)) : [];
             } else {
                 list = (this.products || []).slice ? this.products.slice() : [].concat(this.products || []);
+            }
+
+            if (this.serviceFilter) {
+                list = list.filter(p => {
+                    const net = p.network || (p.decoded_description ? p.decoded_description.network : null);
+                    const label = (net && String(net).trim()) ? String(net).trim() : 'Other';
+                    return String(label) === String(this.serviceFilter);
+                });
+            } else {
+                // hide products until a service is chosen
+                return [];
             }
 
             // sort by base_price according to sortDirection
@@ -395,6 +522,12 @@ document.addEventListener('alpine:init', () => {
         }
 
         ,
+
+        sizeLabel(prod) {
+            if (!prod) return '';
+            const value = prod.size || prod.package_size || (prod.decoded_description ? prod.decoded_description.size : null);
+            return (typeof value === 'string' && value.trim().length > 0) ? value.trim() : '';
+        },
 
         // Safely derive a readable description from product data which may be
         // a string, a JSON-encoded string, or an object. Returns an empty
