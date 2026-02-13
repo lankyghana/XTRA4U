@@ -7,11 +7,22 @@ use App\Models\Product;
 use App\Models\Vendor;
 use App\Models\ResellerProduct;
 use App\Models\WalletTopup;
+use App\Models\NetworkService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class VendorQuickBuyController extends Controller
 {
+    private function cleanMetaValue($value): ?string
+    {
+        if (is_string($value)) {
+            $trimmed = trim($value);
+            return $trimmed === '' ? null : $trimmed;
+        }
+
+        return null;
+    }
+
     private function resolveVendor(): Vendor
     {
         $vendorGuardUser = Auth::guard('vendor')->user();
@@ -30,9 +41,11 @@ class VendorQuickBuyController extends Controller
     {
         $vendor = $this->resolveVendor();
 
+        $networkServices = NetworkService::active()->get()->keyBy(fn ($svc) => strtolower($svc->name));
+
         $products = Product::where('vendor_id', $vendor->id)
             ->where('is_active', true)
-            ->orderBy('name')
+            ->orderBy('created_at')
             ->get()
             ->map(function ($p) {
                 $p->base_price = (float) ($p->min_base_price ?? $p->price);
@@ -47,6 +60,13 @@ class VendorQuickBuyController extends Controller
                     $p->display_description = $p->description ?? 'Reliable top-up curated for your customers.';
                 }
 
+                $p->package_size = $this->cleanMetaValue(data_get($decoded, 'size'));
+                $p->validity = $this->cleanMetaValue(data_get($decoded, 'validity'));
+                $p->network = $this->cleanMetaValue(data_get($decoded, 'network'));
+                $p->tag = $p->tag ?? $this->cleanMetaValue(data_get($decoded, 'tag'));
+                $p->network_logo = null; // populated after map using lookup table
+                $p->created_at = $p->created_at;
+
                 return $p;
             });
 
@@ -59,21 +79,48 @@ class VendorQuickBuyController extends Controller
                 $prod = $rp->product;
                 if (! $prod) return null;
 
+                $decoded = $prod->decoded_description ?? [];
+                $description = data_get($decoded, 'description') ?? data_get($decoded, 'notes') ?? ($prod->description ?? null);
+                $packageSize = $this->cleanMetaValue(data_get($decoded, 'size'));
+                $validity = $this->cleanMetaValue(data_get($decoded, 'validity'));
+                $network = $this->cleanMetaValue(data_get($decoded, 'network'));
+                $tag = $this->cleanMetaValue(data_get($decoded, 'tag'));
+                $category = $prod->category ?? $this->cleanMetaValue(data_get($decoded, 'category'));
+
                 // Create a lightweight display object for the reseller listing.
                 return (object) [
                     'id' => 'reseller_' . $rp->id,
                     'name' => $prod->name,
-                    'description' => $prod->description ?? null,
+                    'description' => $description,
+                    'display_description' => $description,
                     'base_price' => (float) $rp->base_price,
                     'selling_price' => (float) $rp->selling_price,
-                    'category' => $prod->category ?? null,
+                    'category' => $category,
+                    'network' => $network,
+                    'package_size' => $packageSize,
+                    'validity' => $validity,
+                    'tag' => $tag,
+                    'network_logo' => null, // populated after merge using lookup
+                    'created_at' => $prod->created_at,
                     'is_reseller' => true,
                     'reseller_product_id' => $rp->id,
                     'original_product_id' => $prod->id,
                 ];
             })->filter();
 
-        $products = $products->concat($resellerListings);
+        // Preserve creation ordering across vendor and reseller listings
+        $products = $products
+            ->concat($resellerListings)
+            ->sortBy('created_at')
+            ->values();
+
+        // Attach network logos based on network service table
+        $products = $products->map(function ($p) use ($networkServices) {
+            $networkKey = strtolower($p->network ?? '');
+            $logo = $networkKey && isset($networkServices[$networkKey]) ? $networkServices[$networkKey]->image_url : null;
+            $p->network_logo = $logo;
+            return $p;
+        });
 
         // Calculate available (unconsumed) top-ups for display on quick-buy (cached briefly)
         $totalTopups = (float) \Illuminate\Support\Facades\Cache::remember("vendor:{$vendor->id}:topups_available", 10, function () use ($vendor) {
