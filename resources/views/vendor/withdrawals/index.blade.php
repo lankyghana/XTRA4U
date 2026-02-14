@@ -26,6 +26,41 @@
                     </div>
                 </div>
 
+                <!-- Top-up Modal (hidden by default) -->
+                <div id="wallet-topup-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4">
+                    <div class="absolute inset-0 bg-black/40" data-close-modal></div>
+                    <div class="relative bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+                        <h3 class="text-lg font-semibold text-gray-900">Mobile Money Payment</h3>
+                        <div class="mt-4 bg-yellow-50 border border-yellow-100 p-4 rounded">
+                            <p class="text-sm font-semibold text-yellow-800">Didn't receive the MoMo prompt?</p>
+                            <p class="text-sm text-yellow-700 mt-2">You can approve the payment manually from your MoMo menu: Dial <strong>*170#</strong> → Select <strong>6 (My Wallet)</strong> → Select <strong>3 (My Approvals)</strong> → Approve the pending transaction.</p>
+                        </div>
+
+                        <form id="modal-topup-form" class="mt-4" onsubmit="return false;">
+                            <label class="block text-sm font-medium text-gray-700">Amount (GHS)</label>
+                            <input id="modal-topup-amount" type="number" step="0.01" min="1" class="mt-2 w-full rounded-lg border border-gray-300 px-4 py-2" placeholder="50.00" />
+
+                            <label class="block text-sm font-medium text-gray-700 mt-4">MoMo number</label>
+                            <input id="modal-topup-phone-modal" type="tel" class="mt-2 w-full rounded-lg border border-gray-300 px-4 py-2" placeholder="e.g. 0551234567" />
+
+                            <label class="block text-sm font-medium text-gray-700 mt-4">Network</label>
+                            <select id="modal-topup-network" class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2">
+                                <option value="">Auto-detect network</option>
+                                <option value="MTN">MTN</option>
+                                <option value="TELECEL">TELECEL (Vodafone)</option>
+                                <option value="AIRTELTIGO">AIRTELTIGO</option>
+                            </select>
+
+                            <div class="mt-6 flex items-center justify-end gap-3">
+                                <button type="button" data-close-modal class="px-4 py-2 rounded-lg border bg-white">Cancel</button>
+                                <button id="modal-topup-confirm" type="button" class="px-4 py-2 rounded-lg bg-purple-600 text-white">Confirm & Pay</button>
+                            </div>
+
+                            <p id="modal-topup-feedback" class="mt-3 text-sm text-red-600" aria-live="polite"></p>
+                        </form>
+                    </div>
+                </div>
+
                         <div class="mt-4 md:mt-0 flex items-center gap-3">
                     <div class="flex items-center gap-2">
                         <a id="quick-topups" href="?tab=topups" class="px-4 py-2 rounded-full text-sm font-medium {{ $activeTab === 'topups' ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 border border-gray-200 shadow-sm hover:shadow-md' }}">Top Ups</a>
@@ -125,12 +160,8 @@
                                 <div class="flex flex-col justify-center">
                                     <form id="wallet-topup-form" class="w-full" onsubmit="return false;">
                                         <label for="wallet-topup-amount" class="block text-sm font-medium text-gray-700">Amount (GHS)</label>
-                                        <div class="mt-2 flex flex-col sm:flex-row gap-3">
-                                            <input aria-label="Top up amount" type="number" step="0.01" min="1" name="amount" id="wallet-topup-amount" inputmode="decimal" placeholder="50.00" class="flex-1 w-full rounded-lg border border-gray-300 px-4 py-3 focus:ring-2 focus:ring-purple-200 focus:border-purple-500 box-border" />
-                                            <button type="button" id="wallet-topup-submit" class="w-full sm:w-auto mt-2 sm:mt-0 rounded-lg bg-purple-600 text-white px-4 py-3 inline-flex items-center justify-center disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap">
-                                                <svg id="wallet-topup-button-spinner" class="w-4 h-4 animate-spin hidden mr-2" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
-                                                <span id="wallet-topup-button-text">Top Up Wallet</span>
-                                            </button>
+                                        <div class="mt-2">
+                                            <input aria-label="Top up amount" type="number" step="0.01" min="1" name="amount" id="wallet-topup-amount" inputmode="decimal" placeholder="50.00" class="w-full rounded-lg border border-gray-300 px-4 py-3 focus:ring-2 focus:ring-purple-200 focus:border-purple-500 box-border" />
                                         </div>
 
                                         <!-- Quick amount chips -->
@@ -141,6 +172,30 @@
                                         </div>
 
                                         <input type="hidden" name="vendor_id" value="{{ $vendor->id }}" />
+                                        <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div>
+                                                <label for="wallet-topup-phone" class="block text-sm font-medium text-gray-700">MoMo number</label>
+                                                <input id="wallet-topup-phone" aria-label="Payer MoMo number" type="tel" name="payer_phone" placeholder="e.g. 0244123456" class="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 focus:ring-2 focus:ring-purple-200 focus:border-purple-500" />
+                                                <p class="text-xs text-gray-400 mt-1">Enter the number that will approve the payment prompt.</p>
+                                            </div>
+                                            <div>
+                                                <label for="wallet-topup-network" class="block text-sm font-medium text-gray-700">Network</label>
+                                                <select id="wallet-topup-network" name="network" class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-3 focus:ring-2 focus:ring-purple-200 focus:border-purple-500">
+                                                    <option value="">Auto-detect network</option>
+                                                    <option value="MTN">MTN</option>
+                                                    <option value="TELECEL">TELECEL (Vodafone)</option>
+                                                    <option value="AIRTELTIGO">AIRTELTIGO</option>
+                                                </select>
+                                                <p class="text-xs text-gray-400 mt-1">Choose the network if auto-detection fails.</p>
+                                            </div>
+                                        </div>
+
+                                        <div class="mt-4 flex items-center justify-end">
+                                            <button type="button" id="wallet-topup-submit" class="w-full sm:w-auto rounded-lg bg-purple-600 text-white px-4 py-3 inline-flex items-center justify-center disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap">
+                                                <svg id="wallet-topup-button-spinner" class="w-4 h-4 animate-spin hidden mr-2" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+                                                <span id="wallet-topup-button-text">Top Up Wallet</span>
+                                            </button>
+                                        </div>
                                         <input type="hidden" id="wallet-topup-gateway" name="gateway" value="">
 
                                         <p id="wallet-topup-feedback" class="mt-3 text-sm text-red-600" aria-live="polite"></p>
@@ -214,6 +269,14 @@
 
                                     try {
                                         const payload = { vendor_id: '{{ $vendor->id }}', amount: amount };
+                                        const payerEl = document.getElementById('wallet-topup-phone');
+                                        if (payerEl && payerEl.value && String(payerEl.value).trim().length > 0) {
+                                            payload.payer_phone = String(payerEl.value).trim();
+                                        }
+                                        const netEl = document.getElementById('wallet-topup-network');
+                                        if (netEl && netEl.value && String(netEl.value).trim().length > 0) {
+                                            payload.network = String(netEl.value).trim();
+                                        }
                                         if (gatewayHidden && gatewayHidden.value) payload.gateway = gatewayHidden.value;
 
                                         const resp = await fetch('{{ route('vendor.wallet.topup') }}', {
@@ -230,6 +293,16 @@
                                         if (data.success && data.authorization_url) {
                                             // redirect to payment provider
                                             window.location.href = data.authorization_url;
+                                            return;
+                                        }
+
+                                        // Inline flows (no authorization_url) return a reference we can poll.
+                                        if (data.success && data.reference && !data.authorization_url) {
+                                            // start polling for completion
+                                            showMessage('Processing payment, waiting for confirmation...', '');
+                                            await pollTopupStatus(data.reference);
+                                            setLoading(false);
+                                            inProgress = false;
                                             return;
                                         }
 
@@ -287,6 +360,53 @@
                                     } catch (e) {}
                                 }
 
+                                // Poll a top-up reference until the gateway/callback marks it completed or failed.
+                                async function pollTopupStatus(reference) {
+                                    const pollInterval = 2500; // ms
+                                    const timeoutMs = 120000; // 2 minutes
+                                    const started = Date.now();
+                                    let lastState = null;
+
+                                    while (Date.now() - started < timeoutMs) {
+                                        try {
+                                            const r = await fetch('{{ route('vendor.wallet.topup.status', ['reference' => 'REF']) }}'.replace('REF', encodeURIComponent(reference)), {
+                                                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                                                credentials: 'same-origin'
+                                            });
+                                            if (!r.ok) {
+                                                // transient error — try again
+                                            } else {
+                                                const j = await r.json();
+                                                const state = j.status || (j.raw && (j.raw.data && j.raw.data.status)) || null;
+                                                if (state && state !== lastState) {
+                                                    lastState = state;
+                                                }
+
+                                                if (j.status === 'completed') {
+                                                    showMessage('\u2714\uFE0F Wallet topped up successfully', 'success');
+                                                    await refreshWalletSummary(true);
+                                                    amountInput.value = '';
+                                                    if (gatewayHidden) gatewayHidden.value = '';
+                                                    gatewayButtons.forEach(b => b.classList.remove('ring','ring-2','ring-purple-400'));
+                                                    return;
+                                                }
+
+                                                if (j.status === 'failed') {
+                                                    showMessage('Top-up failed. Please try again or contact support.', 'error');
+                                                    return;
+                                                }
+                                            }
+                                        } catch (e) {
+                                            // ignore and retry until timeout
+                                        }
+
+                                        await new Promise(r => setTimeout(r, pollInterval));
+                                    }
+
+                                    // Timed out waiting for confirmation — advise user to check history
+                                    showMessage('Awaiting payment confirmation timed out. Check your Top-ups tab or contact support.', 'error');
+                                }
+
                                 // Gateway selection highlighting (if gateways present)
                                 gatewayButtons.forEach(b => {
                                     b.addEventListener('click', () => {
@@ -298,6 +418,97 @@
 
                                 // initial validation state
                                 validate();
+
+                                // Modal open/close helpers
+                                function openTopupModal(prefill) {
+                                    const modal = document.getElementById('wallet-topup-modal');
+                                    if (!modal) return;
+                                    modal.classList.remove('hidden');
+                                    modal.classList.add('flex');
+                                    if (prefill && prefill.amount) document.getElementById('modal-topup-amount').value = prefill.amount;
+                                }
+
+                                function closeTopupModal() {
+                                    const modal = document.getElementById('wallet-topup-modal');
+                                    if (!modal) return;
+                                    modal.classList.add('hidden');
+                                    modal.classList.remove('flex');
+                                    document.getElementById('modal-topup-feedback').textContent = '';
+                                }
+
+                                // Wire any "Top up wallet" links on the page to open the modal
+                                document.querySelectorAll('a[href*="/vendor/wallet"]').forEach(a => {
+                                    a.addEventListener('click', (ev) => {
+                                        // If link explicitly includes ?tab=topups allow normal navigation
+                                        if (String(a.href || '').includes('?tab=topups')) return;
+                                        ev.preventDefault();
+                                        openTopupModal();
+                                    });
+                                });
+
+                                // Close modal elements
+                                document.querySelectorAll('[data-close-modal]').forEach(el => el.addEventListener('click', closeTopupModal));
+
+                                // Confirm button inside modal
+                                const modalConfirm = document.getElementById('modal-topup-confirm');
+                                if (modalConfirm) {
+                                    modalConfirm.addEventListener('click', async () => {
+                                        const amt = parseFloat(document.getElementById('modal-topup-amount').value || 0);
+                                        const phone = String(document.getElementById('modal-topup-phone-modal').value || '').trim();
+                                        const net = String(document.getElementById('modal-topup-network').value || '').trim();
+                                        const feedbackEl = document.getElementById('modal-topup-feedback');
+
+                                        if (!amt || amt < 1) { feedbackEl.textContent = 'Enter a valid amount (minimum GHS 1)'; return; }
+                                        if (!phone) { feedbackEl.textContent = 'Enter the MoMo number that will approve the payment prompt.'; return; }
+
+                                        // Trigger the same API used by the page
+                                        modalConfirm.disabled = true;
+                                        feedbackEl.textContent = '';
+                                        try {
+                                            const payload = { vendor_id: '{{ $vendor->id }}', amount: amt, payer_phone: phone };
+                                            if (net) payload.network = net;
+
+                                            const resp = await fetch('{{ route('vendor.wallet.topup') }}', {
+                                                method: 'POST',
+                                                headers: {
+                                                    'Content-Type': 'application/json',
+                                                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                                                    'Accept': 'application/json'
+                                                },
+                                                body: JSON.stringify(payload)
+                                            });
+
+                                            const data = await resp.json();
+                                            if (data.success && data.authorization_url) {
+                                                // redirect
+                                                window.location.href = data.authorization_url;
+                                                return;
+                                            }
+
+                                            if (data.success && data.reference && !data.authorization_url) {
+                                                feedbackEl.textContent = 'Processing payment, waiting for confirmation...';
+                                                await pollTopupStatus(data.reference);
+                                                closeTopupModal();
+                                                modalConfirm.disabled = false;
+                                                return;
+                                            }
+
+                                            if (data.success) {
+                                                feedbackEl.textContent = 'Wallet topped up successfully.';
+                                                await refreshWalletSummary(true);
+                                                closeTopupModal();
+                                                modalConfirm.disabled = false;
+                                                return;
+                                            }
+
+                                            modalConfirm.disabled = false;
+                                            feedbackEl.textContent = data.message || 'Failed to initiate top-up';
+                                        } catch (e) {
+                                            modalConfirm.disabled = false;
+                                            document.getElementById('modal-topup-feedback').textContent = 'Unable to contact server';
+                                        }
+                                    });
+                                }
                             })();
                         </script>
                     </div>
