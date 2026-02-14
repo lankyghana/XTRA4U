@@ -92,7 +92,7 @@
                         </div>
                     </div>
                     <div class="mt-3 flex items-center justify-end gap-3">
-                        <a href="{{ route('vendor.withdrawals.index', ['tab' => 'topups']) }}" class="text-sm font-semibold text-purple-600">Top up wallet</a>
+                        <a href="{{ route('vendor.withdrawals.index', ['tab' => 'topups']) }}" class="text-sm font-semibold text-purple-600 topup-open">Top up wallet</a>
                     </div>
                 </div>
             </div>
@@ -563,6 +563,27 @@ document.addEventListener('alpine:init', () => {
             return '';
         },
     }));
+});
+</script>
+
+<script>
+// Quick-buy: open the same modal used on Withdrawals page when clicking Top up
+document.addEventListener('DOMContentLoaded', function () {
+    const links = document.querySelectorAll('a.topup-open');
+    links.forEach(a => {
+        a.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            // If the withdrawals page modal exists on this page, open it; otherwise navigate
+            const modal = document.getElementById('wallet-topup-modal');
+            if (modal && typeof modal.classList !== 'undefined') {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+                // Try to prefill amount if quick-buy knows a reasonable default (none here)
+            } else {
+                window.location.href = a.href;
+            }
+        });
+    });
 });
 </script>
 
