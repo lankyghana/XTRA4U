@@ -22,10 +22,15 @@ final class ExternalFulfillmentClient
         //   "recipient": "0591178627",
         //   "capacity": 2
         // }
+        $recipient = $this->toLocalGhanaNumber((string) $order->recipient_phone_number);
+        if ($recipient === '') {
+            throw new \RuntimeException('Invalid recipient phone number for external fulfillment.');
+        }
+
         $payload = [
             'network' => $this->resolveDatafyhubNetwork($order),
             'reference' => $this->resolveDatafyhubReference($order, $idempotencyKey),
-            'recipient' => (string) $order->recipient_phone_number,
+            'recipient' => $recipient,
             'capacity' => $this->resolveDatafyhubCapacity($order),
         ];
 
@@ -37,6 +42,32 @@ final class ExternalFulfillmentClient
                 'Idempotency-Key' => $idempotencyKey,
             ])
             ->post($this->config->url(), $payload);
+    }
+
+    /**
+     * Normalize a phone string into local Ghana format expected by Datafyhub.
+     * Returns empty string when unable to produce a valid local number.
+     */
+    protected function toLocalGhanaNumber(string $phone): string
+    {
+        $digits = preg_replace('/[^0-9]/', '', $phone);
+
+        if ($digits === '') return '';
+
+        if (str_starts_with($digits, '233') && strlen($digits) > 3) {
+            return '0' . substr($digits, 3);
+        }
+
+        if (str_starts_with($digits, '0') && strlen($digits) >= 10) {
+            return $digits;
+        }
+
+        // If 9 digits, prefix 0
+        if (strlen($digits) === 9) {
+            return '0' . $digits;
+        }
+
+        return '';
     }
 
     private function resolveDatafyhubReference(Order $order, string $idempotencyKey): string
