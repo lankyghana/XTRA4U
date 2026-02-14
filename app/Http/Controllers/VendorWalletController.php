@@ -31,6 +31,8 @@ class VendorWalletController extends Controller
             'vendor_id' => 'required|exists:vendors,id',
             'amount' => 'required|numeric|min:0.01',
             'return_url' => 'nullable|url',
+            'payer_phone' => 'nullable|string',
+            'network' => 'nullable|string',
         ]);
 
         $reference = Str::uuid()->toString();
@@ -53,10 +55,30 @@ class VendorWalletController extends Controller
 
         $callbackUrl = route('vendor.wallet.topup.callback', ['reference' => $reference]);
 
-        $result = $this->paymentService->initiateGenericPayment($request->user()?->email ?? 'noreply@xtra4u.com', (float) $validated['amount'], $callbackUrl, $reference, [
+        // Include vendor phone when available so inline gateways that require
+        // a MoMo number (e.g. BulkClix) can initiate direct MoMo prompts.
+        $vendor = \App\Models\Vendor::find((int) $validated['vendor_id']);
+        $metadata = [
             'vendor_id' => $validated['vendor_id'],
             'purpose' => 'wallet_topup',
-        ]);
+        ];
+
+        // Allow caller to provide an overriding payer phone (useful when vendor has no phone on file)
+        $payerPhone = $request->input('payer_phone') ?? $request->input('phone') ?? null;
+        if ($payerPhone && is_string($payerPhone) && trim($payerPhone) !== '') {
+            $metadata['phone_number'] = trim((string) $payerPhone);
+        } elseif ($vendor && !empty(trim((string) $vendor->phone_number))) {
+            $metadata['phone_number'] = trim((string) $vendor->phone_number);
+        }
+
+        // Allow caller to hint the network (MTN/TELECEL/AIRTELTIGO). Gateways may
+        // still attempt to infer network if this is missing.
+        $network = $request->input('network') ?? null;
+        if ($network && is_string($network) && trim($network) !== '') {
+            $metadata['network'] = strtoupper(trim((string) $network));
+        }
+
+        $result = $this->paymentService->initiateGenericPayment($request->user()?->email ?? 'noreply@xtra4u.com', (float) $validated['amount'], $callbackUrl, $reference, $metadata);
 
         if (! $result['success']) {
             return response()->json(['success' => false, 'message' => $result['message'] ?? 'Failed to initiate top-up'], 400);
@@ -298,6 +320,53 @@ class VendorWalletController extends Controller
             'vendor_id' => $vendorId,
             'wallet_balance' => (float) $vendor->wallet_balance,
             'vendor_topups_total' => (float) $topupsTotal,
+        ]);
+    }
+
+    // Polling endpoint for client-side verification of a top-up by reference.
+    public function topupStatus(Request $request, string $reference)
+    {
+        // Quick DB check: if we have a completed record, short-circuit
+        $topup = WalletTopup::where('reference', $reference)->first();
+        if ($topup && $topup->status === 'completed') {
+            return response()->json([
+                'success' => true,
+                'status' => 'completed',
+                'reference' => $reference,
+                'vendor_id' => $topup->vendor_id,
+                'amount' => (float) $topup->amount,
+            ]);
+        }
+
+        // Ask the payment service to verify. Let the gateway return its
+        // canonical structure; we'll normalize a few common keys.
+        try {
+            $result = $this->paymentService->checkPaymentStatus($reference);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'message' => 'Verification failed', 'error' => $e->getMessage()], 500);
+        }
+
+        // Normalize status field
+        $rawStatus = null;
+        if (is_array($result)) {
+            $rawStatus = $result['status'] ?? $result['data']['status'] ?? $result['data']['payment_status'] ?? $result['message'] ?? null;
+        }
+
+        $normalized = 'pending';
+        if ($result['success'] ?? false) {
+            $low = is_string($rawStatus) ? strtolower($rawStatus) : '';
+            if (strpos($low, 'complete') !== false || strpos($low, 'success') !== false) $normalized = 'completed';
+            if (strpos($low, 'fail') !== false || strpos($low, 'failed') !== false || strpos($low, 'error') !== false) $normalized = 'failed';
+        } else {
+            // If gateway explicitly reports success=false but provides data, keep pending
+            $normalized = 'pending';
+        }
+
+        return response()->json([
+            'success' => true,
+            'status' => $normalized,
+            'raw' => $result,
+            'reference' => $reference,
         ]);
     }
 }
