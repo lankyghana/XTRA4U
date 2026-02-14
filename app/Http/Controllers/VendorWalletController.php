@@ -362,6 +362,66 @@ class VendorWalletController extends Controller
             $normalized = 'pending';
         }
 
+        // If gateway indicates the payment is completed, attempt to reconcile
+        // and credit the vendor now (idempotent). This makes client-side
+        // polling useful: the UI can detect completed state and the DB will
+        // reflect the credited top-up so balance endpoints return the new value.
+        if ($normalized === 'completed') {
+            $data = $result['data'] ?? ($result['response'] ?? []);
+            $meta = $data['metadata'] ?? ($result['metadata'] ?? []);
+
+            // Try to find existing DB record or cached mapping
+            $topupRecord = WalletTopup::where('reference', $reference)->first();
+            if (! $topupRecord) {
+                $cached = Cache::get("wallet_topup:{$reference}");
+                if ($cached && is_array($cached)) {
+                    $topupRecord = WalletTopup::create([
+                        'reference' => $reference,
+                        'vendor_id' => $cached['vendor_id'],
+                        'amount' => $cached['amount'],
+                        'status' => 'initiated',
+                        'metadata' => ['purpose' => 'wallet_topup'],
+                    ]);
+                } elseif (is_array($meta) && ! empty($meta['vendor_id'])) {
+                    // If gateway provided metadata, create a DB record from it
+                    $topupRecord = WalletTopup::create([
+                        'reference' => $reference,
+                        'vendor_id' => (int) $meta['vendor_id'],
+                        'amount' => (float) ($data['amount'] ?? ($result['amount'] ?? 0)),
+                        'status' => 'initiated',
+                        'metadata' => $meta,
+                    ]);
+                }
+            }
+
+            // If we have a record and it's not completed, attempt to credit
+            if ($topupRecord && $topupRecord->status !== 'completed') {
+                $vendorId = (int) $topupRecord->vendor_id;
+                $amount = (float) ($data['amount'] ?? ($topupRecord->amount ?? 0));
+
+                if ($vendorId > 0 && $amount > 0) {
+                    $credited = false;
+                    DB::transaction(function () use ($vendorId, $amount, $reference, &$credited, $result) {
+                        $credited = $this->walletService->creditVendor($vendorId, $amount, ['reference' => $reference]);
+                        if ($credited) {
+                            $tr = WalletTopup::where('reference', $reference)->first();
+                            if ($tr) {
+                                $tr->update([
+                                    'status' => 'completed',
+                                    'gateway_response' => $result,
+                                ]);
+                            }
+                            Cache::forget("wallet_topup:{$reference}");
+                        }
+                    });
+                    if ($credited) {
+                        // Recompute available topups briefly in cache
+                        Cache::forget("vendor:{$topupRecord->vendor_id}:topups_available");
+                    }
+                }
+            }
+        }
+
         return response()->json([
             'success' => true,
             'status' => $normalized,
