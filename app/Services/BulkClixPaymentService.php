@@ -112,6 +112,32 @@ class BulkClixPaymentService implements CollectsPayments, HandlesGenericPayments
         return trim((string) $ref, '-');
     }
 
+    /**
+     * Build a BulkClix-friendly transaction id with a hard limit of 36 chars.
+     * Prefix is `XTRA4U-BCX-` (11 chars) so we keep the remainder for uniqueness.
+     */
+    protected function buildTransactionId(?string $seed = null, $orderId = null): string
+    {
+        $prefix = 'XTRA4U-BCX-';
+        $max = 36;
+
+        $base = '';
+        if ($seed && is_string($seed) && trim($seed) !== '') {
+            $base = $this->sanitizeReference($seed);
+        } else {
+            $base = strtoupper(uniqid());
+        }
+
+        if ($orderId !== null) {
+            $base = $base . '-' . (string) $orderId;
+        }
+
+        $available = max(1, $max - strlen($prefix));
+        $suffix = substr($base, 0, $available);
+
+        return $prefix . $suffix;
+    }
+
     public function initiatePayment(
         string $email,
         float $amount,
@@ -155,9 +181,7 @@ class BulkClixPaymentService implements CollectsPayments, HandlesGenericPayments
             ];
         }
 
-        $transactionId = $reference
-            ? ('XTRA4U-BCX-' . $this->sanitizeReference($reference))
-            : ('XTRA4U-BCX-' . strtoupper(uniqid()));
+        $transactionId = $this->buildTransactionId($reference);
 
         $callbackWithRef = $callbackUrl;
         $separator = str_contains($callbackWithRef, '?') ? '&' : '?';
@@ -254,7 +278,7 @@ class BulkClixPaymentService implements CollectsPayments, HandlesGenericPayments
             ];
         }
 
-        $transactionId = 'XTRA4U-BCX-' . strtoupper(uniqid()) . '-' . $order->id;
+        $transactionId = $this->buildTransactionId(null, $order->id);
 
         $payload = [
             'amount' => (float) $amount,
