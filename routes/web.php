@@ -245,6 +245,9 @@ Route::middleware(['vendor.approved'])
         // Vendor wallet top-up and ledger
         Route::post('wallet/topup', [\App\Http\Controllers\VendorWalletController::class, 'initiateTopup'])
             ->name('wallet.topup');
+        // Polling endpoint for client-side verification of inline top-ups
+        Route::get('wallet/topup/status/{reference}', [\App\Http\Controllers\VendorWalletController::class, 'topupStatus'])
+            ->name('wallet.topup.status');
         Route::get('wallet/{vendor}', [\App\Http\Controllers\VendorWalletController::class, 'ledger'])
             ->whereNumber('vendor')
             ->name('wallet.ledger');
