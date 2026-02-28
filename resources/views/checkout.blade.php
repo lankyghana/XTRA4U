@@ -124,7 +124,19 @@
 
                 const data = await response.json();
 
-                if (data.authorization_url) {
+                // Unified inline flow: backends return `flow_type: 'inline'` for inline gateways
+                if (data.flow_type === 'inline') {
+                    // Use InlinePaymentManager (shared module) for all inline gateways
+                    InlinePaymentManager.open({
+                        reference: data.reference,
+                        authorization_url: data.authorization_url ?? null,
+                        gateway_name: data.gateway_name ?? null,
+                    }, (status) => {
+                        // callback invoked on paid|failed|timeout
+                        this.isSubmitting = false;
+                    });
+                } else if (data.authorization_url) {
+                    // Non-inline redirect flow
                     window.location.href = data.authorization_url;
                 } else if (data.success) {
                     window.location.href = data.redirect || '/checkout/success';
@@ -137,6 +149,71 @@
                 alert('An error occurred. Please try again.');
                 this.isSubmitting = false;
             }
+        }
+        
+                // Inline UI is handled by the shared InlinePaymentManager component
+                // (see components/inline_payment_manager.blade.php included globally)
+        }
+
+        function closeInlinePaymentModal() {
+            const modal = document.getElementById('inline-payment-modal');
+            if (modal) modal.remove();
+            if (window.inlinePaymentPoll) {
+                clearInterval(window.inlinePaymentPoll);
+                window.inlinePaymentPoll = null;
+            }
+            // Re-enable checkout buttons
+            const submitButtons = document.querySelectorAll('button[type=submit], input[type=submit]');
+            submitButtons.forEach(b => b.removeAttribute('disabled'));
+        }
+
+        // Centralized polling routine with safety/timeouts
+        function startPolling(reference, onFinish) {
+            // avoid multiple polls
+            if (window.inlinePaymentPoll) return;
+
+            const pollInterval = 3000;
+            let pollCount = 0;
+            const maxPolls = Math.ceil((3 * 60 * 1000) / pollInterval); // 3 minutes default
+
+            window.inlinePaymentPoll = setInterval(async () => {
+                pollCount++;
+                try {
+                    const res = await fetch('/payment/status/' + encodeURIComponent(reference), { headers: { 'Accept': 'application/json' } });
+                    const body = await res.json();
+                    const status = (body && body.status) ? body.status : 'pending';
+
+                    if (status === 'paid') {
+                        clearInterval(window.inlinePaymentPoll);
+                        window.inlinePaymentPoll = null;
+                        if (typeof onFinish === 'function') onFinish();
+                        // Close modal and redirect to success page
+                        closeInlinePaymentModal();
+                        // redirect to success — keep using checkout success URL format
+                        window.location.href = '/checkout/success/' + '';
+                        return;
+                    }
+
+                    if (status === 'failed') {
+                        clearInterval(window.inlinePaymentPoll);
+                        window.inlinePaymentPoll = null;
+                        if (typeof onFinish === 'function') onFinish();
+                        alert('Payment failed. Please try another method.');
+                        closeInlinePaymentModal();
+                        return;
+                    }
+                } catch (e) {
+                    console.error('Poll error', e);
+                }
+
+                if (pollCount >= maxPolls) {
+                    clearInterval(window.inlinePaymentPoll);
+                    window.inlinePaymentPoll = null;
+                    if (typeof onFinish === 'function') onFinish();
+                    alert('Payment confirmation timed out. Please check your payment provider or try again.');
+                    closeInlinePaymentModal();
+                }
+            }, pollInterval);
         }
     }"
 >
@@ -282,8 +359,11 @@
                         <!-- Price & Select -->
                         <div class="flex items-center justify-between pt-3 border-t border-gray-100">
                             <div>
-                                <p class="text-2xl font-bold text-purple-600" x-text="formatCurrency(product.price)"></p>
-                            </div>
+
+                            {{-- Inline payment UI manager (shared) --}}
+                            @include('components.inline_payment_manager')
+
+                            @endsection
                             <div class="flex items-center gap-2">
                                 <template x-if="isSelected(product)">
                                     <span class="flex items-center gap-1 text-green-600 text-sm font-medium">
