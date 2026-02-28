@@ -292,6 +292,9 @@ Route::middleware('prune.purchase.tokens')->group(function () {
 Route::post('/webhooks/moolre/payment', [\App\Http\Controllers\Webhooks\MoolreWebhookController::class, 'handle'])
     ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
     ->name('webhooks.moolre.payment');
+// Client-side polling endpoint for inline embed/iframe payment flows
+Route::get('/payment/status/{reference}', [\App\Http\Controllers\PaymentStatusController::class, 'status'])
+    ->name('payment.status');
 Route::match(['GET', 'POST'], '/payment/callback', [PaymentCallbackController::class, 'handle'])->name('payment.callback');
 
 // Admin Authentication Routes
