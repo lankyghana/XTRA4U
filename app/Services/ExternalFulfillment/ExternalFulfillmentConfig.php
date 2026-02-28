@@ -10,49 +10,42 @@ use Illuminate\Support\Facades\Schema;
 final class ExternalFulfillmentConfig
 {
     public function __construct(
-        public bool $enabled,
-        public string $baseUrl,
-        public string $token,
-        public string $endpoint,
-        public int $timeoutSeconds,
+        public string $provider,
+        /** @var array<string,array<string,mixed>> */
+        public array $providers,
     ) {
     }
 
     public static function loadFresh(): self
     {
-        $baseUrlFromConfig = trim((string) config('services.external_fulfillment.base_url', ''));
-        $endpointFromConfig = trim((string) config('services.external_fulfillment.endpoint', ''));
+        $settings = Schema::hasTable('settings')
+            ? Setting::getGroupFresh('external_fulfillment')
+            : [];
 
-        if (! Schema::hasTable('settings')) {
-            return new self(false, $baseUrlFromConfig, '', $endpointFromConfig, 10);
-        }
+        $provider = (string) ($settings['external_fulfillment_provider'] ?? 'datafyhub');
 
-        $settings = Setting::getGroupFresh('external_fulfillment');
+        $timeout = self::coerceTimeout((int) ($settings['external_fulfillment_timeout_seconds'] ?? 10));
 
-        $enabledRaw = $settings['external_fulfillment_enabled'] ?? null;
-        $enabled = filter_var($enabledRaw, FILTER_VALIDATE_BOOLEAN);
+        $providers = [
+            'datafyhub' => [
+                'enabled' => self::toBool($settings['external_fulfillment_enabled'] ?? null),
+                'base_url' => trim((string) config('services.external_fulfillment.base_url', '')),
+                'endpoint' => trim((string) config('services.external_fulfillment.endpoint', '')),
+                'token' => (string) ($settings['external_fulfillment_token'] ?? ''),
+                'timeout_seconds' => $timeout,
+            ],
+            'xpresportal' => [
+                'enabled' => self::toBool($settings['external_fulfillment_enabled'] ?? null),
+                'base_url' => trim((string) config('services.xpresportal.base_url', '')),
+                'endpoint' => '/api/v1/orders',
+                'api_key' => (string) config('services.xpresportal.api_key', ''),
+                'api_secret' => (string) config('services.xpresportal.api_secret', ''),
+                'timeout_seconds' => self::coerceTimeout((int) config('services.xpresportal.timeout', 30)),
+                'environment' => (string) config('services.xpresportal.environment', 'sandbox'),
+            ],
+        ];
 
-        $timeoutRaw = $settings['external_fulfillment_timeout_seconds'] ?? 10;
-        $timeout = (int) $timeoutRaw;
-        if ($timeout <= 0) {
-            $timeout = 10;
-        }
-
-        $baseUrl = $baseUrlFromConfig !== ''
-            ? $baseUrlFromConfig
-            : trim((string) ($settings['external_fulfillment_base_url'] ?? ''));
-
-        $endpoint = $endpointFromConfig !== ''
-            ? $endpointFromConfig
-            : trim((string) ($settings['external_fulfillment_endpoint'] ?? ''));
-
-        return new self(
-            (bool) $enabled,
-            $baseUrl,
-            (string) ($settings['external_fulfillment_token'] ?? ''),
-            $endpoint,
-            $timeout,
-        );
+        return new self($provider, $providers);
     }
 
     public static function loadFreshForVendor(Vendor $vendor): self
@@ -62,43 +55,111 @@ final class ExternalFulfillmentConfig
 
         // Business rule: only root vendors can enable external fulfillment.
         if (! is_null($vendor->affiliate_vendor_id)) {
-            return new self(false, $baseUrlFromConfig, '', $endpointFromConfig, 10);
+            return new self('datafyhub', [
+                'datafyhub' => [
+                    'enabled' => false,
+                    'base_url' => $baseUrlFromConfig,
+                    'endpoint' => $endpointFromConfig,
+                    'token' => '',
+                    'timeout_seconds' => 10,
+                ],
+            ]);
         }
 
         if (! Schema::hasTable('vendor_settings')) {
-            return new self(false, $baseUrlFromConfig, '', $endpointFromConfig, 10);
+            return new self('datafyhub', [
+                'datafyhub' => [
+                    'enabled' => false,
+                    'base_url' => $baseUrlFromConfig,
+                    'endpoint' => $endpointFromConfig,
+                    'token' => '',
+                    'timeout_seconds' => 10,
+                ],
+            ]);
         }
 
         $settings = VendorSetting::getGroupFreshForVendor((int) $vendor->id, 'external_fulfillment');
 
-        $enabledRaw = $settings['external_fulfillment_enabled'] ?? null;
-        $enabled = filter_var($enabledRaw, FILTER_VALIDATE_BOOLEAN);
+        $enabled = self::toBool($settings['external_fulfillment_enabled'] ?? null);
+        $provider = (string) ($settings['external_fulfillment_provider'] ?? 'datafyhub');
+        $timeout = self::coerceTimeout((int) ($settings['external_fulfillment_timeout_seconds'] ?? 10));
 
-        $timeoutRaw = $settings['external_fulfillment_timeout_seconds'] ?? 10;
-        $timeout = (int) $timeoutRaw;
-        if ($timeout <= 0) {
-            $timeout = 10;
-        }
+        $providers = [
+            'datafyhub' => [
+                'enabled' => $enabled,
+                'base_url' => $baseUrlFromConfig,
+                'endpoint' => $endpointFromConfig,
+                'token' => (string) ($settings['external_fulfillment_token'] ?? ''),
+                'timeout_seconds' => $timeout,
+            ],
+            'xpresportal' => [
+                'enabled' => $enabled,
+                'base_url' => trim((string) config('services.xpresportal.base_url', '')),
+                'endpoint' => '/api/v1/orders',
+                'api_key' => (string) config('services.xpresportal.api_key', ''),
+                'api_secret' => (string) config('services.xpresportal.api_secret', ''),
+                'timeout_seconds' => self::coerceTimeout((int) config('services.xpresportal.timeout', 30)),
+                'environment' => (string) config('services.xpresportal.environment', 'sandbox'),
+            ],
+        ];
 
-        return new self(
-            (bool) $enabled,
-            $baseUrlFromConfig,
-            (string) ($settings['external_fulfillment_token'] ?? ''),
-            $endpointFromConfig,
-            $timeout,
-        );
+        return new self($provider, $providers);
     }
 
     public function isReady(): bool
     {
-        return $this->enabled
-            && $this->baseUrl !== ''
-            && $this->token !== ''
-            && $this->endpoint !== '';
+        $config = $this->providerConfig($this->provider);
+        if ($config === []) {
+            $config = $this->providerConfig('datafyhub');
+        }
+
+        if (! ($config['enabled'] ?? false)) {
+            return false;
+        }
+
+        if ($this->provider === 'xpresportal') {
+            return $config['base_url'] !== ''
+                && $config['api_key'] !== ''
+                && $config['api_secret'] !== ''
+                && $config['endpoint'] !== '';
+        }
+
+        return $config['base_url'] !== ''
+            && $config['token'] !== ''
+            && $config['endpoint'] !== '';
     }
 
     public function url(): string
     {
-        return rtrim($this->baseUrl, '/') . '/' . ltrim($this->endpoint, '/');
+        $config = $this->providerConfig($this->provider);
+        if ($config === []) {
+            $config = $this->providerConfig('datafyhub');
+        }
+        return rtrim((string) ($config['base_url'] ?? ''), '/') . '/' . ltrim((string) ($config['endpoint'] ?? ''), '/');
+    }
+
+    /** @return array<string,mixed> */
+    public function providerConfig(string $provider): array
+    {
+        return $this->providers[$provider] ?? [];
+    }
+
+    public function timeoutSeconds(): int
+    {
+        $config = $this->providerConfig($this->provider);
+        if ($config === []) {
+            $config = $this->providerConfig('datafyhub');
+        }
+        return (int) ($config['timeout_seconds'] ?? 10);
+    }
+
+    private static function toBool(mixed $value): bool
+    {
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN);
+    }
+
+    private static function coerceTimeout(int $value): int
+    {
+        return $value > 0 ? $value : 10;
     }
 }
