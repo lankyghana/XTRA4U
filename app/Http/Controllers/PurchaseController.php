@@ -262,6 +262,8 @@ class PurchaseController extends Controller
                     'success' => true,
                     'message' => $paymentResult['message'],
                     'reference' => $paymentResult['reference'],
+                    'authorization_url' => $paymentResult['authorization_url'] ?? null,
+                    'gateway_name' => $paymentResult['gateway_name'] ?? null,
                     'order_id' => $order->id,
                     'redirect' => route('checkout.show') . '?payment_pending=1&reference=' . $paymentResult['reference'],
                 ]);
