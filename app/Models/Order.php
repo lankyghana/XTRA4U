@@ -34,6 +34,7 @@ class Order extends Model
         'platform_commission',
         'affiliate_chain_snapshot',
         'is_reseller_order',
+        'external_fulfillment_provider_used',
     ];
 
     protected $casts = [
