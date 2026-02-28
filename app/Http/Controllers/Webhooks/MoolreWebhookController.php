@@ -40,19 +40,24 @@ class MoolreWebhookController extends Controller
 
         $expectedSecret = $config?->getConfig('webhook_secret');
 
-        // Optional: capture/log secret if present (useful for ops/debug), but don't require it.
-        if (empty($expectedSecret) && $secret !== '') {
-            Log::info('Moolre webhook secret observed (optional; used only for extra verification)', [
-                'externalref' => $externalRef,
-            ]);
-        }
+        // If an expected webhook secret is configured, require a matching secret
+        // in the payload. Reject mismatches to avoid processing forged webhooks.
+        if (!empty($expectedSecret)) {
+            if ($secret === '' || !hash_equals((string) $expectedSecret, $secret)) {
+                Log::warning('Moolre webhook secret mismatch - rejecting', [
+                    'externalref' => $externalRef,
+                ]);
 
-        // If a secret is configured, we can log mismatches for visibility.
-        // We still verify using the status API, so a mismatch doesn't block order completion.
-        if (!empty($expectedSecret) && $secret !== '' && !hash_equals((string) $expectedSecret, $secret)) {
-            Log::warning('Moolre webhook secret mismatch (continuing with status verification)', [
-                'externalref' => $externalRef,
-            ]);
+                // Return 403 so operator/gateway gets clear signal the signature failed.
+                return response()->json(['success' => false, 'message' => 'Invalid webhook signature'], 403);
+            }
+        } else {
+            // Optional: capture/log secret if present (useful for ops/debug), but don't require it.
+            if ($secret !== '') {
+                Log::info('Moolre webhook secret observed (optional; used only for extra verification)', [
+                    'externalref' => $externalRef,
+                ]);
+            }
         }
 
         $order = Order::where('payment_reference', $externalRef)->first();
