@@ -132,6 +132,8 @@ class MoolrePaymentService implements CollectsPayments, HandlesGenericPayments
                         'message' => $data['message'] ?? 'Payment link generated.',
                         'reference' => $externalRef,
                         'authorization_url' => $authorizationUrl,
+                        'gateway_name' => PaymentGatewayConfig::GATEWAY_MOOLRE,
+                        'flow_type' => 'inline',
                     ];
                 }
             }
@@ -206,6 +208,8 @@ class MoolrePaymentService implements CollectsPayments, HandlesGenericPayments
                     'message' => $data['message'] ?? 'Payment link generated.',
                     'reference' => $externalRef,
                     'authorization_url' => data_get($data, 'data.authorization_url'),
+                    'gateway_name' => PaymentGatewayConfig::GATEWAY_MOOLRE,
+                    'flow_type' => 'inline',
                 ];
             }
 
