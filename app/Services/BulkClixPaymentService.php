@@ -214,6 +214,8 @@ class BulkClixPaymentService implements CollectsPayments, HandlesGenericPayments
                     'reference' => $transactionId,
                     // Inline flow: do not redirect away; the frontend should poll a verify endpoint.
                     'authorization_url' => null,
+                    'gateway_name' => PaymentGatewayConfig::GATEWAY_BULKCLIX,
+                    'flow_type' => 'inline',
                     'transaction_id' => data_get($json, 'data.ext_transaction_id') ?: data_get($json, 'data.transaction_id'),
                     'data' => $json['data'] ?? null,
                 ];
@@ -312,12 +314,14 @@ class BulkClixPaymentService implements CollectsPayments, HandlesGenericPayments
                 return [
                     'success' => true,
                     'message' => $json['message'] ?? 'Payment initiated. Please approve the MoMo prompt to complete.',
-                    'reference' => $transactionId,
-                    // Inline flow: do not redirect away; the frontend will poll /checkout/verify.
-                    'authorization_url' => null,
-                    // Helps us persist the provider transaction id early when available.
-                    'transaction_id' => data_get($json, 'data.ext_transaction_id') ?: data_get($json, 'data.transaction_id'),
-                    'data' => $json['data'] ?? null,
+                        'reference' => $transactionId,
+                        // Inline flow: do not redirect away; the frontend will poll /checkout/verify.
+                        'authorization_url' => null,
+                        'gateway_name' => PaymentGatewayConfig::GATEWAY_BULKCLIX,
+                        'flow_type' => 'inline',
+                        // Helps us persist the provider transaction id early when available.
+                        'transaction_id' => data_get($json, 'data.ext_transaction_id') ?: data_get($json, 'data.transaction_id'),
+                        'data' => $json['data'] ?? null,
                 ];
             }
 
