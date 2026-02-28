@@ -1,0 +1,250 @@
+<?php
+
+namespace App\Services\ExternalFulfillment\Providers;
+
+use App\Models\Order;
+use App\Models\Product;
+use App\Services\ExternalFulfillment\Contracts\ExternalFulfillmentClient;
+use App\Services\ExternalFulfillment\ExternalFulfillmentConfig;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+
+class DatafyhubClient implements ExternalFulfillmentClient
+{
+    public function __construct(private ExternalFulfillmentConfig $config)
+    {
+    }
+
+    public function sendOrder(Order $order, string $idempotencyKey): array
+    {
+        $recipient = $this->toLocalGhanaNumber((string) $order->recipient_phone_number);
+        if ($recipient === '') {
+            return [
+                'success' => false,
+                'status' => 'failed',
+                'message' => 'Invalid recipient phone number for external fulfillment.',
+            ];
+        }
+
+        $payload = [
+            'network' => $this->resolveDatafyhubNetwork($order),
+            'reference' => $this->resolveDatafyhubReference($order, $idempotencyKey),
+            'recipient' => $recipient,
+            'capacity' => $this->resolveDatafyhubCapacity($order),
+        ];
+
+        $providerConfig = $this->config->providerConfig('datafyhub');
+        $url = rtrim((string) ($providerConfig['base_url'] ?? ''), '/') . '/' . ltrim((string) ($providerConfig['endpoint'] ?? ''), '/');
+        $token = (string) ($providerConfig['token'] ?? '');
+        $timeout = (int) ($providerConfig['timeout_seconds'] ?? 10);
+
+        try {
+            $response = Http::timeout($timeout)
+                ->acceptJson()
+                ->asJson()
+                ->withToken($token)
+                ->withHeaders([
+                    'Idempotency-Key' => $idempotencyKey,
+                ])
+                ->post($url, $payload)
+                ->throw();
+
+            $json = $response->json();
+            $remoteReference = $this->extractReference($json);
+
+            return [
+                'success' => true,
+                'status' => 'success',
+                'external_reference' => $remoteReference,
+                'message' => 'success',
+                'raw' => $json,
+            ];
+        } catch (RequestException|ConnectionException $e) {
+            $response = $e instanceof RequestException ? $e->response : null;
+            $status = $response?->status();
+            $body = $response?->json() ?? $response?->body();
+            $message = $e->getMessage();
+
+            Log::warning('Datafyhub fulfillment failed', [
+                'order_id' => $order->id,
+                'status' => $status,
+                'error' => $message,
+            ]);
+
+            return [
+                'success' => false,
+                'status' => 'failed',
+                'external_reference' => null,
+                'message' => $this->limitMessage($message),
+                'raw' => $body,
+            ];
+        }
+    }
+
+    private function extractReference(mixed $json): ?string
+    {
+        foreach (['reference', 'id', 'transaction_id', 'data.reference', 'data.id'] as $path) {
+            $value = data_get($json, $path);
+            if (is_scalar($value) && (string) $value !== '') {
+                return (string) $value;
+            }
+        }
+
+        return null;
+    }
+
+    private function limitMessage(string $message): string
+    {
+        return mb_substr($message, 0, 1000);
+    }
+
+    /**
+     * Normalize a phone string into local Ghana format expected by Datafyhub.
+     * Returns empty string when unable to produce a valid local number.
+     */
+    private function toLocalGhanaNumber(string $phone): string
+    {
+        $digits = preg_replace('/[^0-9]/', '', $phone);
+
+        if ($digits === '') return '';
+
+        if (str_starts_with($digits, '233') && strlen($digits) > 3) {
+            return '0' . substr($digits, 3);
+        }
+
+        if (str_starts_with($digits, '0') && strlen($digits) >= 10) {
+            return $digits;
+        }
+
+        // If 9 digits, prefix 0
+        if (strlen($digits) === 9) {
+            return '0' . $digits;
+        }
+
+        return '';
+    }
+
+    private function resolveDatafyhubReference(Order $order, string $idempotencyKey): string
+    {
+        $reference = (string) ($order->payment_reference ?? '');
+        if ($reference !== '') {
+            return $reference;
+        }
+
+        return $idempotencyKey;
+    }
+
+    private function resolveDatafyhubNetwork(Order $order): string
+    {
+        $network = null;
+        $product = null;
+        $explicitDatafyhubNetwork = null;
+
+        // Prefer structured metadata from the product description.
+        if (! empty($order->vendor_service_id)) {
+            $product = Product::query()->find((int) $order->vendor_service_id);
+            $network = is_string(data_get($product, 'decoded_description.network'))
+                ? (string) data_get($product, 'decoded_description.network')
+                : null;
+
+            $explicitDatafyhubNetwork = is_string(data_get($product, 'decoded_description.datafyhub_network'))
+                ? trim((string) data_get($product, 'decoded_description.datafyhub_network'))
+                : null;
+        }
+
+        if ($explicitDatafyhubNetwork !== '') {
+            $explicitNormalized = strtolower(preg_replace('/\s+/', '', (string) $explicitDatafyhubNetwork));
+            if (in_array($explicitNormalized, ['mtn', 'telecel', 'ishare', 'bigtime', 'xpress'], true)) {
+                return $explicitNormalized;
+            }
+        }
+
+        // Fallback to any captured order network.
+        if (! $network) {
+            $network = is_string($order->mobile_money_network) ? $order->mobile_money_network : null;
+        }
+
+        $network = trim((string) ($network ?? ''));
+
+        if ($network === '') {
+            // Datafyhub requires a network key; default to mtn as a safe fallback.
+            return 'mtn';
+        }
+
+        $normalized = strtolower(preg_replace('/\s+/', '', $network));
+
+        // Datafyhub-supported networks (per docs): mtn, telecel, ishare, bigtime, xpress
+        if (in_array($normalized, ['mtn', 'telecel', 'ishare', 'bigtime', 'xpress'], true)) {
+            return $normalized;
+        }
+
+        if (in_array($normalized, ['vodafone'], true)) {
+            return 'telecel';
+        }
+
+        if (in_array($normalized, ['airteltigo', 'airtel-tigo', 'tigo', 'airtel'], true)) {
+            $hints = [];
+            $hints[] = (string) ($product?->name ?? '');
+            $hints[] = (string) ($order->service_purchased ?? '');
+            $hints[] = (string) data_get($product, 'decoded_description.tag', '');
+            $hints[] = (string) data_get($product, 'decoded_description.notes', '');
+            $hint = strtolower(implode(' ', array_filter($hints)));
+
+            if (str_contains($hint, 'ishare') || str_contains($hint, 'i-share')) {
+                return 'ishare';
+            }
+
+            if (str_contains($hint, 'bigtime') || str_contains($hint, 'big time')) {
+                return 'bigtime';
+            }
+
+            if (str_contains($hint, 'xpress')) {
+                return 'xpress';
+            }
+
+            // If the product/network metadata doesn't disambiguate AirtelTigo package type,
+            // prefer failing fast over silently sending an invalid network.
+            return 'invalid';
+        }
+
+        // Unknown network: send the normalized value (external API may reject it).
+        return $normalized;
+    }
+
+    private function resolveDatafyhubCapacity(Order $order): int
+    {
+        // Try to parse the product "size" metadata (commonly something like "2" or "2GB").
+        $raw = null;
+        $product = null;
+
+        if (! empty($order->vendor_service_id)) {
+            $product = Product::query()->find((int) $order->vendor_service_id);
+            $raw = data_get($product, 'decoded_description.size');
+        }
+
+        if (is_numeric($raw)) {
+            $capacity = (int) $raw;
+            return max(1, $capacity);
+        }
+
+        if (is_string($raw)) {
+            if (preg_match('/(\d+)/', $raw, $m)) {
+                return max(1, (int) $m[1]);
+            }
+        }
+
+        // Fallback: parse digits from product/order display names.
+        $hints = [];
+        $hints[] = (string) ($product?->name ?? '');
+        $hints[] = (string) ($order->service_purchased ?? '');
+        $hint = implode(' ', array_filter($hints));
+
+        if ($hint !== '' && preg_match('/(\d+)\s*(gb|g)?/i', $hint, $m)) {
+            return max(1, (int) $m[1]);
+        }
+
+        return 1;
+    }
+}
