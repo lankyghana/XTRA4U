@@ -81,5 +81,13 @@ return [
         'endpoint' => env('EXTERNAL_FULFILLMENT_ENDPOINT', ''),
     ],
 
+    'xpresportal' => [
+        'base_url' => env('XPRES_BASE_URL'),
+        'api_key' => env('XPRES_API_KEY'),
+        'api_secret' => env('XPRES_API_SECRET'),
+        'timeout' => env('XPRES_TIMEOUT', 30),
+        'environment' => env('XPRES_ENV', 'sandbox'),
+    ],
+
 
 ];
