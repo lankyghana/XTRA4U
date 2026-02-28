@@ -290,19 +290,31 @@
                                         });
                                         const data = await resp.json();
 
-                                        if (data.success && data.authorization_url) {
-                                            // redirect to payment provider
-                                            window.location.href = data.authorization_url;
+                                        // Use shared InlinePaymentManager for inline flows
+                                        if (data.flow_type === 'inline') {
+                                            InlinePaymentManager.open({
+                                                reference: data.reference,
+                                                authorization_url: data.authorization_url ?? null,
+                                                gateway_name: data.gateway_name ?? null
+                                            }, async (status) => {
+                                                if (status === 'paid') {
+                                                    showMessage('\u2714\uFE0F Wallet topped up successfully', 'success');
+                                                    await refreshWalletSummary(true);
+                                                    amountInput.value = '';
+                                                    if (gatewayHidden) gatewayHidden.value = '';
+                                                    gatewayButtons.forEach(b => b.classList.remove('ring','ring-2','ring-purple-400'));
+                                                } else if (status === 'failed') {
+                                                    showMessage('Top-up failed. Please try again or contact support.', 'error');
+                                                }
+                                            });
+                                            setLoading(false);
+                                            inProgress = false;
                                             return;
                                         }
 
-                                        // Inline flows (no authorization_url) return a reference we can poll.
-                                        if (data.success && data.reference && !data.authorization_url) {
-                                            // start polling for completion
-                                            showMessage('Processing payment, waiting for confirmation...', '');
-                                            await pollTopupStatus(data.reference);
-                                            setLoading(false);
-                                            inProgress = false;
+                                        if (data.success && data.authorization_url) {
+                                            // redirect to payment provider
+                                            window.location.href = data.authorization_url;
                                             return;
                                         }
 
@@ -479,17 +491,24 @@
                                             });
 
                                             const data = await resp.json();
-                                            if (data.success && data.authorization_url) {
-                                                // redirect
-                                                window.location.href = data.authorization_url;
+                                            if (data.flow_type === 'inline') {
+                                                feedbackEl.textContent = 'Processing payment, waiting for confirmation...';
+                                                InlinePaymentManager.open({ reference: data.reference, authorization_url: data.authorization_url ?? null, gateway_name: data.gateway_name ?? null }, async (status) => {
+                                                    if (status === 'paid') {
+                                                        feedbackEl.textContent = 'Wallet topped up successfully.';
+                                                        await refreshWalletSummary(true);
+                                                        closeTopupModal();
+                                                    } else if (status === 'failed') {
+                                                        feedbackEl.textContent = 'Top-up failed. Please try again.';
+                                                    }
+                                                    modalConfirm.disabled = false;
+                                                });
                                                 return;
                                             }
 
-                                            if (data.success && data.reference && !data.authorization_url) {
-                                                feedbackEl.textContent = 'Processing payment, waiting for confirmation...';
-                                                await pollTopupStatus(data.reference);
-                                                closeTopupModal();
-                                                modalConfirm.disabled = false;
+                                            if (data.success && data.authorization_url) {
+                                                // redirect
+                                                window.location.href = data.authorization_url;
                                                 return;
                                             }
 
@@ -821,4 +840,7 @@
         }
     })();
 </script>
-@endsection
+    {{-- Inline payment UI manager (shared) --}}
+    @include('components.inline_payment_manager')
+
+    @endsection
