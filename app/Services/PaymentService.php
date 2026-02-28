@@ -70,6 +70,7 @@ class PaymentService
                 'message' => $result['message'] ?? 'Payment initialized. Please complete payment.',
                 'reference' => $result['reference'],
                 'authorization_url' => $result['authorization_url'] ?? null,
+                'gateway_name' => $result['gateway_name'] ?? null,
                 'order_id' => $order->id,
             ];
         }
