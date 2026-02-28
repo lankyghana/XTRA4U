@@ -20,7 +20,8 @@ class AdminAuthController extends Controller
             'password' => ['required'],
         ]);
 
-        if (! Auth::attempt($credentials, $request->boolean('remember'))) {
+        // Use the dedicated admin guard so we authenticate against the admins table
+        if (! Auth::guard('admin')->attempt($credentials, $request->boolean('remember'))) {
             throw ValidationException::withMessages([
                 'email' => __('auth.failed'),
             ]);
@@ -28,8 +29,11 @@ class AdminAuthController extends Controller
 
         $request->session()->regenerate();
 
-        if (Auth::user()->role !== 'admin') {
-            Auth::logout();
+        // Optional defense in depth: ensure the admin guard user is flagged as admin if the
+        // column exists. Missing/empty role defaults to admin.
+        $user = Auth::guard('admin')->user();
+        if (($user->role ?? 'admin') !== 'admin') {
+            Auth::guard('admin')->logout();
             $request->session()->invalidate();
             $request->session()->regenerateToken();
 
@@ -43,7 +47,7 @@ class AdminAuthController extends Controller
 
     public function logout(Request $request)
     {
-        Auth::logout();
+        Auth::guard('admin')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
