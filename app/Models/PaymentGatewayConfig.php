@@ -294,8 +294,9 @@ class PaymentGatewayConfig extends Model
             self::GATEWAY_MOOLRE => [
                 'name' => 'Moolre',
                 'types' => [self::TYPE_PAYMENT_COLLECTION, self::TYPE_PAYOUT],
-                // Redirect/hosted checkout.
-                'collection_flow' => 'redirect',
+                // Use inline/embed flow where the payment UI can be embedded
+                // in an iframe/modal so customers don't leave our site.
+                'collection_flow' => 'inline',
                 'capabilities' => self::defaultCapabilitiesFor(self::GATEWAY_MOOLRE),
                 // Moolre has distinct credentials for collections vs transfers.
                 // We model required fields by type to keep payout-only configs usable.
