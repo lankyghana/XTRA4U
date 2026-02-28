@@ -166,7 +166,9 @@ class WalletService
         // Sum only the remaining (unconsumed) portions of completed top-ups.
         $total = \App\Models\WalletTopup::where('vendor_id', $vendorId)
             ->where('status', 'completed')
-            ->selectRaw('SUM(GREATEST(amount - COALESCE(consumed, 0), 0)) as available')
+            ->selectRaw(
+                'SUM(CASE WHEN (amount - COALESCE(consumed, 0)) > 0 THEN (amount - COALESCE(consumed, 0)) ELSE 0 END) as available'
+            )
             ->value('available');
 
         return round(max(0.0, (float) $total), 2);
