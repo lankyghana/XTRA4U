@@ -7,13 +7,14 @@ class AdminOnly
 {
     public function handle($request, Closure $next)
     {
-        $user = Auth::user();
+        // Accept either the dedicated admin guard or a web user with role=admin
+        $user = Auth::guard('admin')->user() ?: Auth::user();
 
         if (! $user) {
             return redirect()->route('admin.login');
         }
 
-        if ($user->role !== 'admin') {
+        if (($user->role ?? 'admin') !== 'admin') {
             abort(403, 'Unauthorized');
         }
 
