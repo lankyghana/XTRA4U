@@ -36,6 +36,21 @@
                 </div>
 
                 <div>
+                    <label for="external_fulfillment_provider" class="block text-sm font-medium text-gray-700 mb-2">
+                        Provider
+                    </label>
+                    <select name="external_fulfillment_provider" id="external_fulfillment_provider"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue">
+                        @foreach($providers as $key => $label)
+                            <option value="{{ $key }}" {{ (($settings['external_fulfillment_provider'] ?? 'datafyhub') === $key) ? 'selected' : '' }}>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                    @error('external_fulfillment_provider')
+                        <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                    @enderror
+                </div>
+
+                <div>
                     <label for="external_fulfillment_token" class="block text-sm font-medium text-gray-700 mb-2">
                         API Token
                     </label>
