@@ -25,6 +25,10 @@ class ExternalFulfillmentSettingsController extends Controller
         return view('vendor.settings.external-fulfillment', [
             'vendor' => $vendor,
             'settings' => $settings,
+            'providers' => [
+                'datafyhub' => 'Datafyhub',
+                'xpresportal' => 'XpresPortal',
+            ],
         ]);
     }
 
@@ -38,11 +42,13 @@ class ExternalFulfillmentSettingsController extends Controller
             'external_fulfillment_enabled' => 'nullable|boolean',
             'external_fulfillment_token' => 'nullable|string|max:255',
             'external_fulfillment_timeout_seconds' => 'nullable|integer|min:1|max:120',
+            'external_fulfillment_provider' => 'nullable|string|in:datafyhub,xpresportal',
         ]);
 
         $enabled = (bool) $request->boolean('external_fulfillment_enabled');
+        $provider = (string) ($request->input('external_fulfillment_provider') ?? 'datafyhub');
 
-        if ($enabled) {
+        if ($enabled && $provider === 'datafyhub') {
             $existingToken = trim((string) VendorSetting::getForVendor($vendor->id, 'external_fulfillment_token', ''));
             if (! $request->filled('external_fulfillment_token') && $existingToken === '') {
                 return back()
@@ -52,6 +58,7 @@ class ExternalFulfillmentSettingsController extends Controller
         }
 
         VendorSetting::setForVendor($vendor->id, 'external_fulfillment_enabled', $enabled ? '1' : '0', 'external_fulfillment');
+        VendorSetting::setForVendor($vendor->id, 'external_fulfillment_provider', $provider, 'external_fulfillment');
         VendorSetting::setForVendor(
             $vendor->id,
             'external_fulfillment_timeout_seconds',
