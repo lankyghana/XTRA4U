@@ -4,8 +4,8 @@ namespace App\Jobs;
 
 use App\Models\Order;
 use App\Models\Vendor;
-use App\Services\ExternalFulfillment\ExternalFulfillmentClient;
 use App\Services\ExternalFulfillment\ExternalFulfillmentConfig;
+use App\Services\ExternalFulfillment\ExternalFulfillmentClientFactory;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -69,53 +69,58 @@ class ProcessExternalFulfillment implements ShouldQueue
             }
 
             $idempotencyKey = (string) ($order->external_fulfillment_idempotency_key ?: ('order-' . $order->id));
+            $providerUsed = $config->provider ?? 'datafyhub';
 
             Order::whereKey($order->id)->update([
                 'external_fulfillment_idempotency_key' => $idempotencyKey,
                 'external_fulfillment_status' => 'processing',
                 'external_fulfillment_attempts' => (int) ($order->external_fulfillment_attempts ?? 0) + 1,
                 'external_fulfillment_last_attempt_at' => now(),
+                'external_fulfillment_provider_used' => $providerUsed,
             ]);
 
-            $client = new ExternalFulfillmentClient($config);
-            $response = $client->sendOrder($order, $idempotencyKey);
+            $client = ExternalFulfillmentClientFactory::make($config);
+            $result = $client->sendOrder($order, $idempotencyKey);
 
-            if ($response->successful()) {
-                $json = $response->json();
+            $status = strtolower((string) ($result['status'] ?? ''));
+            $success = (bool) ($result['success'] ?? false);
+            $remoteReference = $result['external_reference'] ?? null;
+            $message = (string) ($result['message'] ?? '');
 
-                $remoteReference = null;
-                foreach (['reference', 'id', 'transaction_id', 'data.reference', 'data.id'] as $path) {
-                    $value = data_get($json, $path);
-                    if (is_scalar($value) && (string) $value !== '') {
-                        $remoteReference = (string) $value;
-                        break;
-                    }
-                }
-
+            if ($success || in_array($status, ['success', 'completed'], true)) {
                 Order::whereKey($order->id)->update([
                     'external_fulfillment_status' => 'succeeded',
                     'external_fulfillment_completed_at' => now(),
                     'external_fulfillment_remote_reference' => $remoteReference,
                     'external_fulfillment_last_error' => null,
+                    'external_fulfillment_provider_used' => $providerUsed,
                 ]);
 
                 return;
             }
 
-            $errorMessage = 'HTTP ' . $response->status();
-            $body = $response->body();
-            if (is_string($body) && $body !== '') {
-                $errorMessage .= ': ' . mb_substr($body, 0, 1000);
+            if (in_array($status, ['pending', 'processing'], true)) {
+                Order::whereKey($order->id)->update([
+                    'external_fulfillment_status' => 'processing',
+                    'external_fulfillment_remote_reference' => $remoteReference,
+                    'external_fulfillment_last_error' => null,
+                    'external_fulfillment_provider_used' => $providerUsed,
+                ]);
+
+                return;
             }
+
+            $errorMessage = $message !== '' ? $message : 'External fulfillment failed';
 
             Order::whereKey($order->id)->update([
                 'external_fulfillment_status' => 'failed',
                 'external_fulfillment_last_error' => $errorMessage,
+                'external_fulfillment_provider_used' => $providerUsed,
             ]);
 
             Log::warning('External fulfillment failed', [
                 'order_id' => $order->id,
-                'status' => $response->status(),
+                'status' => $status,
             ]);
 
             throw new \RuntimeException($errorMessage);
