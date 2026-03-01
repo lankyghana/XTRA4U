@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Order;
+use App\Models\Product;
 use App\Models\Vendor;
 use App\Services\ExternalFulfillment\ExternalFulfillmentConfig;
 use App\Services\ExternalFulfillment\ExternalFulfillmentClientFactory;
@@ -70,6 +71,11 @@ class ProcessExternalFulfillment implements ShouldQueue
 
             $idempotencyKey = (string) ($order->external_fulfillment_idempotency_key ?: ('order-' . $order->id));
             $providerUsed = $config->provider ?? 'datafyhub';
+            $providerNetwork = $this->resolveProviderNetwork($config, $order);
+
+            $order->setAttribute('external_provider', $providerUsed);
+            $order->setAttribute('external_provider_network', $providerNetwork);
+            $order->setAttribute('external_provider_networks', config("external_fulfillment.providers.{$providerUsed}.networks", []));
 
             Order::whereKey($order->id)->update([
                 'external_fulfillment_idempotency_key' => $idempotencyKey,
@@ -127,5 +133,34 @@ class ProcessExternalFulfillment implements ShouldQueue
         } finally {
             optional($lock)->release();
         }
+    }
+
+    private function resolveProviderNetwork(ExternalFulfillmentConfig $config, Order $order): ?string
+    {
+        $provider = $config->provider ?? 'datafyhub';
+        $product = null;
+        $metadata = [];
+
+        if (! empty($order->vendor_service_id)) {
+            $product = Product::query()->find((int) $order->vendor_service_id);
+            $metadata = is_array($product?->decoded_description) ? $product->decoded_description : [];
+        }
+
+        $networkFromMappings = data_get($metadata, "external_mappings.{$provider}.network");
+        if (is_string($networkFromMappings) && $networkFromMappings !== '') {
+            return $networkFromMappings;
+        }
+
+        $genericNetwork = data_get($metadata, 'external_network');
+        if (is_string($genericNetwork) && $genericNetwork !== '') {
+            return $genericNetwork;
+        }
+
+        $legacyDatafyhub = data_get($metadata, 'datafyhub_network');
+        if (is_string($legacyDatafyhub) && $legacyDatafyhub !== '') {
+            return $legacyDatafyhub;
+        }
+
+        return null;
     }
 }

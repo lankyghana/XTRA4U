@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\NetworkService;
 use App\Models\Product;
 use App\Models\ResellerProduct;
+use App\Models\Vendor;
+use App\Services\ExternalFulfillment\ExternalFulfillmentConfig;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -24,20 +26,29 @@ class ProductController extends Controller
     // Show create product form
     public function create()
     {
+        $vendor = $this->resolveVendor();
         $networkOptions = $this->getNetworkOptions();
+        [$activeExternalFulfillmentProvider, $providerNetworks] = $this->resolveExternalFulfillmentContext($vendor);
 
-        return view('product_create', compact('networkOptions'));
+        return view('product_create', [
+            'networkOptions' => $networkOptions,
+            'activeExternalFulfillmentProvider' => $activeExternalFulfillmentProvider,
+            'providerNetworks' => $providerNetworks,
+        ]);
     }
 
     // Store new product
     public function store(Request $request)
     {
+        $vendor = $this->resolveVendor();
+        [$activeExternalFulfillmentProvider, $providerNetworks] = $this->resolveExternalFulfillmentContext($vendor);
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:500',
             'price' => 'required|numeric|min:0',
             'network' => $this->networkValidationRule(),
-            'datafyhub_network' => 'nullable|string|in:mtn,telecel,ishare,bigtime,xpress',
+            'external_network' => $this->externalNetworkValidationRule($providerNetworks),
             'category' => $this->categoryValidationRule(),
             'size' => 'nullable|string|max:50',
             'validity' => 'nullable|string|max:50',
@@ -45,12 +56,15 @@ class ProductController extends Controller
             'notes' => 'nullable|string|max:255',
         ]);
 
-        $vendor = $this->resolveVendor();
-
         Product::create([
             'vendor_id' => $vendor->id,
             'name' => $validated['name'],
-            'description' => $this->buildStructuredDescription($request, $validated['description'] ?? null),
+            'description' => $this->buildStructuredDescription(
+                $request,
+                $validated['description'] ?? null,
+                $vendor,
+                $activeExternalFulfillmentProvider,
+            ),
             'price' => $validated['price'],
             'is_active' => true,
         ]);
@@ -64,8 +78,16 @@ class ProductController extends Controller
         $product = $this->findVendorProduct($id);
         $metadata = $this->decodeDescription($product->description);
         $networkOptions = $this->getNetworkOptions();
+        $vendor = $this->resolveVendor();
+        [$activeExternalFulfillmentProvider, $providerNetworks] = $this->resolveExternalFulfillmentContext($vendor);
 
-        return view('product_edit', compact('product', 'metadata', 'networkOptions'));
+        return view('product_edit', [
+            'product' => $product,
+            'metadata' => $metadata,
+            'networkOptions' => $networkOptions,
+            'activeExternalFulfillmentProvider' => $activeExternalFulfillmentProvider,
+            'providerNetworks' => $providerNetworks,
+        ]);
     }
 
     // Update product
@@ -75,12 +97,15 @@ class ProductController extends Controller
         $metadata = $this->decodeDescription($product->description);
         $existingNetwork = $metadata['network'] ?? null;
 
+        $vendor = $this->resolveVendor();
+        [$activeExternalFulfillmentProvider, $providerNetworks] = $this->resolveExternalFulfillmentContext($vendor);
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:500',
             'price' => 'required|numeric|min:0',
             'network' => $this->networkValidationRule($existingNetwork),
-            'datafyhub_network' => 'nullable|string|in:mtn,telecel,ishare,bigtime,xpress',
+            'external_network' => $this->externalNetworkValidationRule($providerNetworks),
             'category' => $this->categoryValidationRule(),
             'size' => 'nullable|string|max:50',
             'validity' => 'nullable|string|max:50',
@@ -95,7 +120,13 @@ class ProductController extends Controller
         $product->update([
             'name' => $validated['name'],
             'price' => $newPrice,
-            'description' => $this->buildStructuredDescription($request, $validated['description'] ?? null),
+            'description' => $this->buildStructuredDescription(
+                $request,
+                $validated['description'] ?? null,
+                $vendor,
+                $activeExternalFulfillmentProvider,
+                $metadata,
+            ),
             'is_active' => $request->boolean('is_active', $product->is_active),
         ]);
 
@@ -193,12 +224,39 @@ class ProductController extends Controller
             ?? 'data';
     }
 
-    protected function buildStructuredDescription(Request $request, ?string $plainDescription): ?string
+    protected function buildStructuredDescription(
+        Request $request,
+        ?string $plainDescription,
+        Vendor $vendor,
+        ?string $activeExternalFulfillmentProvider = null,
+        array $existingMetadata = [],
+    ): ?string
     {
+        $externalMappings = [];
+        if (isset($existingMetadata['external_mappings']) && is_array($existingMetadata['external_mappings'])) {
+            $externalMappings = $existingMetadata['external_mappings'];
+        }
+
+        $activeProvider = $activeExternalFulfillmentProvider ?? 'datafyhub';
+        $externalNetwork = $request->input('external_network');
+
+        if ($activeProvider !== '') {
+            if ($externalNetwork !== null && $externalNetwork !== '') {
+                $externalMappings[$activeProvider]['network'] = $externalNetwork;
+            } else {
+                if (isset($externalMappings[$activeProvider]['network'])) {
+                    unset($externalMappings[$activeProvider]['network']);
+                }
+                if (isset($externalMappings[$activeProvider]) && empty($externalMappings[$activeProvider])) {
+                    unset($externalMappings[$activeProvider]);
+                }
+            }
+        }
+
         $payload = [
             'network' => $request->input('network'),
-            // Used only by External Fulfillment integrations (e.g. Datafyhub) and not shown to customers.
-            'datafyhub_network' => $request->input('datafyhub_network'),
+            'external_network' => $externalNetwork,
+            'external_mappings' => empty($externalMappings) ? null : $externalMappings,
             'category' => $request->input('category', $this->defaultCategory()),
             'size' => $request->input('size'),
             'validity' => $request->input('validity'),
@@ -229,5 +287,23 @@ class ProductController extends Controller
         return json_last_error() === JSON_ERROR_NONE && is_array($decoded)
             ? $decoded
             : [];
+    }
+
+    protected function resolveExternalFulfillmentContext(Vendor $vendor): array
+    {
+        $config = ExternalFulfillmentConfig::loadFreshForVendor($vendor);
+        $activeProvider = $config->provider ?? 'datafyhub';
+        $providerNetworks = config("external_fulfillment.providers.{$activeProvider}.networks", []);
+
+        return [$activeProvider, $providerNetworks];
+    }
+
+    protected function externalNetworkValidationRule(array $providerNetworks): string
+    {
+        if (! empty($providerNetworks)) {
+            return 'nullable|string|in:' . implode(',', $providerNetworks);
+        }
+
+        return 'nullable|string|max:60';
     }
 }

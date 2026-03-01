@@ -138,9 +138,18 @@ class DatafyhubClient implements ExternalFulfillmentClient
 
     private function resolveDatafyhubNetwork(Order $order): string
     {
+        $allowedNetworks = array_map('strtolower', (array) config('external_fulfillment.providers.datafyhub.networks', ['mtn', 'telecel', 'ishare', 'bigtime', 'xpress']));
         $network = null;
         $product = null;
         $explicitDatafyhubNetwork = null;
+
+        $overrideNetwork = $order->getAttribute('external_provider_network');
+        if (is_string($overrideNetwork) && $overrideNetwork !== '') {
+            $normalizedOverride = $this->normalizeNetwork($overrideNetwork);
+            if (in_array($normalizedOverride, $allowedNetworks, true)) {
+                return $normalizedOverride;
+            }
+        }
 
         // Prefer structured metadata from the product description.
         if (! empty($order->vendor_service_id)) {
@@ -149,14 +158,26 @@ class DatafyhubClient implements ExternalFulfillmentClient
                 ? (string) data_get($product, 'decoded_description.network')
                 : null;
 
+            $mappedNetwork = data_get($product, 'decoded_description.external_mappings.datafyhub.network');
+            if (is_string($mappedNetwork) && $mappedNetwork !== '') {
+                $explicitDatafyhubNetwork = $mappedNetwork;
+            }
+
+            if ($explicitDatafyhubNetwork === null) {
+                $genericExternal = data_get($product, 'decoded_description.external_network');
+                if (is_string($genericExternal) && $genericExternal !== '') {
+                    $explicitDatafyhubNetwork = $genericExternal;
+                }
+            }
+
             $explicitDatafyhubNetwork = is_string(data_get($product, 'decoded_description.datafyhub_network'))
                 ? trim((string) data_get($product, 'decoded_description.datafyhub_network'))
-                : null;
+                : $explicitDatafyhubNetwork;
         }
 
         if ($explicitDatafyhubNetwork !== '') {
-            $explicitNormalized = strtolower(preg_replace('/\s+/', '', (string) $explicitDatafyhubNetwork));
-            if (in_array($explicitNormalized, ['mtn', 'telecel', 'ishare', 'bigtime', 'xpress'], true)) {
+            $explicitNormalized = $this->normalizeNetwork((string) $explicitDatafyhubNetwork);
+            if (in_array($explicitNormalized, $allowedNetworks, true)) {
                 return $explicitNormalized;
             }
         }
@@ -173,10 +194,10 @@ class DatafyhubClient implements ExternalFulfillmentClient
             return 'mtn';
         }
 
-        $normalized = strtolower(preg_replace('/\s+/', '', $network));
+        $normalized = $this->normalizeNetwork($network);
 
         // Datafyhub-supported networks (per docs): mtn, telecel, ishare, bigtime, xpress
-        if (in_array($normalized, ['mtn', 'telecel', 'ishare', 'bigtime', 'xpress'], true)) {
+        if (in_array($normalized, $allowedNetworks, true)) {
             return $normalized;
         }
 
@@ -246,5 +267,10 @@ class DatafyhubClient implements ExternalFulfillmentClient
         }
 
         return 1;
+    }
+
+    private function normalizeNetwork(string $network): string
+    {
+        return strtolower(preg_replace('/\s+/', '', $network));
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Services\ExternalFulfillment\Providers;
 
 use App\Models\Order;
+use App\Models\Product;
 use App\Services\ExternalFulfillment\Contracts\ExternalFulfillmentClient;
 use App\Services\ExternalFulfillment\ExternalFulfillmentConfig;
 use Illuminate\Http\Client\ConnectionException;
@@ -24,6 +25,7 @@ class XpresPortalClient implements ExternalFulfillmentClient
         $apiSecret = (string) ($providerConfig['api_secret'] ?? '');
         $timeout = (int) ($providerConfig['timeout_seconds'] ?? 30);
         $environment = (string) ($providerConfig['environment'] ?? 'sandbox');
+        $allowedNetworks = (array) config('external_fulfillment.providers.xpresportal.networks', []);
 
         $recipient = $this->normalizeMsisdn((string) $order->recipient_phone_number);
         if ($recipient === '') {
@@ -41,7 +43,7 @@ class XpresPortalClient implements ExternalFulfillmentClient
                 'phone' => $recipient,
                 'email' => (string) $order->customer_email,
             ],
-            'network' => (string) $order->mobile_money_network,
+            'network' => $this->resolveNetwork($order, $allowedNetworks),
             'amount' => (float) ($order->amount_paid ?? 0),
             'product' => [
                 'name' => $order->display_service_name,
@@ -180,5 +182,42 @@ class XpresPortalClient implements ExternalFulfillmentClient
     private function limitMessage(string $message): string
     {
         return mb_substr($message, 0, 500);
+    }
+
+    private function resolveNetwork(Order $order, array $allowedNetworks): string
+    {
+        $preferred = $order->getAttribute('external_provider_network');
+        $normalizedPreferred = $this->normalizeNetwork($preferred);
+        if ($normalizedPreferred !== '' && (empty($allowedNetworks) || in_array($normalizedPreferred, $allowedNetworks, true))) {
+            return $normalizedPreferred;
+        }
+
+        $metadata = [];
+        if (! empty($order->vendor_service_id)) {
+            $product = Product::query()->find((int) $order->vendor_service_id);
+            $metadata = is_array($product?->decoded_description) ? $product->decoded_description : [];
+        }
+
+        $fromMappings = $this->normalizeNetwork(data_get($metadata, 'external_mappings.xpresportal.network'));
+        if ($fromMappings !== '' && (empty($allowedNetworks) || in_array($fromMappings, $allowedNetworks, true))) {
+            return $fromMappings;
+        }
+
+        $generic = $this->normalizeNetwork(data_get($metadata, 'external_network'));
+        if ($generic !== '' && (empty($allowedNetworks) || in_array($generic, $allowedNetworks, true))) {
+            return $generic;
+        }
+
+        $fallback = $this->normalizeNetwork($order->mobile_money_network);
+
+        return $fallback !== '' ? $fallback : 'MTN';
+    }
+
+    private function normalizeNetwork(mixed $network): string
+    {
+        $string = is_string($network) ? $network : '';
+        $trimmed = trim($string);
+
+        return $trimmed === '' ? '' : strtoupper(preg_replace('/\s+/', '', $trimmed));
     }
 }

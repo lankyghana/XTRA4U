@@ -33,7 +33,24 @@
             </div>
         @enderror
 
-        <div class="flex flex-wrap gap-2">
+        <div class="flex flex-wrap gap-3 items-center justify-between">
+            <form method="GET" action="{{ route('admin.withdrawals.index') }}" class="flex items-center gap-2 w-full md:w-auto">
+                <input
+                    type="text"
+                    name="q"
+                    value="{{ $search ?? '' }}"
+                    placeholder="Search vendor, reference, MoMo number"
+                    class="w-full md:w-72 px-3 py-2 border border-gray-200 rounded-lg shadow-sm focus:border-brand-deep-blue focus:ring-brand-deep-blue text-sm"
+                >
+                @if(($statusFilter ?? '') !== '')
+                    <input type="hidden" name="status" value="{{ $statusFilter }}">
+                @endif
+                <x-button type="submit" variant="primary" size="sm">Search</x-button>
+                @if(($search ?? '') !== '')
+                    <a href="{{ route('admin.withdrawals.index', array_filter(['status' => $statusFilter])) }}" class="text-sm text-gray-500 hover:text-gray-700">Clear</a>
+                @endif
+            </form>
+
             @php
                 $filters = [
                     '' => 'All',
@@ -42,12 +59,14 @@
                     \App\Models\VendorWithdrawal::STATUS_FAILED => 'Failed',
                 ];
             @endphp
-            @foreach ($filters as $value => $label)
-                <a href="{{ route('admin.withdrawals.index', array_filter(['status' => $value])) }}"
-                   class="px-3 py-2 rounded-lg text-sm font-medium {{ ($statusFilter ?? '') === $value ? 'bg-brand-deep-blue text-white' : 'text-gray-600 border border-gray-200' }}">
-                    {{ $label }}
-                </a>
-            @endforeach
+            <div class="flex flex-wrap gap-2">
+                @foreach ($filters as $value => $label)
+                    <a href="{{ route('admin.withdrawals.index', array_filter(['status' => $value, 'q' => $search ?? null])) }}"
+                       class="px-3 py-2 rounded-lg text-sm font-medium {{ ($statusFilter ?? '') === $value ? 'bg-brand-deep-blue text-white' : 'text-gray-600 border border-gray-200' }}">
+                        {{ $label }}
+                    </a>
+                @endforeach
+            </div>
         </div>
 
         <x-table :headers="['Vendor', 'MoMo Details', 'Amount', 'Status', 'Gateway', 'References', 'Timestamps', 'Error', 'Actions']">

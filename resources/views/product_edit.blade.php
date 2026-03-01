@@ -5,6 +5,8 @@
 
 @section('content')
 @php($metadata = $metadata ?? [])
+@php($activeExternalFulfillmentProviderLabel = isset($activeExternalFulfillmentProvider) ? Str::headline($activeExternalFulfillmentProvider) : 'External Provider')
+@php($externalNetwork = old('external_network', data_get($metadata, "external_mappings.{$activeExternalFulfillmentProvider}.network") ?? data_get($metadata, 'external_network') ?? data_get($metadata, 'datafyhub_network')))
 
 <div class="min-h-screen flex items-center justify-center bg-gray-100 py-10 px-4">
     <div class="w-full max-w-2xl bg-white rounded-2xl shadow-xl p-8 space-y-6">
@@ -56,15 +58,12 @@
             </div>
 
             <div>
-                <label for="datafyhub_network" class="block text-sm font-semibold text-gray-700">External Fulfillment Network (Datafyhub)</label>
-                <select name="datafyhub_network" id="datafyhub_network" class="mt-1 block w-full border-gray-200 rounded-lg shadow-sm focus:border-purple-400 focus:ring-purple-400">
-                    @php($selectedDatafyhubNetwork = old('datafyhub_network', $metadata['datafyhub_network'] ?? ''))
-                    <option value="" {{ $selectedDatafyhubNetwork === '' ? 'selected' : '' }}>Auto (recommended)</option>
-                    <option value="mtn" {{ $selectedDatafyhubNetwork === 'mtn' ? 'selected' : '' }}>mtn</option>
-                    <option value="telecel" {{ $selectedDatafyhubNetwork === 'telecel' ? 'selected' : '' }}>telecel</option>
-                    <option value="ishare" {{ $selectedDatafyhubNetwork === 'ishare' ? 'selected' : '' }}>ishare</option>
-                    <option value="bigtime" {{ $selectedDatafyhubNetwork === 'bigtime' ? 'selected' : '' }}>bigtime</option>
-                    <option value="xpress" {{ $selectedDatafyhubNetwork === 'xpress' ? 'selected' : '' }}>xpress</option>
+                <label for="external_network" class="block text-sm font-semibold text-gray-700">External Fulfillment Network ({{ $activeExternalFulfillmentProviderLabel }})</label>
+                <select name="external_network" id="external_network" class="mt-1 block w-full border-gray-200 rounded-lg shadow-sm focus:border-purple-400 focus:ring-purple-400">
+                    <option value="" {{ $externalNetwork === '' ? 'selected' : '' }}>Auto (recommended)</option>
+                    @foreach($providerNetworks as $network)
+                        <option value="{{ $network }}" {{ $externalNetwork === $network ? 'selected' : '' }}>{{ $network }}</option>
+                    @endforeach
                 </select>
                 <p class="text-xs text-gray-400 mt-1">Optional. Used only for External Fulfillment; customers won’t see this.</p>
             </div>

@@ -14,10 +14,30 @@ class AdminWithdrawalController extends Controller
     public function index(Request $request): View
     {
         $statusFilter = $request->query('status');
+        $search = trim((string) $request->query('q', ''));
         $query = VendorWithdrawal::with('vendor')->latest();
 
         if ($statusFilter && in_array($statusFilter, VendorWithdrawal::statuses(), true)) {
             $query->where('status', $statusFilter);
+        }
+
+        if ($search !== '') {
+            $searchNumeric = ctype_digit($search) ? (int) $search : null;
+            $query->where(function ($q) use ($search, $searchNumeric) {
+                $q->where('reference', 'like', "%{$search}%")
+                    ->orWhere('payout_reference', 'like', "%{$search}%")
+                    ->orWhere('payout_transaction_id', 'like', "%{$search}%")
+                    ->orWhere('momo_number', 'like', "%{$search}%")
+                    ->orWhere('momo_account_name', 'like', "%{$search}%")
+                    ->orWhereHas('vendor', function ($vq) use ($search, $searchNumeric) {
+                        $vq->where('name', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%");
+
+                        if (! is_null($searchNumeric)) {
+                            $vq->orWhere('id', $searchNumeric);
+                        }
+                    });
+            });
         }
 
         $withdrawals = $query->paginate(15)->withQueryString();
@@ -33,6 +53,7 @@ class AdminWithdrawalController extends Controller
         return view('admin.withdrawals', [
             'withdrawals' => $withdrawals,
             'statusFilter' => $statusFilter,
+            'search' => $search,
             'summary' => $summary,
         ]);
     }

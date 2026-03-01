@@ -51,15 +51,14 @@
                 </div>
             </div>
 
+            @php($activeExternalFulfillmentProviderLabel = isset($activeExternalFulfillmentProvider) ? Str::headline($activeExternalFulfillmentProvider) : 'External Provider')
             <div>
-                <label for="datafyhub_network" class="block text-sm font-semibold text-gray-700">External Fulfillment Network (Datafyhub)</label>
-                <select name="datafyhub_network" id="datafyhub_network" class="mt-1 block w-full border-gray-200 rounded-lg shadow-sm focus:border-purple-400 focus:ring-purple-400">
-                    <option value="" {{ old('datafyhub_network') === '' ? 'selected' : '' }}>Auto (recommended)</option>
-                    <option value="mtn" {{ old('datafyhub_network') === 'mtn' ? 'selected' : '' }}>mtn</option>
-                    <option value="telecel" {{ old('datafyhub_network') === 'telecel' ? 'selected' : '' }}>telecel</option>
-                    <option value="ishare" {{ old('datafyhub_network') === 'ishare' ? 'selected' : '' }}>ishare</option>
-                    <option value="bigtime" {{ old('datafyhub_network') === 'bigtime' ? 'selected' : '' }}>bigtime</option>
-                    <option value="xpress" {{ old('datafyhub_network') === 'xpress' ? 'selected' : '' }}>xpress</option>
+                <label for="external_network" class="block text-sm font-semibold text-gray-700">External Fulfillment Network ({{ $activeExternalFulfillmentProviderLabel }})</label>
+                <select name="external_network" id="external_network" class="mt-1 block w-full border-gray-200 rounded-lg shadow-sm focus:border-purple-400 focus:ring-purple-400">
+                    <option value="" {{ old('external_network') === '' ? 'selected' : '' }}>Auto (recommended)</option>
+                    @foreach($providerNetworks as $network)
+                        <option value="{{ $network }}" {{ old('external_network') === $network ? 'selected' : '' }}>{{ $network }}</option>
+                    @endforeach
                 </select>
                 <p class="text-xs text-gray-400 mt-1">Optional. Used only for External Fulfillment; customers won’t see this.</p>
             </div>
