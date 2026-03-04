@@ -328,6 +328,8 @@
                                     <x-badge variant="completed">Approved</x-badge>
                                 @elseif ($withdrawal->status === 'rejected')
                                     <x-badge variant="warning">Rejected</x-badge>
+                                @elseif ($withdrawal->status === 'cancelled')
+                                    <x-badge variant="warning">Cancelled</x-badge>
                                 @else
                                     <x-badge variant="pending">Pending</x-badge>
                                 @endif

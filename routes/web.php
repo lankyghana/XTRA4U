@@ -305,6 +305,7 @@ Route::post('/admin/logout', [AdminAuthController::class, 'logout'])->name('admi
 Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/', [AdminController::class, 'dashboard'])->name('dashboard');
     Route::resource('vendors', AdminVendorController::class)->only(['index', 'update', 'destroy']);
+    Route::post('vendors/{vendor}/adjust-balance', [AdminVendorController::class, 'adjustBalance'])->name('vendors.adjust-balance');
     Route::resource('network-services', AdminNetworkServiceController::class)
         ->except(['show'])
         ->parameters(['network-services' => 'network_service']);
@@ -320,6 +321,7 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
     Route::get('wallet-topups', [AdminWalletTopupController::class, 'index'])->name('wallet-topups.index');
     Route::get('withdrawals', [AdminWithdrawalController::class, 'index'])->name('withdrawals.index');
     Route::post('withdrawals/{withdrawal}/refresh', [AdminWithdrawalController::class, 'refresh'])->name('withdrawals.refresh');
+    Route::post('withdrawals/{withdrawal}/cancel', [AdminWithdrawalController::class, 'cancel'])->name('withdrawals.cancel');
 
     // High-volume recipient number audit log
     Route::get('recipient-numbers', [\App\Http\Controllers\AdminRecipientNumberController::class, 'index'])->name('recipient-numbers.index');

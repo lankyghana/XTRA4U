@@ -3,11 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\ProcessVendorWithdrawalPayout;
+use App\Models\Vendor;
 use App\Models\VendorWithdrawal;
+use App\Models\WalletLedger;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
+use Illuminate\Validation\ValidationException;
 
 class AdminWithdrawalController extends Controller
 {
@@ -46,6 +50,7 @@ class AdminWithdrawalController extends Controller
             'processing' => VendorWithdrawal::where('status', VendorWithdrawal::STATUS_PROCESSING)->count(),
             'approved' => VendorWithdrawal::where('status', VendorWithdrawal::STATUS_APPROVED)->count(),
             'failed' => VendorWithdrawal::where('status', VendorWithdrawal::STATUS_FAILED)->count(),
+            'cancelled' => VendorWithdrawal::where('status', VendorWithdrawal::STATUS_CANCELLED)->count(),
             'processing_amount' => VendorWithdrawal::where('status', VendorWithdrawal::STATUS_PROCESSING)->sum('amount'),
             'total_amount' => VendorWithdrawal::sum('amount'),
         ];
@@ -90,5 +95,75 @@ class AdminWithdrawalController extends Controller
         }
 
         return back()->with('status', 'Withdrawal refreshed: still processing (provider status pending).');
+    }
+
+    public function cancel(Request $request, VendorWithdrawal $withdrawal): RedirectResponse
+    {
+        $data = $request->validate([
+            'note' => ['required', 'string', 'min:5', 'max:500'],
+        ]);
+
+        if ($withdrawal->status !== VendorWithdrawal::STATUS_PROCESSING) {
+            return back()->withErrors([
+                'withdrawal' => 'Only withdrawals in "processing" can be cancelled.',
+            ]);
+        }
+
+        if ($withdrawal->paid_at || $withdrawal->status === VendorWithdrawal::STATUS_APPROVED) {
+            return back()->withErrors([
+                'withdrawal' => 'Paid/approved withdrawals cannot be cancelled.',
+            ]);
+        }
+
+        DB::transaction(function () use ($withdrawal, $data, $request) {
+            $lockedWithdrawal = VendorWithdrawal::whereKey($withdrawal->id)->lockForUpdate()->firstOrFail();
+
+            if ($lockedWithdrawal->status !== VendorWithdrawal::STATUS_PROCESSING) {
+                throw ValidationException::withMessages([
+                    'withdrawal' => 'Only withdrawals in "processing" can be cancelled.',
+                ]);
+            }
+
+            $vendor = Vendor::whereKey($lockedWithdrawal->vendor_id)->lockForUpdate()->firstOrFail();
+
+            $amount = (float) $lockedWithdrawal->amount;
+
+            $vendor->increment('wallet_balance', $amount);
+            $vendor->refresh();
+
+            WalletLedger::create([
+                'vendor_id' => $vendor->id,
+                'type' => 'credit',
+                'source' => 'withdrawal_reversal',
+                'amount' => $amount,
+                'balance_after' => (float) $vendor->wallet_balance,
+                'metadata' => [
+                    'withdrawal_id' => $lockedWithdrawal->id,
+                    'admin_id' => auth()->id(),
+                    'ip_address' => $request->ip(),
+                    'reason' => $data['note'],
+                    'action' => 'withdrawal_cancelled',
+                ],
+            ]);
+
+            $lockedWithdrawal->update([
+                'status' => VendorWithdrawal::STATUS_CANCELLED,
+                'notes' => $data['note'],
+                'error_message' => null,
+                'payout_status' => 'cancelled',
+                'refunded_at' => now(),
+            ]);
+        });
+
+        Log::info('Admin cancelled vendor withdrawal', [
+            'admin_id' => auth()->id(),
+            'admin_ip' => $request->ip(),
+            'withdrawal_id' => $withdrawal->id,
+            'vendor_id' => $withdrawal->vendor_id,
+            'amount' => $withdrawal->amount,
+            'note' => $data['note'],
+        ]);
+
+        return back()->with('status', 'Withdrawal cancelled successfully.');
     }
 }

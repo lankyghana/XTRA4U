@@ -100,8 +100,11 @@
                             <x-badge variant="pending">Pending</x-badge>
                         @endif
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium" x-data="{ showAdjust: false }">
                         <div class="flex flex-wrap justify-end gap-2">
+                            <button type="button" @click="showAdjust = !showAdjust" class="px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold">
+                                Adjust Balance
+                            </button>
                             @if ($vendor->affiliate_vendor_id)
                                 <form method="POST" action="{{ route('admin.vendors.disable-affiliate', $vendor) }}" onsubmit="return confirm('Disable this affiliate relationship?');">
                                     @csrf
@@ -132,6 +135,30 @@
                                     Delete
                                 </button>
                             </form>
+                        </div>
+
+                        <div class="mt-3 text-left" x-show="showAdjust" x-cloak>
+                            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+                                <div class="flex items-center justify-between text-xs text-gray-600">
+                                    <span>Current balance: <strong>GHS {{ number_format($vendor->wallet_balance, 2) }}</strong></span>
+                                    <button type="button" class="text-gray-500 hover:text-gray-700" @click="showAdjust = false">Close</button>
+                                </div>
+                                <form method="POST" action="{{ route('admin.vendors.adjust-balance', $vendor) }}" class="space-y-2" onsubmit="return confirm('Subtract from this vendor balance? This cannot be undone.');">
+                                    @csrf
+                                    <div>
+                                        <label class="block text-xs font-semibold text-gray-700">Amount</label>
+                                        <input type="number" name="amount" min="0.01" step="0.01" required class="w-full mt-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue" placeholder="e.g. 50.00">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-semibold text-gray-700">Reason (required)</label>
+                                        <textarea name="reason" minlength="5" required class="w-full mt-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue" rows="2" placeholder="Describe why this balance is being reduced"></textarea>
+                                    </div>
+                                    <p class="text-[11px] text-red-600">This action subtracts funds and cannot be undone.</p>
+                                    <div class="flex justify-end">
+                                        <x-button type="submit" variant="danger" size="sm">Confirm Adjustment</x-button>
+                                    </div>
+                                </form>
+                            </div>
                         </div>
                     </td>
                 </tr>

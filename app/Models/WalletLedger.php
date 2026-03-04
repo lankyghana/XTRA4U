@@ -9,7 +9,7 @@ class WalletLedger extends Model
     protected $table = 'wallet_ledgers';
 
     protected $fillable = [
-        'vendor_id', 'type', 'amount', 'balance_after', 'metadata',
+        'vendor_id', 'type', 'source', 'amount', 'balance_after', 'metadata',
     ];
 
     protected $casts = [

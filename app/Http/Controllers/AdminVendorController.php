@@ -4,10 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Mail\VendorApprovedMail;
 use App\Models\Vendor;
+use App\Models\WalletLedger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 class AdminVendorController extends Controller
 {
@@ -98,5 +102,51 @@ class AdminVendorController extends Controller
 		$vendor->forceFill(['affiliate_vendor_id' => null])->save();
 
 		return back()->with('status', 'Affiliate relationship disabled successfully.');
+	}
+
+	public function adjustBalance(Request $request, Vendor $vendor): RedirectResponse
+	{
+		$data = $request->validate([
+			'amount' => ['required', 'numeric', 'min:0.01'],
+			'reason' => ['required', 'string', 'min:5'],
+		]);
+
+		DB::transaction(function () use ($vendor, $data, $request) {
+			$lockedVendor = Vendor::whereKey($vendor->id)->lockForUpdate()->firstOrFail();
+			$amount = (float) $data['amount'];
+
+			if ($lockedVendor->wallet_balance < $amount) {
+				throw ValidationException::withMessages([
+					'amount' => 'Insufficient vendor balance.',
+				]);
+			}
+
+			$lockedVendor->decrement('wallet_balance', $amount);
+			$lockedVendor->refresh();
+
+			WalletLedger::create([
+				'vendor_id' => $lockedVendor->id,
+				'type' => 'debit',
+				'source' => 'admin_adjustment',
+				'amount' => $amount,
+				'balance_after' => (float) $lockedVendor->wallet_balance,
+				'metadata' => [
+					'reason' => $data['reason'],
+					'admin_id' => auth()->id(),
+					'ip_address' => $request->ip(),
+					'action' => 'admin_debit',
+				],
+			]);
+		});
+
+		Log::info('Admin adjusted vendor wallet balance', [
+			'admin_id' => auth()->id(),
+			'admin_ip' => $request->ip(),
+			'vendor_id' => $vendor->id,
+			'amount' => $data['amount'],
+			'reason' => $data['reason'],
+		]);
+
+		return back()->with('status', 'Balance adjusted successfully.');
 	}
 }

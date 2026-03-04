@@ -19,6 +19,10 @@
                 <p class="text-xs uppercase text-red-100 font-medium">Failed</p>
                 <p class="text-2xl font-bold text-white mt-1">{{ $summary['failed'] }}</p>
             </div>
+            <div class="bg-gradient-to-br from-gray-500 to-gray-700 rounded-xl px-5 py-4 shadow-lg transform hover:scale-105 transition-transform duration-200">
+                <p class="text-xs uppercase text-gray-100 font-medium">Cancelled</p>
+                <p class="text-2xl font-bold text-white mt-1">{{ $summary['cancelled'] }}</p>
+            </div>
         </div>
 
         @if (session('status'))
@@ -57,6 +61,7 @@
                     \App\Models\VendorWithdrawal::STATUS_PROCESSING => 'Processing',
                     \App\Models\VendorWithdrawal::STATUS_APPROVED => 'Approved',
                     \App\Models\VendorWithdrawal::STATUS_FAILED => 'Failed',
+                    \App\Models\VendorWithdrawal::STATUS_CANCELLED => 'Cancelled',
                 ];
             @endphp
             <div class="flex flex-wrap gap-2">
@@ -113,6 +118,9 @@
                                 @case(\App\Models\VendorWithdrawal::STATUS_FAILED)
                                     <x-badge variant="warning">Failed</x-badge>
                                     @break
+                                @case(\App\Models\VendorWithdrawal::STATUS_CANCELLED)
+                                    <x-badge variant="pending">Cancelled</x-badge>
+                                    @break
                                 @case(\App\Models\VendorWithdrawal::STATUS_PROCESSING)
                                     <x-badge variant="processing">Processing</x-badge>
                                     @break
@@ -153,15 +161,23 @@
                         @endphp
 
                         @if($isProcessing)
-                            <form method="POST" action="{{ route('admin.withdrawals.refresh', $withdrawal) }}">
-                                @csrf
-                                <x-button type="submit" variant="outline" size="sm" :disabled="$cooldownActive" title="{{ $cooldownActive ? 'Please wait a moment before retrying.' : 'Refresh payout status now' }}">
-                                    Refresh
-                                </x-button>
-                            </form>
-                            @if($cooldownActive)
-                                <p class="text-xs text-gray-400 mt-1">Try again shortly</p>
-                            @endif
+                            <div class="flex flex-col gap-2">
+                                <form method="POST" action="{{ route('admin.withdrawals.refresh', $withdrawal) }}">
+                                    @csrf
+                                    <x-button type="submit" variant="outline" size="sm" :disabled="$cooldownActive" title="{{ $cooldownActive ? 'Please wait a moment before retrying.' : 'Refresh payout status now' }}">
+                                        Refresh
+                                    </x-button>
+                                </form>
+                                <form method="POST" action="{{ route('admin.withdrawals.cancel', $withdrawal) }}" class="space-y-1" onsubmit="return confirm('Cancel and refund this withdrawal? This cannot be undone.');">
+                                    @csrf
+                                    <input type="text" name="note" required minlength="5" maxlength="500" placeholder="Reason for cancellation" class="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue">
+                                    <x-button type="submit" variant="danger" size="sm">Cancel & Refund</x-button>
+                                    <p class="text-[11px] text-red-600">This action cannot be undone.</p>
+                                </form>
+                                @if($cooldownActive)
+                                    <p class="text-xs text-gray-400">Try again shortly</p>
+                                @endif
+                            </div>
                         @else
                             <span class="text-gray-400">—</span>
                         @endif
