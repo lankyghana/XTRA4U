@@ -303,7 +303,8 @@ class PaymentGatewayConfig extends Model
                 'config_fields_by_type' => [
                     self::TYPE_PAYMENT_COLLECTION => [
                         'api_user' => 'API Username',
-                        'public_key' => 'Public API Key',
+                        'api_key' => 'API Key',
+                        'public_key' => 'Public API Key (legacy/optional)',
                         'account_number' => 'Account Number',
                         'business_email' => 'Business Email',
                         'webhook_secret' => 'Webhook Secret (optional)',
@@ -389,7 +390,7 @@ class PaymentGatewayConfig extends Model
             // We verify payment via Moolre's status API (server-to-server) instead of trusting the webhook payload.
             if ($this->gateway_name === self::GATEWAY_MOOLRE
                 && $this->gateway_type === self::TYPE_PAYMENT_COLLECTION
-                && $field === 'webhook_secret'
+                && in_array($field, ['webhook_secret', 'public_key', 'api_key'], true)
             ) {
                 continue;
             }
@@ -410,6 +411,19 @@ class PaymentGatewayConfig extends Model
                 if (filter_var($value, FILTER_VALIDATE_URL) === false) {
                     return false;
                 }
+            }
+        }
+
+        // Moolre collection credential compatibility:
+        // prefer api_key, but allow legacy public_key-only configs.
+        if ($this->gateway_name === self::GATEWAY_MOOLRE
+            && $this->gateway_type === self::TYPE_PAYMENT_COLLECTION
+        ) {
+            $apiKey = trim((string) ($config['api_key'] ?? ''));
+            $publicKey = trim((string) ($config['public_key'] ?? ''));
+
+            if ($apiKey === '' && $publicKey === '') {
+                return false;
             }
         }
 

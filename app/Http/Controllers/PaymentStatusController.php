@@ -16,7 +16,7 @@ class PaymentStatusController extends Controller
         if (!isset($result['success']) || !$result['success']) {
             return response()->json([
                 'success' => false,
-                'status' => 'pending',
+                'status' => 'failed',
                 'message' => $result['message'] ?? 'Unable to retrieve payment status',
             ], 200);
         }
@@ -26,7 +26,8 @@ class PaymentStatusController extends Controller
         $status = match ($rawStatus) {
             'success', 'paid' => 'paid',
             'failed', 'error' => 'failed',
-            default => 'pending',
+            'pending', 'processing', 'initiated', 'unknown' => 'pending',
+            default => 'failed',
         };
 
         return response()->json([

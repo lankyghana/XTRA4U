@@ -18,7 +18,10 @@ class PaymentCallbackController extends Controller
 
 	public function handle(Request $request)
 	{
-		$reference = $request->input('reference') ?? $request->input('trxref');
+		$reference = $request->input('reference')
+			?? $request->input('trxref')
+			?? $request->input('externalref')
+			?? $request->input('externalRef');
 		if (! $reference) {
 			return response()->json(['success' => false, 'message' => 'Missing payment reference'], 400);
 		}

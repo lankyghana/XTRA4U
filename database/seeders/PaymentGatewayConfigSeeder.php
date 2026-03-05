@@ -221,6 +221,7 @@ class PaymentGatewayConfigSeeder extends Seeder
                 'environment' => env('APP_ENV') === 'production' ? PaymentGatewayConfig::ENV_LIVE : PaymentGatewayConfig::ENV_SANDBOX,
                 'config_data' => [
                     'api_user' => env('MOOLRE_API_USER', ''),
+                    'api_key' => env('MOOLRE_API_KEY', env('MOOLRE_PUBLIC_KEY', '')),
                     'public_key' => env('MOOLRE_PUBLIC_KEY', ''),
                     'account_number' => env('MOOLRE_ACCOUNT_NUMBER', ''),
                     'business_email' => env('MOOLRE_BUSINESS_EMAIL', ''),

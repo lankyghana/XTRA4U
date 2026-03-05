@@ -20,9 +20,21 @@ class MoolreWebhookController extends Controller
         $payload = $request->all();
         $data = (array) ($payload['data'] ?? []);
 
-        $externalRef = (string) ($data['externalref'] ?? '');
-        $txStatus = isset($data['txstatus']) ? (int) $data['txstatus'] : null;
-        $secret = (string) ($data['secret'] ?? '');
+        $externalRef = (string) (
+            $data['externalref']
+                ?? $data['externalRef']
+                ?? $data['reference']
+                ?? $data['trxref']
+                ?? $payload['externalref']
+                ?? $payload['externalRef']
+                ?? $payload['reference']
+                ?? $payload['trxref']
+                ?? ''
+        );
+        $txStatus = isset($data['txstatus'])
+            ? (int) $data['txstatus']
+            : (isset($payload['txstatus']) ? (int) $payload['txstatus'] : null);
+        $secret = (string) ($data['secret'] ?? $payload['secret'] ?? '');
 
         if ($externalRef === '' || $txStatus === null) {
             return response()->json(['success' => false, 'message' => 'Invalid payload'], 400);

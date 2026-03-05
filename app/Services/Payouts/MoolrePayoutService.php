@@ -52,6 +52,31 @@ class MoolrePayoutService implements HandlesPayouts
         return (string) $this->config->getConfig('currency', 'GHS');
     }
 
+    protected function responseMessage(array $payload, string $fallback): string
+    {
+        $message = $payload['message'] ?? null;
+
+        if (is_array($message)) {
+            return (string) ($message[0] ?? $fallback);
+        }
+
+        if (is_string($message) && trim($message) !== '') {
+            return $message;
+        }
+
+        return $fallback;
+    }
+
+    protected function mapGatewayStatus(int $status): string
+    {
+        return match ($status) {
+            1 => 'completed',
+            2 => 'pending',
+            0 => 'failed',
+            default => 'unknown',
+        };
+    }
+
     protected function http(array $headers): PendingRequest
     {
         $client = Http::withHeaders($headers)
@@ -133,15 +158,23 @@ class MoolrePayoutService implements HandlesPayouts
             // Step 2: Initiate transfer
             $transferPayload = [
                 'type' => 1,
-                'channel' => $channel,
-                'currency' => $this->currency(),
                 'amount' => (string) ((float) $withdrawal->amount),
+                'currency' => $this->currency(),
+                'channel' => $channel,
                 'receiver' => $receiver,
-                'sublistid' => '',
                 'externalref' => $externalRef,
-                'reference' => 'XTRA4U Vendor Payout - ' . $externalRef,
+                'narration' => 'Vendor withdrawal',
                 'accountnumber' => $this->accountNumber(),
             ];
+
+            Log::info('Moolre transfer initiation request', [
+                'withdrawal_id' => $withdrawal->id,
+                'reference' => $externalRef,
+                'amount' => (string) ((float) $withdrawal->amount),
+                'currency' => $this->currency(),
+                'channel' => $channel,
+                'receiver' => $receiver,
+            ]);
 
             $transferResponse = $this->http([
                 'X-API-USER' => $this->apiUser(),
@@ -151,6 +184,8 @@ class MoolrePayoutService implements HandlesPayouts
             ])->post($this->baseUrl() . '/open/transact/transfer', $transferPayload);
 
             $transferData = $transferResponse->json();
+            $message = $this->responseMessage($transferData, 'Transfer failed.');
+            $transactionId = data_get($transferData, 'data.transactionid');
 
             if (!$transferResponse->successful()) {
                 Log::error('Moolre initiate-transfer failed', [
@@ -160,44 +195,58 @@ class MoolrePayoutService implements HandlesPayouts
                     'response' => $transferData,
                 ]);
 
-                return [
-                    'success' => false,
-                    'message' => $transferData['message'][0] ?? $transferData['message'] ?? 'Transfer failed.',
-                    'reference' => null,
-                ];
+                // Network/timeouts can be ambiguous; query status endpoint before deciding final state.
+                $statusResult = $this->checkTransferStatus($externalRef);
+                if (!empty($transactionId) && empty($statusResult['transaction_id'] ?? null)) {
+                    $statusResult['transaction_id'] = $transactionId;
+                }
+                $statusResult['reference'] = $externalRef;
+                if (!empty($message) && empty($statusResult['message'] ?? null)) {
+                    $statusResult['message'] = $message;
+                }
+
+                return $statusResult;
             }
 
-            $txStatus = (int) data_get($transferData, 'data.txstatus', 3);
-            $transactionId = data_get($transferData, 'data.transactionid');
+            $transferStatus = (int) ($transferData['status'] ?? -1);
+            $mappedStatus = $this->mapGatewayStatus($transferStatus);
 
-            if ($txStatus === 1) {
+            if ($mappedStatus === 'completed') {
                 return [
                     'success' => true,
-                    'message' => 'Payout completed successfully via Moolre',
+                    'message' => $message !== '' ? $message : 'Payout completed successfully via Moolre',
                     'reference' => $externalRef,
                     'transaction_id' => $transactionId,
                     'status' => 'completed',
                 ];
             }
 
-            if ($txStatus === 0 || $txStatus === 3) {
-                // Pending/Unknown: do not assume failure. Per docs, confirm using transfer status.
+            if ($mappedStatus === 'pending') {
                 $statusResult = $this->checkTransferStatus($externalRef);
                 if (!empty($transactionId) && empty($statusResult['transaction_id'] ?? null)) {
                     $statusResult['transaction_id'] = $transactionId;
                 }
-                // Ensure we persist/use the same external reference.
                 $statusResult['reference'] = $externalRef;
                 return $statusResult;
             }
 
-            return [
-                'success' => false,
-                'message' => 'Payout failed via Moolre',
-                'reference' => $externalRef,
-                'transaction_id' => $transactionId,
-                'status' => 'failed',
-            ];
+            if ($mappedStatus === 'failed') {
+                return [
+                    'success' => false,
+                    'message' => $message !== '' ? $message : 'Payout failed via Moolre',
+                    'reference' => $externalRef,
+                    'transaction_id' => $transactionId,
+                    'status' => 'failed',
+                ];
+            }
+
+            // Unknown response shape: confirm via status endpoint.
+            $statusResult = $this->checkTransferStatus($externalRef);
+            if (!empty($transactionId) && empty($statusResult['transaction_id'] ?? null)) {
+                $statusResult['transaction_id'] = $transactionId;
+            }
+            $statusResult['reference'] = $externalRef;
+            return $statusResult;
         } catch (\Throwable $e) {
             Log::error('Moolre payout exception', [
                 'withdrawal_id' => $withdrawal->id,
@@ -215,13 +264,19 @@ class MoolrePayoutService implements HandlesPayouts
     protected function checkTransferStatus(string $externalRef): array
     {
         $payload = [
-            'type' => 1,
+            'type' => 2,
             'idtype' => 1,
             'id' => $externalRef,
             'accountnumber' => $this->accountNumber(),
         ];
 
         try {
+            Log::info('Moolre transfer status request', [
+                'reference' => $externalRef,
+                'type' => 2,
+                'idtype' => 1,
+            ]);
+
             $response = $this->http([
                 'X-API-USER' => $this->apiUser(),
                 'X-API-KEY' => $this->apiKey(),
@@ -230,8 +285,9 @@ class MoolrePayoutService implements HandlesPayouts
             ])->post($this->baseUrl() . '/open/transact/status', $payload);
 
             $data = $response->json();
+            $message = $this->responseMessage($data, 'Unable to confirm payout status.');
 
-            if (!$response->successful() || (int) ($data['status'] ?? 0) !== 1) {
+            if (!$response->successful()) {
                 $apiKey = $this->apiKey();
                 Log::warning('Moolre transfer status check failed', [
                     'reference' => $externalRef,
@@ -245,43 +301,57 @@ class MoolrePayoutService implements HandlesPayouts
                 ]);
 
                 return [
-                    'success' => null,
-                    'pending' => true,
-                    'message' => $data['message'] ?? 'Unable to confirm payout status yet.',
-                    'reference' => $externalRef,
-                    'status' => 'pending',
-                ];
-            }
-
-            $txStatus = (int) data_get($data, 'data.txstatus', 3);
-
-            if ($txStatus === 1) {
-                return [
-                    'success' => true,
-                    'message' => $data['message'] ?? 'Payout completed successfully via Moolre',
-                    'reference' => $externalRef,
-                    'transaction_id' => data_get($data, 'data.transactionid'),
-                    'status' => 'completed',
-                ];
-            }
-
-            if ($txStatus === 2) {
-                return [
                     'success' => false,
-                    'message' => $data['message'] ?? 'Payout failed via Moolre',
+                    'pending' => false,
+                    'message' => $message,
                     'reference' => $externalRef,
-                    'transaction_id' => data_get($data, 'data.transactionid'),
                     'status' => 'failed',
                 ];
             }
 
+            $apiStatus = (int) ($data['status'] ?? -1);
+            $mappedStatus = $this->mapGatewayStatus($apiStatus);
+            $transactionId = data_get($data, 'data.transactionid');
+
+            if ($mappedStatus === 'completed') {
+                return [
+                    'success' => true,
+                    'message' => $message,
+                    'reference' => $externalRef,
+                    'transaction_id' => $transactionId,
+                    'status' => 'completed',
+                ];
+            }
+
+            if ($mappedStatus === 'failed') {
+                return [
+                    'success' => false,
+                    'pending' => false,
+                    'message' => $message,
+                    'reference' => $externalRef,
+                    'transaction_id' => $transactionId,
+                    'status' => 'failed',
+                ];
+            }
+
+            if ($mappedStatus === 'pending') {
+                return [
+                    'success' => null,
+                    'pending' => true,
+                    'message' => $message,
+                    'reference' => $externalRef,
+                    'transaction_id' => $transactionId,
+                    'status' => 'pending',
+                ];
+            }
+
             return [
-                'success' => null,
-                'pending' => true,
-                'message' => $data['message'] ?? 'Payout is still pending via Moolre',
+                'success' => false,
+                'pending' => false,
+                'message' => $message,
                 'reference' => $externalRef,
-                'transaction_id' => data_get($data, 'data.transactionid'),
-                'status' => 'pending',
+                'transaction_id' => $transactionId,
+                'status' => 'failed',
             ];
         } catch (\Throwable $e) {
             Log::warning('Moolre transfer status check exception', [
@@ -290,11 +360,11 @@ class MoolrePayoutService implements HandlesPayouts
             ]);
 
             return [
-                'success' => null,
-                'pending' => true,
-                'message' => 'Unable to confirm payout status yet.',
+                'success' => false,
+                'pending' => false,
+                'message' => 'Unable to confirm payout status.',
                 'reference' => $externalRef,
-                'status' => 'pending',
+                'status' => 'failed',
             ];
         }
     }

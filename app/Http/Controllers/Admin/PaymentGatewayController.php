@@ -407,10 +407,14 @@ class PaymentGatewayController extends Controller
                     }
                     // Collections typically use a "public_key" (JWT) while payouts use "api_key".
                     if (isset($configData['public_key']) && $configData['public_key'] !== '') {
+                        $envContent = $this->setEnvValue($envContent, 'MOOLRE_PUBLIC_KEY', $configData['public_key']);
                         $envContent = $this->setEnvValue($envContent, 'MOOLRE_API_PUBKEY', $configData['public_key']);
                     }
                     if (isset($configData['api_key']) && $configData['api_key'] !== '') {
                         $envContent = $this->setEnvValue($envContent, 'MOOLRE_API_KEY', $configData['api_key']);
+                    } elseif (isset($configData['public_key']) && $configData['public_key'] !== '') {
+                        // Backward compatibility: if only public_key is configured, keep MOOLRE_API_KEY populated.
+                        $envContent = $this->setEnvValue($envContent, 'MOOLRE_API_KEY', $configData['public_key']);
                     }
                     if (isset($configData['account_number']) && $configData['account_number'] !== '') {
                         $envContent = $this->setEnvValue($envContent, 'MOOLRE_ACCOUNT_NUMBER', $configData['account_number']);
