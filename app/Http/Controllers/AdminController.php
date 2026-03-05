@@ -21,6 +21,7 @@ class AdminController extends Controller
         $totalRevenue = Transaction::whereIn('payment_status', ['completed', 'successful'])->sum('commission_amount');
         $transactionsToday = Transaction::whereDate('created_at', now()->toDateString())->count();
         $ordersToday = Order::whereDate('created_at', now()->toDateString())->count();
+        $totalVendorBalances = Vendor::sum('wallet_balance');
 
         $pendingWithdrawals = VendorWithdrawal::where('status', VendorWithdrawal::STATUS_PROCESSING)->count();
 
@@ -33,6 +34,7 @@ class AdminController extends Controller
             'totalRevenue' => $totalRevenue,
             'transactionsToday' => $transactionsToday,
             'ordersToday' => $ordersToday,
+            'totalVendorBalances' => $totalVendorBalances,
             'pendingWithdrawals' => $pendingWithdrawals,
             'manualQueueLastRequestedAt' => $manualQueueLastRequestedAt,
             'manualQueueLastFinishedAt' => $manualQueueLastFinishedAt,

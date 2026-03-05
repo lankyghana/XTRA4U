@@ -14,7 +14,7 @@
         </button>
     </x-slot>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
         <!-- Total Revenue Card -->
         <div class="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
             <div class="px-6 py-5">
@@ -97,6 +97,28 @@
                             <dt class="text-sm font-medium text-purple-100 truncate">Orders Today</dt>
                             <dd class="text-2xl font-bold text-white">{{ $ordersToday }}</dd>
                             <dd class="text-sm text-purple-100 mt-1">Submitted today</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total Vendor Balances Card -->
+        <div class="bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
+            <div class="px-6 py-5">
+                <div class="flex items-center">
+                    <div class="shrink-0">
+                        <div class="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                            <svg class="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1.05a5.002 5.002 0 013.9 3.9H16a1 1 0 110 2h-1.1a5.002 5.002 0 01-3.9 3.9V15a1 1 0 11-2 0v-1.1a5.002 5.002 0 01-3.9-3.9H4a1 1 0 110-2h1.1a5.002 5.002 0 013.9-3.9V3a1 1 0 011-1zm0 4a3 3 0 100 6 3 3 0 000-6z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-amber-100 truncate">Total Vendor Balances</dt>
+                            <dd class="text-2xl font-bold text-white">GHS {{ number_format($totalVendorBalances, 2) }}</dd>
+                            <dd class="text-sm text-amber-100 mt-1">Combined wallet balances</dd>
                         </dl>
                     </div>
                 </div>

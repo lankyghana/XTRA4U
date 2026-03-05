@@ -177,4 +177,45 @@ class VendorDashboardTest extends TestCase
         // Use raw HTML assert to avoid strip_tags normalization differences in test runner
         $response->assertSee('#' . $order->id, false);
     }
+
+    public function test_vendor_dashboard_shows_paid_afa_registration_in_recent_orders()
+    {
+        $vendor = Vendor::factory()->create([
+            'is_approved' => true,
+            'password' => bcrypt('password'),
+        ]);
+
+        AfaRegistration::create([
+            'vendor_id' => $vendor->id,
+            'reseller_vendor_id' => null,
+            'full_name' => 'Dashboard AFA User',
+            'id_number' => 'GHA-123456789-0',
+            'id_type' => AfaRegistration::ID_GHANA_CARD,
+            'date_of_birth' => '1992-05-06',
+            'phone_number' => '0247000000',
+            'location' => 'Accra',
+            'region' => 'Greater Accra',
+            'occupation' => null,
+            'amount' => 120.00,
+            'vendor_price' => 120.00,
+            'platform_commission' => 2.40,
+            'vendor_earning' => 117.60,
+            'reseller_earning' => 0.00,
+            'is_reseller_order' => false,
+            'payment_reference' => 'PAYREF-AFA-DASH-1',
+            'payment_gateway' => 'test',
+            'payment_status' => AfaRegistration::PAYMENT_COMPLETED,
+            'payment_completed_at' => now(),
+            'status' => AfaRegistration::STATUS_PROCESSING,
+            'reference' => 'AFA-DASH-0001',
+        ]);
+
+        $this->actingAs($vendor, 'vendor');
+        $response = $this->get('/vendor/dashboard');
+
+        $response->assertStatus(200);
+        $response->assertSee('AFA-DASH-0001', false);
+        $response->assertSee('0247000000', false);
+        $response->assertSee('GHS 120.00', false);
+    }
 }

@@ -351,12 +351,25 @@
                 <div class="overflow-hidden rounded-lg border border-gray-200">
                     <x-table :headers="['Order ID', 'Recipient', 'Amount', 'Status', 'Placed']">
                         @forelse ($orders->take(5) as $order)
+                            @php
+                                $isAfaOrder = $order instanceof \App\Models\AfaRegistration;
+                                $displayReference = $isAfaOrder
+                                    ? ($order->reference ?: ('AFA-' . $order->id))
+                                    : ('#' . $order->id);
+                                $recipientPhone = $isAfaOrder ? $order->phone_number : $order->recipient_phone_number;
+                                $displayAmount = $isAfaOrder ? (float) $order->amount : (float) $order->amount_paid;
+                                $rawStatus = strtolower((string) $order->status);
+                                $statusVariant = in_array($rawStatus, ['completed', 'approved'], true)
+                                    ? 'completed'
+                                    : (in_array($rawStatus, ['rejected', 'cancelled', 'failed'], true) ? 'warning' : 'pending');
+                                $statusLabel = $isAfaOrder ? ucfirst((string) $order->status) : (string) $order->status;
+                            @endphp
                             <tr class="hover:bg-gray-50 transition-colors duration-150">
-                                <td class="px-6 py-4 text-sm font-medium text-gray-900">#{{ $order->id }}</td>
-                                <td class="px-6 py-4 text-sm text-gray-900">{{ $order->recipient_phone_number }}</td>
-                                <td class="px-6 py-4 text-sm text-gray-900">GHS {{ number_format($order->amount_paid, 2) }}</td>
+                                <td class="px-6 py-4 text-sm font-medium text-gray-900">{{ $displayReference }}</td>
+                                <td class="px-6 py-4 text-sm text-gray-900">{{ $recipientPhone }}</td>
+                                <td class="px-6 py-4 text-sm text-gray-900">GHS {{ number_format($displayAmount, 2) }}</td>
                                 <td class="px-6 py-4 text-sm">
-                                    <x-badge :variant="$order->status === 'Completed' ? 'completed' : 'pending'">{{ $order->status }}</x-badge>
+                                    <x-badge :variant="$statusVariant">{{ $statusLabel }}</x-badge>
                                 </td>
                                 <td class="px-6 py-4 text-sm text-gray-700">{{ $order->created_at?->format('M d, Y g:i A') }}</td>
                             </tr>

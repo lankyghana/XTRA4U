@@ -72,6 +72,8 @@ class VendorAffiliateOrdersFulfillmentTest extends TestCase
         $ordersResponse = $this->get('/vendor/orders');
         $ordersResponse->assertStatus(200);
         $ordersResponse->assertSeeText('#' . $order->id);
+        $ordersResponse->assertSeeText('Affiliate Vendor');
+        $ordersResponse->assertSeeText($reseller->name);
 
         // Owner should NOT see it under Affiliate Orders tab.
         $affiliateResponse = $this->get('/vendor/orders/affiliate');
@@ -140,6 +142,7 @@ class VendorAffiliateOrdersFulfillmentTest extends TestCase
         $ordersResponse = $this->get('/vendor/orders');
         $ordersResponse->assertStatus(200);
         $ordersResponse->assertSeeText('#' . $order->id);
+        $ordersResponse->assertSeeText($reseller->name);
 
         $affiliateResponse = $this->get('/vendor/orders/affiliate');
         $affiliateResponse->assertStatus(200);
@@ -152,5 +155,52 @@ class VendorAffiliateOrdersFulfillmentTest extends TestCase
 		$updateResponse->assertSessionHas('error');
 
 		$this->assertSame('Processing', $order->fresh()->status);
+    }
+
+    public function test_normal_order_shows_no_affiliate_vendor_name(): void
+    {
+        $vendor = Vendor::factory()->create([
+            'is_approved' => true,
+            'password' => bcrypt('password'),
+            'name' => 'Parent Vendor',
+        ]);
+
+        $otherVendor = Vendor::factory()->create([
+            'is_approved' => true,
+            'password' => bcrypt('password'),
+            'name' => 'Unrelated Affiliate',
+        ]);
+
+        $order = Order::create([
+            'recipient_phone_number' => '0553333333',
+            'mobile_money_number' => '0553333333',
+            'service_purchased' => 'DIRECT-PRODUCT',
+            'amount_paid' => 30.00,
+            'vendor_id' => $vendor->id,
+            'owner_vendor_id' => null,
+            'reseller_vendor_id' => null,
+            'is_reseller_order' => false,
+            'status' => 'Processing',
+            'payment_status' => 'paid',
+            'payment_completed_at' => now(),
+        ]);
+
+        Transaction::create([
+            'order_id' => $order->id,
+            'vendor_id' => $vendor->id,
+            'recipient_phone' => $order->recipient_phone_number,
+            'amount' => 30.00,
+            'commission_amount' => 0.60,
+            'vendor_earning' => 29.40,
+            'payment_status' => 'successful',
+        ]);
+
+        $this->actingAs($vendor, 'vendor');
+
+        $response = $this->get('/vendor/orders');
+        $response->assertStatus(200);
+        $response->assertSeeText('Affiliate Vendor');
+        $response->assertSeeText('#' . $order->id);
+        $response->assertDontSeeText($otherVendor->name);
     }
 }

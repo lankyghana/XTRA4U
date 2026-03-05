@@ -100,6 +100,7 @@
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Order ID</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Recipient</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Product</th>
+                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Affiliate Vendor</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Amount</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Status</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">External API</th>
@@ -124,12 +125,19 @@
                                             <div class="flex items-center gap-2">
                                                 <span>#{{ $order->id }}</span>
                                                 @if($isAffiliateForViewer)
-                                                    <x-badge variant="processing" size="sm">Affiliate</x-badge>
+                                                    <x-badge variant="processing" size="sm">Affiliate Order</x-badge>
                                                 @endif
                                             </div>
                                         </td>
                                         <td class="px-6 py-4 text-sm text-gray-900">{{ $order->recipient_phone_number }}</td>
                                         <td class="px-6 py-4 text-sm text-gray-900">{{ $order->display_product_label }}</td>
+                                        <td class="px-6 py-4 text-sm text-gray-900">
+                                            @if($order->is_reseller_order && $order->resellerVendor)
+                                                <span class="text-purple-600 font-medium">{{ $order->resellerVendor->name }}</span>
+                                            @else
+                                                -
+                                            @endif
+                                        </td>
                                         <td class="px-6 py-4 text-sm font-semibold text-gray-900">GHS {{ number_format($order->amount_paid, 2) }}</td>
                                         <td class="px-6 py-4 text-sm">
                                             @if($order->status === 'Completed')
@@ -180,7 +188,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="8" class="px-6 py-8 text-center">
+                                        <td colspan="9" class="px-6 py-8 text-center">
                                             <div class="flex flex-col items-center justify-center">
                                                 <svg class="w-12 h-12 text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>

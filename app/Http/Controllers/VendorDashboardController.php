@@ -58,7 +58,7 @@ class VendorDashboardController extends Controller
 		$commissions = $filteredStats['commissions'];
 		
 		// Vendors must only see successfully-paid orders.
-		$orders = Order::query()
+		$productOrders = Order::query()
 			->where(function ($q) use ($vendorId) {
 				$q->where('vendor_id', $vendorId)
 					->orWhere('owner_vendor_id', $vendorId)
@@ -77,6 +77,15 @@ class VendorDashboardController extends Controller
 			->latest()
 			->limit(50)
 			->get();
+
+		// Surface paid AFA registrations in the same recent list shown on dashboard.
+		$afaOrders = $this->getRecentAfaRegistrations($vendorId, 50);
+
+		$orders = $productOrders
+			->concat($afaOrders)
+			->sortByDesc(fn ($row) => $row->created_at?->getTimestamp() ?? 0)
+			->take(50)
+			->values();
 		$products = Product::where('vendor_id', $vendorId)->orderBy('name')->get();
 		$storeLink = route('storefront.vendor', ['vendor' => $vendor]);
 		$recentWithdrawals = VendorWithdrawal::where('vendor_id', $vendorId)->latest()->take(5)->get();
@@ -190,6 +199,22 @@ class VendorDashboardController extends Controller
 		];
 	}
 
+	private function getRecentAfaRegistrations(int $vendorId, int $limit = 50)
+	{
+		return AfaRegistration::query()
+			->paid()
+			->where(function ($q) use ($vendorId) {
+				$q->where('reseller_vendor_id', $vendorId)
+					->orWhere(function ($qq) use ($vendorId) {
+						$qq->where('vendor_id', $vendorId)
+							->where('is_reseller_order', false);
+					});
+			})
+			->latest()
+			->limit($limit)
+			->get();
+	}
+
 	private function resolveDateRange(string $filter): array
 	{
 		$now = now();
@@ -249,7 +274,7 @@ class VendorDashboardController extends Controller
 						});
 				});
 			})
-			->with(['service'])
+			->with(['service', 'resellerVendor'])
 			->latest()
 			->paginate(20)
 			->withQueryString();
