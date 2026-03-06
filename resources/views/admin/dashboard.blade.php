@@ -116,9 +116,9 @@
                     </div>
                     <div class="ml-5 w-0 flex-1">
                         <dl>
-                            <dt class="text-sm font-medium text-amber-100 truncate">Total Vendor Balances</dt>
-                            <dd class="text-2xl font-bold text-white">GHS {{ number_format($totalVendorBalances, 2) }}</dd>
-                            <dd class="text-sm text-amber-100 mt-1">Combined wallet balances</dd>
+                            <dt class="text-sm font-medium text-amber-100 truncate">Total Withdrawable Balances</dt>
+                            <dd class="text-2xl font-bold text-white">GHS {{ number_format($totalWithdrawableBalances, 2) }}</dd>
+                            <dd class="text-sm text-amber-100 mt-1">Combined withdrawable balances</dd>
                         </dl>
                     </div>
                 </div>

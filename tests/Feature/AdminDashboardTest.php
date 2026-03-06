@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Models\Vendor;
+use App\Models\WalletTopup;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -22,11 +23,11 @@ class AdminDashboardTest extends TestCase
         return $admin;
     }
 
-    public function test_admin_dashboard_shows_sum_of_all_vendor_balances(): void
+    public function test_admin_dashboard_shows_sum_of_all_vendor_withdrawable_balances(): void
     {
         $this->actingAdmin();
 
-        Vendor::factory()->create([
+        $vendorOne = Vendor::factory()->create([
             'wallet_balance' => 100.25,
         ]);
 
@@ -34,10 +35,19 @@ class AdminDashboardTest extends TestCase
             'wallet_balance' => 49.75,
         ]);
 
+        WalletTopup::create([
+            'vendor_id' => $vendorOne->id,
+            'amount' => 30.00,
+            'consumed' => 5.00,
+            'status' => 'completed',
+            'reference' => 'TEST-TOPUP-' . uniqid(),
+            'metadata' => ['source' => 'test'],
+        ]);
+
         $response = $this->get(route('admin.dashboard'));
 
         $response->assertOk();
-        $response->assertSeeText('Total Vendor Balances');
-        $response->assertSeeText('GHS 150.00');
+        $response->assertSeeText('Total Withdrawable Balances');
+        $response->assertSeeText('GHS 125.00');
     }
 }

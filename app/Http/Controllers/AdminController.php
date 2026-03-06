@@ -7,13 +7,14 @@ use App\Models\Order;
 use App\Models\Transaction;
 use App\Models\VendorWithdrawal;
 use App\Models\AdminNotification;
+use App\Services\WalletService;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 
 class AdminController extends Controller
 {
-    public function dashboard()
+    public function dashboard(WalletService $walletService)
     {
         $activeVendors = Vendor::where('is_approved', true)->count();
         $pendingVendors = Vendor::where('is_approved', false)->latest()->take(5)->get();
@@ -21,7 +22,7 @@ class AdminController extends Controller
         $totalRevenue = Transaction::whereIn('payment_status', ['completed', 'successful'])->sum('commission_amount');
         $transactionsToday = Transaction::whereDate('created_at', now()->toDateString())->count();
         $ordersToday = Order::whereDate('created_at', now()->toDateString())->count();
-        $totalVendorBalances = Vendor::sum('wallet_balance');
+        $totalWithdrawableBalances = $walletService->getTotalWithdrawableBalance();
 
         $pendingWithdrawals = VendorWithdrawal::where('status', VendorWithdrawal::STATUS_PROCESSING)->count();
 
@@ -34,7 +35,7 @@ class AdminController extends Controller
             'totalRevenue' => $totalRevenue,
             'transactionsToday' => $transactionsToday,
             'ordersToday' => $ordersToday,
-            'totalVendorBalances' => $totalVendorBalances,
+            'totalWithdrawableBalances' => $totalWithdrawableBalances,
             'pendingWithdrawals' => $pendingWithdrawals,
             'manualQueueLastRequestedAt' => $manualQueueLastRequestedAt,
             'manualQueueLastFinishedAt' => $manualQueueLastFinishedAt,

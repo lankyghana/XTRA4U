@@ -53,7 +53,7 @@ class VendorAfaFulfillmentOwnershipTest extends TestCase
         $this->assertSame(AfaRegistration::STATUS_PROCESSING, $registration->fresh()->status);
     }
 
-    public function test_source_vendor_does_not_manage_reseller_registrations(): void
+    public function test_source_vendor_can_view_but_cannot_manage_reseller_registrations(): void
     {
         $source = Vendor::factory()->create(['is_approved' => true]);
         $reseller = Vendor::factory()->create(['is_approved' => true]);
@@ -84,9 +84,16 @@ class VendorAfaFulfillmentOwnershipTest extends TestCase
 
         $this->get(route('vendor.afa.index'))
             ->assertOk()
-            ->assertDontSee($registration->reference);
+            ->assertSee($registration->reference);
 
         $this->get(route('vendor.afa.show', $registration))
-            ->assertForbidden();
+            ->assertOk();
+
+        $this->patch(route('vendor.afa.update-status', $registration), [
+            'status' => 'processing',
+            'notes' => 'provider should not manage reseller order',
+        ])->assertSessionHas('error');
+
+        $this->assertSame(AfaRegistration::STATUS_PENDING, $registration->fresh()->status);
     }
 }

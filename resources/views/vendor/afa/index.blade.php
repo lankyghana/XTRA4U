@@ -165,8 +165,11 @@
                                                     View
                                                 </a>
                                                 @php
-                                                    // Check if current vendor can manage this registration
-                                                    $canManage = ((int) $reg->vendor_id === (int) $vendor->id);
+                                                    // Fulfillment ownership:
+                                                    // reseller orders are managed by reseller; direct orders by provider.
+                                                    $canManage = $reg->is_reseller_order
+                                                        ? ((int) $reg->reseller_vendor_id === (int) $vendor->id)
+                                                        : ((int) $reg->vendor_id === (int) $vendor->id);
                                                 @endphp
                                                 @if(!in_array($reg->status, ['completed', 'cancelled']))
                                                     @if($canManage)

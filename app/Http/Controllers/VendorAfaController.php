@@ -25,17 +25,12 @@ class VendorAfaController extends Controller
     {
         $vendor = $this->vendor();
 
-        // Show registrations with enforcement:
-        // - Reseller orders visible to the reseller who sold them (`reseller_vendor_id`)
-        // - Direct orders visible to the provider (`vendor_id`) when not a reseller order
+        // Show registrations where this vendor participated either as provider or reseller.
         $baseQuery = AfaRegistration::query()
-            ->where('payment_status', AfaRegistration::PAYMENT_COMPLETED)
+            ->paid()
             ->where(function ($q) use ($vendor) {
                 $q->where('reseller_vendor_id', $vendor->id)
-                  ->orWhere(function ($qq) use ($vendor) {
-                      $qq->where('vendor_id', $vendor->id)
-                         ->where('is_reseller_order', false);
-                  });
+                  ->orWhere('vendor_id', $vendor->id);
             });
 
         $query = clone $baseQuery;
@@ -63,6 +58,7 @@ class VendorAfaController extends Controller
             'all' => (clone $baseQuery)->count(),
             'pending' => (clone $baseQuery)->where('status', AfaRegistration::STATUS_PENDING)->count(),
             'processing' => (clone $baseQuery)->where('status', AfaRegistration::STATUS_PROCESSING)->count(),
+            'approved' => (clone $baseQuery)->where('status', AfaRegistration::STATUS_APPROVED)->count(),
             'completed' => (clone $baseQuery)->where('status', AfaRegistration::STATUS_COMPLETED)->count(),
             'rejected' => (clone $baseQuery)->where('status', AfaRegistration::STATUS_REJECTED)->count(),
         ];
@@ -83,13 +79,9 @@ class VendorAfaController extends Controller
     {
         $vendor = $this->vendor();
 
-        // Authorization:
-        // - Reseller orders: only the reseller who sold it may view
-        // - Direct orders: only the provider may view
-        $isResellerOrder = (bool) $registration->is_reseller_order;
-        $canView = $isResellerOrder
-            ? ((int) $registration->reseller_vendor_id === (int) $vendor->id)
-            : ((int) $registration->vendor_id === (int) $vendor->id);
+        // Both participants (provider or reseller) may view registration details.
+        $canView = ((int) $registration->vendor_id === (int) $vendor->id)
+            || ((int) $registration->reseller_vendor_id === (int) $vendor->id);
 
         if (!$canView) {
             abort(403, 'Unauthorized');

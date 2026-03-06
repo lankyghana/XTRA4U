@@ -157,6 +157,37 @@ class WalletService
     }
 
     /**
+     * Compute total withdrawable balance across all vendors.
+     *
+     * Mirrors getWithdrawableBalance() per vendor:
+     * withdrawable = max(0, wallet_balance - available_topups).
+     */
+    public function getTotalWithdrawableBalance(): float
+    {
+        $vendors = Vendor::query()->select(['id', 'wallet_balance'])->get();
+        if ($vendors->isEmpty()) {
+            return 0.0;
+        }
+
+        $topupsByVendor = \App\Models\WalletTopup::query()
+            ->where('status', 'completed')
+            ->selectRaw(
+                'vendor_id, SUM(CASE WHEN (amount - COALESCE(consumed, 0)) > 0 THEN (amount - COALESCE(consumed, 0)) ELSE 0 END) as available'
+            )
+            ->groupBy('vendor_id')
+            ->pluck('available', 'vendor_id');
+
+        $totalWithdrawable = 0.0;
+        foreach ($vendors as $vendor) {
+            $availableTopups = (float) ($topupsByVendor[$vendor->id] ?? 0.0);
+            $withdrawable = max(0.0, (float) $vendor->wallet_balance - $availableTopups);
+            $totalWithdrawable += $withdrawable;
+        }
+
+        return round($totalWithdrawable, 2);
+    }
+
+    /**
      * Sum total vendor top-ups (completed)
      * Top-ups are credit ledger entries with metadata.purpose = 'wallet_topup' and possibly status in metadata
      */
