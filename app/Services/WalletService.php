@@ -180,7 +180,8 @@ class WalletService
         $totalWithdrawable = 0.0;
         foreach ($vendors as $vendor) {
             $availableTopups = (float) ($topupsByVendor[$vendor->id] ?? 0.0);
-            $withdrawable = max(0.0, (float) $vendor->wallet_balance - $availableTopups);
+            // Match per-vendor /vendor/wallet display semantics: clamp and round each vendor first.
+            $withdrawable = round(max(0.0, (float) $vendor->wallet_balance - $availableTopups), 2);
             $totalWithdrawable += $withdrawable;
         }
 

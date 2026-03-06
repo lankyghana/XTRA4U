@@ -65,15 +65,26 @@ class MoolrePaymentService implements CollectsPayments, HandlesGenericPayments
     {
         $digits = preg_replace('/[^0-9]/', '', $phone);
 
-        if (str_starts_with($digits, '0')) {
-            $digits = '233' . substr($digits, 1);
+        if ($digits === '') {
+            return '';
         }
 
-        if (!str_starts_with($digits, '233')) {
-            $digits = '233' . $digits;
+        // Moolre expects local Ghana format (0XXXXXXXXX), not country code.
+        if (str_starts_with($digits, '233')) {
+            $digits = '0' . substr($digits, 3);
+        }
+
+        // Accept 9-digit local form and normalize to 10 digits.
+        if (strlen($digits) === 9) {
+            $digits = '0' . $digits;
         }
 
         return $digits;
+    }
+
+    protected function isValidMoolrePhone(string $phone): bool
+    {
+        return (bool) preg_match('/^0\d{9}$/', $phone);
     }
 
     protected function mapCollectionChannel(?string $network): ?string
@@ -153,17 +164,18 @@ class MoolrePaymentService implements CollectsPayments, HandlesGenericPayments
         $payer = $this->normalizePhone((string) ($order->mobile_money_number ?? ''));
         $channel = $this->mapCollectionChannel((string) ($order->mobile_money_network ?? ''));
 
-        if ($payer === '' || $channel === null) {
+        if (!$this->isValidMoolrePhone($payer) || $channel === null) {
             Log::warning('Moolre payment init blocked: missing payer details', [
                 'order_id' => $order->id,
                 'reference' => $externalRef,
                 'has_payer' => $payer !== '',
+                'payer' => $payer,
                 'network' => (string) ($order->mobile_money_network ?? ''),
             ]);
 
             return [
                 'success' => false,
-                'message' => 'Missing payer phone/network for Moolre MoMo prompt.',
+                'message' => 'Invalid payer phone/network for Moolre. Use local format e.g. 0244123456 (no country code).',
                 'reference' => $externalRef,
             ];
         }
@@ -276,10 +288,10 @@ class MoolrePaymentService implements CollectsPayments, HandlesGenericPayments
                 ?? ''
         ));
 
-        if ($payer === '' || $channel === null) {
+        if (!$this->isValidMoolrePhone($payer) || $channel === null) {
             return [
                 'success' => false,
-                'message' => 'Missing payer phone/network for Moolre inline collection.',
+                'message' => 'Invalid payer phone/network for Moolre inline collection. Use local format e.g. 0244123456.',
                 'reference' => $externalRef,
             ];
         }

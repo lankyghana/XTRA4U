@@ -8,12 +8,17 @@ trait FormatsGhanaPhoneNumber
     {
         $phone = preg_replace('/[^0-9]/', '', $phone);
 
-        if (str_starts_with($phone, '0')) {
-            $phone = '233' . substr($phone, 1);
+        if ($phone === '') {
+            return '';
         }
 
-        if (!str_starts_with($phone, '233')) {
-            $phone = '233' . $phone;
+        // Moolre expects local Ghana format (0XXXXXXXXX).
+        if (str_starts_with($phone, '233')) {
+            $phone = '0' . substr($phone, 3);
+        }
+
+        if (strlen($phone) === 9) {
+            $phone = '0' . $phone;
         }
 
         return $phone;
