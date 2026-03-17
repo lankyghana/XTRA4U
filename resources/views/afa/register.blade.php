@@ -315,15 +315,15 @@
             <button type="button"
                     id="afa-momo-confirm"
                     class="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl py-3 font-semibold">
-                Confirm & Pay
+                Send Prompt
             </button>
         </div>
 
-        <p class="text-xs text-gray-500 mt-3">Enter the number that will approve the payment prompt.</p>
+        <p class="text-xs text-gray-500 mt-3">Enter the number that should receive the payment prompt.</p>
     </div>
 </div>
 
-{{-- Full-screen verification overlay (inline gateways) --}}
+{{-- Full-screen payment confirmation overlay (inline gateways) --}}
 <div id="afa-verification-overlay" class="fixed inset-0 z-50 hidden items-center justify-center">
     <div class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
     <div class="relative w-full max-w-lg mx-4 rounded-2xl bg-white shadow-2xl overflow-hidden">
@@ -341,8 +341,8 @@
                 </div>
 
                 <div class="flex-1">
-                    <h3 class="text-xl font-semibold text-gray-900">Verifying your payment</h3>
-                    <p id="afa-overlay-text" class="mt-1 text-sm text-gray-600">We’re confirming your Mobile Money transaction. This usually takes a moment.</p>
+                    <h3 class="text-xl font-semibold text-gray-900">Confirming payment status</h3>
+                    <p id="afa-overlay-text" class="mt-1 text-sm text-gray-600">We sent the MoMo prompt and are checking your payment status. This usually takes a moment.</p>
                 </div>
             </div>
 
@@ -355,7 +355,7 @@
                     </div>
                     <div class="text-sm text-gray-700">
                         <div class="font-medium">Don’t close or refresh this page</div>
-                        <div class="mt-0.5 text-gray-600">If you received a MoMo prompt, please approve it to complete payment.</div>
+                        <div class="mt-0.5 text-gray-600">Approve the MoMo prompt on your phone to complete payment. No extra code entry is required here.</div>
                     </div>
                 </div>
             </div>
@@ -445,7 +445,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function showOverlay(text) {
-        if (overlayText) overlayText.textContent = text || 'We’re confirming your Mobile Money transaction. This usually takes a moment.';
+        if (overlayText) overlayText.textContent = text || 'We sent the MoMo prompt and are checking your payment status. This usually takes a moment.';
         if (overlay) {
             overlay.classList.remove('hidden');
             overlay.classList.add('flex');
@@ -549,8 +549,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (res.ok) {
                 const data = await res.json();
                 if (data?.status === 'success' && data?.redirect) {
-                    setMessage(data.message || 'Payment completed. Redirecting…', 'success');
-                    showOverlay(data.message || 'Payment completed. Redirecting…');
+                    setMessage(data.message || 'Payment confirmed. Redirecting…', 'success');
+                    showOverlay(data.message || 'Payment confirmed. Redirecting…');
                     stopPolling();
                     window.location.href = data.redirect;
                     return;
@@ -630,8 +630,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 if (requiresInlineMomo && data?.reference && verifyRoute) {
-                    setMessage(data.message || 'Payment initiated. Please approve the MoMo prompt.', 'info');
-                    showOverlay('Verifying your payment…');
+                    setMessage(data.message || 'Payment initiated. Check your phone and approve the MoMo prompt.', 'info');
+                    showOverlay('Waiting for payment confirmation…');
                     stopPolling();
                     activeReference = data.reference;
                     poll(data.reference, 0);

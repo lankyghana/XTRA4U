@@ -331,7 +331,7 @@
                     :disabled="submitting || paymentPolling || paymentFailed">
                     <span x-show="!submitting && !paymentPolling && !paymentFailed">Proceed to Payment</span>
                     <span x-show="submitting">Processing…</span>
-                    <span x-show="paymentPolling">Waiting for verification…</span>
+                    <span x-show="paymentPolling">Waiting for payment confirmation…</span>
                     <span x-show="paymentFailed">Payment failed</span>
                 </button>
             </form>
@@ -398,18 +398,18 @@
                         <button type="button"
                                 class="flex-1 bg-purple-600 hover:bg-purple-700 text-white rounded-xl py-3 font-semibold"
                                 @click="confirmMomoDetails">
-                            Confirm & Pay
+                            Send Prompt
                         </button>
                     </div>
 
-                    <p class="text-xs text-gray-500 mt-3">Enter the number that will approve the payment prompt.</p>
+                    <p class="text-xs text-gray-500 mt-3">Enter the number that should receive the payment prompt.</p>
                 </div>
             </div>
 
             <div class="mt-4 text-sm text-gray-500" x-show="orderMessage" x-text="orderMessage"></div>
         </div>
 
-        {{-- Full-screen verification overlay (inline gateways) --}}
+        {{-- Full-screen payment confirmation overlay (inline gateways) --}}
         <div x-show="paymentPolling" x-cloak class="fixed inset-0 z-50 flex items-center justify-center">
             <div class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
             <div class="relative w-full max-w-lg mx-4 rounded-2xl bg-white shadow-2xl overflow-hidden">
@@ -427,8 +427,8 @@
                         </div>
 
                         <div class="flex-1">
-                            <h3 class="text-xl font-semibold text-gray-900">Verifying your payment</h3>
-                            <p class="mt-1 text-sm text-gray-600">We’re confirming your Mobile Money transaction. This usually takes a moment.</p>
+                            <h3 class="text-xl font-semibold text-gray-900">Confirming payment status</h3>
+                            <p class="mt-1 text-sm text-gray-600">We sent the MoMo prompt and are checking your payment status. This usually takes a moment.</p>
                         </div>
                     </div>
 
@@ -441,7 +441,7 @@
                             </div>
                             <div class="text-sm text-gray-700">
                                 <div class="font-medium">Don’t close or refresh this page</div>
-                                <div class="mt-0.5 text-gray-600">If you received a MoMo prompt, please approve it to complete payment.</div>
+                                <div class="mt-0.5 text-gray-600">Approve the MoMo prompt on your phone to complete payment. No extra code entry is required here.</div>
                             </div>
                         </div>
                     </div>
@@ -450,7 +450,7 @@
                         <div class="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
                             <div class="h-2 w-1/3 rounded-full bg-purple-600 animate-pulse"></div>
                         </div>
-                        <p class="mt-3 text-xs text-gray-500">You’ll be redirected automatically once payment is confirmed.</p>
+                        <p class="mt-3 text-xs text-gray-500">You will be redirected automatically once payment is confirmed.</p>
                     </div>
                 </div>
             </div>

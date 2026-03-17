@@ -341,7 +341,7 @@
                             // Inline gateways (e.g. BulkClix): do not redirect away; poll for completion.
                             if (this.requiresInlineMomo && resp.reference && this.verifyRoute) {
                                 this.paymentInitiating = false;
-                                this.orderMessage = resp.message || 'Payment initiated. Please approve the MoMo prompt.';
+                                this.orderMessage = resp.message || 'Payment initiated. Check your phone and approve the MoMo prompt.';
                                 this.startPaymentPolling(resp.reference);
                                 return;
                             }
@@ -354,7 +354,7 @@
                             // Fallback: if a gateway returned no redirect but did return a reference, poll.
                             if (resp.reference && this.verifyRoute) {
                                 this.paymentInitiating = false;
-                                this.orderMessage = resp.message || 'Payment initiated. Please complete payment.';
+                                this.orderMessage = resp.message || 'Payment initiated. Waiting for payment confirmation.';
                                 this.startPaymentPolling(resp.reference);
                                 return;
                             }
@@ -411,7 +411,7 @@
 
                     const pollOnce = async (attempt = 0) => {
                         if (!this.verifyRoute) {
-                            this.stopPaymentPolling('Unable to verify payment at the moment.');
+                            this.stopPaymentPolling('Unable to confirm payment status at the moment.');
                             return;
                         }
 
@@ -422,7 +422,7 @@
 
                         // Stop after timeout.
                         if (Date.now() - startedAt > maxMs) {
-                            this.stopPaymentPolling('Payment could not be confirmed. Please try again or use “Track Your Order”.');
+                            this.stopPaymentPolling('Payment confirmation timed out. Please try again or use "Track Your Order".');
                             return;
                         }
 
@@ -450,7 +450,7 @@
 
                                 if (data?.status === 'success' && data?.redirect) {
                                     // Keep overlay visible while navigating.
-                                    this.orderMessage = data.message || 'Payment completed. Redirecting…';
+                                    this.orderMessage = data.message || 'Payment confirmed. Redirecting…';
                                     this.activePaymentReference = reference;
                                     if (this.paymentPollTimer) {
                                         clearTimeout(this.paymentPollTimer);

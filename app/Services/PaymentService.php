@@ -6,6 +6,7 @@ use App\Jobs\SendOrderPlacedCommunications;
 use App\Mail\OrderPlacedMail;
 use App\Models\AdminNotification;
 use App\Models\Order;
+use App\Models\PaymentGatewayConfig;
 use App\Models\Product;
 use App\Models\ResellerProduct;
 use App\Models\Transaction;
@@ -36,6 +37,11 @@ class PaymentService
 
         // All collection flows go through GatewayManager.
         $result = $this->gatewayManager->collect($order, $email, $amount);
+
+        // Purchase-only safety fallback:
+        // If Moolre responds with a verification-code flow, try another active
+        // collection gateway automatically to keep checkout moving.
+        $result = $this->applyCheckoutFallbackForMoolreVerificationCode($order, $email, $amount, $result);
 
         // Persist gateway transaction/tax id whenever a gateway returns one at initiation time.
         // Not all gateways provide this at init; when missing, we'll try again at verification.
@@ -1092,6 +1098,99 @@ class PaymentService
                 if ($text !== '') {
                     return $text;
                 }
+            }
+        }
+
+        return null;
+    }
+
+    private function applyCheckoutFallbackForMoolreVerificationCode(
+        Order $order,
+        string $email,
+        float $amount,
+        array $primaryResult
+    ): array {
+        if (! $this->shouldFallbackFromMoolreVerificationCode($primaryResult)) {
+            return $primaryResult;
+        }
+
+        $fallbackResult = $this->attemptAlternativeCheckoutGateway($order, $email, $amount);
+        if ($fallbackResult !== null) {
+            Log::warning('Checkout gateway fallback applied after Moolre verification-code response', [
+                'order_id' => $order->id,
+                'from_gateway' => PaymentGatewayConfig::GATEWAY_MOOLRE,
+                'to_gateway' => $fallbackResult['gateway_name'] ?? null,
+                'primary_message' => $primaryResult['message'] ?? null,
+            ]);
+
+            return $fallbackResult;
+        }
+
+        Log::warning('Checkout gateway fallback unavailable after Moolre verification-code response', [
+            'order_id' => $order->id,
+            'primary_message' => $primaryResult['message'] ?? null,
+        ]);
+
+        return $primaryResult;
+    }
+
+    private function shouldFallbackFromMoolreVerificationCode(array $result): bool
+    {
+        $gatewayName = strtolower((string) (
+            $result['gateway_name']
+            ?? $this->gatewayManager->getDefaultGatewayName(PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION)
+            ?? ''
+        ));
+
+        if ($gatewayName !== PaymentGatewayConfig::GATEWAY_MOOLRE) {
+            return false;
+        }
+
+        $message = strtolower(trim((string) ($result['message'] ?? '')));
+        if ($message === '') {
+            return false;
+        }
+
+        // Only fallback when Moolre explicitly indicates verification code flow.
+        return str_contains($message, 'verification code')
+            || str_contains($message, 'phone no. verification code')
+            || str_contains($message, 'phone no verification code')
+            || str_contains($message, 'phone number verification code');
+    }
+
+    private function attemptAlternativeCheckoutGateway(Order $order, string $email, float $amount): ?array
+    {
+        $services = $this->gatewayManager->getAllPaymentServices();
+
+        foreach ($services as $gatewayName => $entry) {
+            if (! is_string($gatewayName) || strtolower($gatewayName) === PaymentGatewayConfig::GATEWAY_MOOLRE) {
+                continue;
+            }
+
+            $service = $entry['service'] ?? null;
+            if (! is_object($service) || ! method_exists($service, 'requestPayment')) {
+                continue;
+            }
+
+            try {
+                $candidate = $service->requestPayment($order, $email, $amount);
+            } catch (\Throwable $e) {
+                Log::warning('Checkout fallback gateway threw during payment init', [
+                    'order_id' => $order->id,
+                    'gateway' => $gatewayName,
+                    'error' => $e->getMessage(),
+                ]);
+                continue;
+            }
+
+            if (! is_array($candidate)) {
+                continue;
+            }
+
+            $candidate['gateway_name'] = $gatewayName;
+
+            if ((bool) ($candidate['success'] ?? false)) {
+                return $candidate;
             }
         }
 
