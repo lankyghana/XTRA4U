@@ -26,6 +26,7 @@ class XpresPortalClient implements ExternalFulfillmentClient
         $timeout = (int) ($providerConfig['timeout_seconds'] ?? 30);
         $environment = (string) ($providerConfig['environment'] ?? 'sandbox');
         $allowedNetworks = (array) config('external_fulfillment.providers.xpresportal.networks', []);
+        $serviceMapping = $this->resolveServiceMapping($order);
 
         $recipient = $this->normalizeMsisdn((string) $order->recipient_phone_number);
         if ($recipient === '') {
@@ -34,6 +35,19 @@ class XpresPortalClient implements ExternalFulfillmentClient
                 'status' => 'failed',
                 'message' => 'Invalid recipient phone number for XpresPortal fulfillment.',
             ];
+        }
+
+        $productPayload = [
+            'name' => $order->display_service_name,
+            'description' => (string) $order->service_purchased,
+        ];
+
+        if (($serviceMapping['service_id'] ?? '') !== '') {
+            $productPayload['service_id'] = (string) $serviceMapping['service_id'];
+        }
+
+        if (($serviceMapping['capacity'] ?? null) !== null && (string) $serviceMapping['capacity'] !== '') {
+            $productPayload['capacity'] = $serviceMapping['capacity'];
         }
 
         $payload = [
@@ -45,19 +59,22 @@ class XpresPortalClient implements ExternalFulfillmentClient
             ],
             'network' => $this->resolveNetwork($order, $allowedNetworks),
             'amount' => (float) ($order->amount_paid ?? 0),
-            'product' => [
-                'name' => $order->display_service_name,
-                'description' => (string) $order->service_purchased,
-            ],
-            'metadata' => [
+            'product' => $productPayload,
+            'metadata' => array_filter([
                 'order_id' => $order->id,
                 'vendor_id' => $order->vendor_id,
                 'owner_vendor_id' => $order->owner_vendor_id,
                 'reseller_vendor_id' => $order->reseller_vendor_id,
                 'payment_gateway' => $order->payment_gateway,
-            ],
+                'mapped_service_id' => $serviceMapping['service_id'] ?? null,
+                'mapped_service_name' => $serviceMapping['service_name'] ?? null,
+            ], static fn ($value) => ! is_null($value) && $value !== ''),
             'environment' => $environment,
         ];
+
+        if (($serviceMapping['service_id'] ?? '') !== '') {
+            $payload['service_id'] = (string) $serviceMapping['service_id'];
+        }
 
         try {
             $response = Http::timeout($timeout)
@@ -124,6 +141,67 @@ class XpresPortalClient implements ExternalFulfillmentClient
                 'message' => $message,
                 'raw' => null,
             ];
+        }
+    }
+
+    public function getServices(): array
+    {
+        $providerConfig = $this->config->providerConfig('xpresportal');
+        $baseUrl = trim((string) ($providerConfig['base_url'] ?? ''));
+        $endpoint = trim((string) ($providerConfig['services_endpoint'] ?? '/api/v1/services'));
+        $apiKey = (string) ($providerConfig['api_key'] ?? '');
+        $apiSecret = (string) ($providerConfig['api_secret'] ?? '');
+        $environment = (string) ($providerConfig['environment'] ?? 'sandbox');
+        $timeout = (int) ($providerConfig['timeout_seconds'] ?? 30);
+
+        if ($baseUrl === '' || $endpoint === '' || $apiKey === '' || $apiSecret === '') {
+            return [];
+        }
+
+        $url = rtrim($baseUrl, '/') . '/' . ltrim($endpoint, '/');
+
+        try {
+            $response = Http::timeout($timeout)
+                ->acceptJson()
+                ->withHeaders([
+                    'X-API-KEY' => $apiKey,
+                    'X-API-SECRET' => $apiSecret,
+                    'X-ENV' => $environment,
+                ])
+                ->get($url);
+
+            if (! $response->successful()) {
+                Log::warning('XpresPortal services fetch failed', [
+                    'status' => $response->status(),
+                    'provider' => 'xpresportal',
+                ]);
+
+                return [];
+            }
+
+            $json = $response->json();
+            $services = data_get($json, 'services');
+
+            if (! is_array($services)) {
+                $services = data_get($json, 'data.services');
+            }
+
+            if (! is_array($services)) {
+                $services = data_get($json, 'data');
+            }
+
+            if (! is_array($services)) {
+                return [];
+            }
+
+            return $this->normalizeDiscoveredServices($services);
+        } catch (RequestException|ConnectionException $e) {
+            Log::warning('XpresPortal services fetch failed', [
+                'provider' => 'xpresportal',
+                'error' => $this->limitMessage($e->getMessage()),
+            ]);
+
+            return [];
         }
     }
 
@@ -219,5 +297,121 @@ class XpresPortalClient implements ExternalFulfillmentClient
         $trimmed = trim($string);
 
         return $trimmed === '' ? '' : strtoupper(preg_replace('/\s+/', '', $trimmed));
+    }
+
+    /** @return array{service_id:string,service_name:string,capacity:mixed,price:?float} */
+    private function resolveServiceMapping(Order $order): array
+    {
+        $metadata = [];
+        if (! empty($order->vendor_service_id)) {
+            $product = Product::query()->find((int) $order->vendor_service_id);
+            $metadata = is_array($product?->decoded_description) ? $product->decoded_description : [];
+        }
+
+        $serviceId = $this->firstString($metadata, [
+            'external_mappings.xpresportal.service_id',
+            'external_service_id',
+        ]) ?? '';
+
+        $serviceName = $this->firstString($metadata, [
+            'external_mappings.xpresportal.service_name',
+            'external_service_name',
+        ]) ?? '';
+
+        $capacity = data_get($metadata, 'external_mappings.xpresportal.capacity');
+        if ($capacity === null || $capacity === '') {
+            $capacity = data_get($metadata, 'size');
+        }
+
+        $price = null;
+        $mappedPrice = data_get($metadata, 'external_mappings.xpresportal.price');
+        if (is_numeric($mappedPrice)) {
+            $price = (float) $mappedPrice;
+        }
+
+        return [
+            'service_id' => $serviceId,
+            'service_name' => $serviceName,
+            'capacity' => $capacity,
+            'price' => $price,
+        ];
+    }
+
+    /**
+     * @param array<int,mixed> $services
+     * @return array<int,array<string,mixed>>
+     */
+    private function normalizeDiscoveredServices(array $services): array
+    {
+        $normalized = [];
+
+        foreach ($services as $service) {
+            if (! is_array($service)) {
+                continue;
+            }
+
+            $id = $this->firstString($service, ['id', 'service_id', 'code', 'key', 'reference']);
+            $name = $this->firstString($service, ['name', 'title', 'label', 'service_name']);
+            $network = $this->normalizeNetwork($this->firstString($service, ['network', 'carrier', 'provider']) ?? '');
+            $capacity = $this->firstScalar($service, ['capacity', 'size', 'volume']);
+            $price = $this->firstNumeric($service, ['price', 'amount', 'cost', 'rate']);
+
+            if (($id ?? '') === '' && ($name ?? '') === '') {
+                continue;
+            }
+
+            $normalized[] = [
+                'id' => $id ?? $name,
+                'name' => $name ?? $id,
+                'network' => $network,
+                'capacity' => $capacity,
+                'price' => $price,
+                'raw' => $service,
+            ];
+        }
+
+        return $normalized;
+    }
+
+    /** @param array<string,mixed> $data */
+    private function firstString(array $data, array $keys): ?string
+    {
+        foreach ($keys as $key) {
+            $value = data_get($data, $key);
+            if (is_scalar($value)) {
+                $string = trim((string) $value);
+                if ($string !== '') {
+                    return $string;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /** @param array<string,mixed> $data */
+    private function firstScalar(array $data, array $keys): mixed
+    {
+        foreach ($keys as $key) {
+            $value = data_get($data, $key);
+            if (is_scalar($value) && (string) $value !== '') {
+                return $value;
+            }
+        }
+
+        return null;
+    }
+
+    /** @param array<string,mixed> $data */
+    private function firstNumeric(array $data, array $keys): ?float
+    {
+        foreach ($keys as $key) {
+            $value = data_get($data, $key);
+            if (is_numeric($value)) {
+                return (float) $value;
+            }
+        }
+
+        return null;
     }
 }

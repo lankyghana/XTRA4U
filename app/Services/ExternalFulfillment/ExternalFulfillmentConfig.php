@@ -22,7 +22,7 @@ final class ExternalFulfillmentConfig
             ? Setting::getGroupFresh('external_fulfillment')
             : [];
 
-        $provider = (string) ($settings['external_fulfillment_provider'] ?? 'datafyhub');
+        $provider = self::normalizeProvider((string) ($settings['external_fulfillment_provider'] ?? 'datafyhub'));
 
         $timeout = self::coerceTimeout((int) ($settings['external_fulfillment_timeout_seconds'] ?? 10));
 
@@ -31,6 +31,7 @@ final class ExternalFulfillmentConfig
                 'enabled' => self::toBool($settings['external_fulfillment_enabled'] ?? null),
                 'base_url' => trim((string) config('services.external_fulfillment.base_url', '')),
                 'endpoint' => trim((string) config('services.external_fulfillment.endpoint', '')),
+                'services_endpoint' => trim((string) config('services.external_fulfillment.services_endpoint', '/services')),
                 'token' => (string) ($settings['external_fulfillment_token'] ?? ''),
                 'timeout_seconds' => $timeout,
             ],
@@ -38,6 +39,7 @@ final class ExternalFulfillmentConfig
                 'enabled' => self::toBool($settings['external_fulfillment_enabled'] ?? null),
                 'base_url' => trim((string) config('services.xpresportal.base_url', '')),
                 'endpoint' => '/api/v1/orders',
+                'services_endpoint' => trim((string) config('services.xpresportal.services_endpoint', '/api/v1/services')),
                 'api_key' => (string) config('services.xpresportal.api_key', ''),
                 'api_secret' => (string) config('services.xpresportal.api_secret', ''),
                 'timeout_seconds' => self::coerceTimeout((int) config('services.xpresportal.timeout', 30)),
@@ -60,6 +62,7 @@ final class ExternalFulfillmentConfig
                     'enabled' => false,
                     'base_url' => $baseUrlFromConfig,
                     'endpoint' => $endpointFromConfig,
+                    'services_endpoint' => trim((string) config('services.external_fulfillment.services_endpoint', '/services')),
                     'token' => '',
                     'timeout_seconds' => 10,
                 ],
@@ -72,6 +75,7 @@ final class ExternalFulfillmentConfig
                     'enabled' => false,
                     'base_url' => $baseUrlFromConfig,
                     'endpoint' => $endpointFromConfig,
+                    'services_endpoint' => trim((string) config('services.external_fulfillment.services_endpoint', '/services')),
                     'token' => '',
                     'timeout_seconds' => 10,
                 ],
@@ -81,7 +85,7 @@ final class ExternalFulfillmentConfig
         $settings = VendorSetting::getGroupFreshForVendor((int) $vendor->id, 'external_fulfillment');
 
         $enabled = self::toBool($settings['external_fulfillment_enabled'] ?? null);
-        $provider = (string) ($settings['external_fulfillment_provider'] ?? 'datafyhub');
+        $provider = self::normalizeProvider((string) ($settings['external_fulfillment_provider'] ?? 'datafyhub'));
         $timeout = self::coerceTimeout((int) ($settings['external_fulfillment_timeout_seconds'] ?? 10));
 
         $providers = [
@@ -89,6 +93,7 @@ final class ExternalFulfillmentConfig
                 'enabled' => $enabled,
                 'base_url' => $baseUrlFromConfig,
                 'endpoint' => $endpointFromConfig,
+                'services_endpoint' => trim((string) config('services.external_fulfillment.services_endpoint', '/services')),
                 'token' => (string) ($settings['external_fulfillment_token'] ?? ''),
                 'timeout_seconds' => $timeout,
             ],
@@ -96,6 +101,7 @@ final class ExternalFulfillmentConfig
                 'enabled' => $enabled,
                 'base_url' => trim((string) config('services.xpresportal.base_url', '')),
                 'endpoint' => '/api/v1/orders',
+                'services_endpoint' => trim((string) config('services.xpresportal.services_endpoint', '/api/v1/services')),
                 'api_key' => (string) config('services.xpresportal.api_key', ''),
                 'api_secret' => (string) config('services.xpresportal.api_secret', ''),
                 'timeout_seconds' => self::coerceTimeout((int) config('services.xpresportal.timeout', 30)),
@@ -161,5 +167,14 @@ final class ExternalFulfillmentConfig
     private static function coerceTimeout(int $value): int
     {
         return $value > 0 ? $value : 10;
+    }
+
+    private static function normalizeProvider(string $provider): string
+    {
+        $normalized = strtolower(trim($provider));
+
+        return in_array($normalized, ['datafyhub', 'xpresportal'], true)
+            ? $normalized
+            : 'datafyhub';
     }
 }

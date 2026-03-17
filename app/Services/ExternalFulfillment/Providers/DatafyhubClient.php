@@ -83,6 +83,61 @@ class DatafyhubClient implements ExternalFulfillmentClient
         }
     }
 
+    public function getServices(): array
+    {
+        $providerConfig = $this->config->providerConfig('datafyhub');
+        $baseUrl = trim((string) ($providerConfig['base_url'] ?? ''));
+        $endpoint = trim((string) ($providerConfig['services_endpoint'] ?? '/services'));
+        $token = (string) ($providerConfig['token'] ?? '');
+        $timeout = (int) ($providerConfig['timeout_seconds'] ?? 10);
+
+        if ($baseUrl === '' || $endpoint === '' || $token === '') {
+            return [];
+        }
+
+        $url = rtrim($baseUrl, '/') . '/' . ltrim($endpoint, '/');
+
+        try {
+            $response = Http::timeout($timeout)
+                ->acceptJson()
+                ->withToken($token)
+                ->get($url);
+
+            if (! $response->successful()) {
+                Log::warning('Datafyhub services fetch failed', [
+                    'status' => $response->status(),
+                    'provider' => 'datafyhub',
+                ]);
+
+                return [];
+            }
+
+            $json = $response->json();
+            $services = data_get($json, 'services');
+
+            if (! is_array($services)) {
+                $services = data_get($json, 'data.services');
+            }
+
+            if (! is_array($services)) {
+                $services = data_get($json, 'data');
+            }
+
+            if (! is_array($services)) {
+                return [];
+            }
+
+            return $this->normalizeDiscoveredServices($services);
+        } catch (RequestException|ConnectionException $e) {
+            Log::warning('Datafyhub services fetch failed', [
+                'provider' => 'datafyhub',
+                'error' => $this->limitMessage($e->getMessage()),
+            ]);
+
+            return [];
+        }
+    }
+
     private function extractReference(mixed $json): ?string
     {
         foreach (['reference', 'id', 'transaction_id', 'data.reference', 'data.id'] as $path) {
@@ -242,6 +297,13 @@ class DatafyhubClient implements ExternalFulfillmentClient
 
         if (! empty($order->vendor_service_id)) {
             $product = Product::query()->find((int) $order->vendor_service_id);
+            $mappedCapacity = data_get($product, 'decoded_description.external_mappings.datafyhub.capacity');
+            if (is_numeric($mappedCapacity)) {
+                return max(1, (int) $mappedCapacity);
+            }
+            if (is_string($mappedCapacity) && preg_match('/(\d+)/', $mappedCapacity, $mappedMatches)) {
+                return max(1, (int) $mappedMatches[1]);
+            }
             $raw = data_get($product, 'decoded_description.size');
         }
 
@@ -272,5 +334,83 @@ class DatafyhubClient implements ExternalFulfillmentClient
     private function normalizeNetwork(string $network): string
     {
         return strtolower(preg_replace('/\s+/', '', $network));
+    }
+
+    /**
+     * @param array<int,mixed> $services
+     * @return array<int,array<string,mixed>>
+     */
+    private function normalizeDiscoveredServices(array $services): array
+    {
+        $normalized = [];
+
+        foreach ($services as $service) {
+            if (! is_array($service)) {
+                continue;
+            }
+
+            $id = $this->firstString($service, ['id', 'service_id', 'code', 'key', 'reference']);
+            $name = $this->firstString($service, ['name', 'title', 'label', 'service_name']);
+            $network = $this->normalizeNetwork($this->firstString($service, ['network', 'carrier', 'provider']) ?? '');
+            $capacity = $this->firstScalar($service, ['capacity', 'size', 'volume']);
+            $price = $this->firstNumeric($service, ['price', 'amount', 'cost', 'rate']);
+
+            if (($id ?? '') === '' && ($name ?? '') === '') {
+                continue;
+            }
+
+            $normalized[] = [
+                'id' => $id ?? $name,
+                'name' => $name ?? $id,
+                'network' => $network,
+                'capacity' => $capacity,
+                'price' => $price,
+                'raw' => $service,
+            ];
+        }
+
+        return $normalized;
+    }
+
+    /** @param array<string,mixed> $data */
+    private function firstString(array $data, array $keys): ?string
+    {
+        foreach ($keys as $key) {
+            $value = data_get($data, $key);
+            if (is_scalar($value)) {
+                $string = trim((string) $value);
+                if ($string !== '') {
+                    return $string;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /** @param array<string,mixed> $data */
+    private function firstScalar(array $data, array $keys): mixed
+    {
+        foreach ($keys as $key) {
+            $value = data_get($data, $key);
+            if (is_scalar($value) && (string) $value !== '') {
+                return $value;
+            }
+        }
+
+        return null;
+    }
+
+    /** @param array<string,mixed> $data */
+    private function firstNumeric(array $data, array $keys): ?float
+    {
+        foreach ($keys as $key) {
+            $value = data_get($data, $key);
+            if (is_numeric($value)) {
+                return (float) $value;
+            }
+        }
+
+        return null;
     }
 }

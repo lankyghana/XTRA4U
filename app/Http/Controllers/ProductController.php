@@ -34,6 +34,7 @@ class ProductController extends Controller
             'networkOptions' => $networkOptions,
             'activeExternalFulfillmentProvider' => $activeExternalFulfillmentProvider,
             'providerNetworks' => $providerNetworks,
+            'externalServicesEndpoint' => route('vendor.external-services.index'),
         ]);
     }
 
@@ -49,6 +50,11 @@ class ProductController extends Controller
             'price' => 'required|numeric|min:0',
             'network' => $this->networkValidationRule(),
             'external_network' => $this->externalNetworkValidationRule($providerNetworks),
+            'external_service_id' => 'nullable|string|max:120',
+            'external_service_name' => 'nullable|string|max:255',
+            'external_service_network' => $this->externalNetworkValidationRule($providerNetworks),
+            'external_service_capacity' => 'nullable|string|max:80',
+            'external_service_price' => 'nullable|numeric|min:0',
             'category' => $this->categoryValidationRule(),
             'size' => 'nullable|string|max:50',
             'validity' => 'nullable|string|max:50',
@@ -87,6 +93,7 @@ class ProductController extends Controller
             'networkOptions' => $networkOptions,
             'activeExternalFulfillmentProvider' => $activeExternalFulfillmentProvider,
             'providerNetworks' => $providerNetworks,
+            'externalServicesEndpoint' => route('vendor.external-services.index'),
         ]);
     }
 
@@ -106,6 +113,11 @@ class ProductController extends Controller
             'price' => 'required|numeric|min:0',
             'network' => $this->networkValidationRule($existingNetwork),
             'external_network' => $this->externalNetworkValidationRule($providerNetworks),
+            'external_service_id' => 'nullable|string|max:120',
+            'external_service_name' => 'nullable|string|max:255',
+            'external_service_network' => $this->externalNetworkValidationRule($providerNetworks),
+            'external_service_capacity' => 'nullable|string|max:80',
+            'external_service_price' => 'nullable|numeric|min:0',
             'category' => $this->categoryValidationRule(),
             'size' => 'nullable|string|max:50',
             'validity' => 'nullable|string|max:50',
@@ -238,18 +250,60 @@ class ProductController extends Controller
         }
 
         $activeProvider = $activeExternalFulfillmentProvider ?? 'datafyhub';
-        $externalNetwork = $request->input('external_network');
+        $externalNetwork = is_string($request->input('external_network'))
+            ? trim((string) $request->input('external_network'))
+            : null;
+        $externalServiceId = trim((string) $request->input('external_service_id', ''));
+        $externalServiceName = trim((string) $request->input('external_service_name', ''));
+        $externalServiceNetwork = trim((string) $request->input('external_service_network', ''));
+        $externalServiceCapacity = trim((string) $request->input('external_service_capacity', ''));
+        $externalServicePrice = $request->input('external_service_price');
 
         if ($activeProvider !== '') {
+            $providerMapping = [];
+            if (isset($externalMappings[$activeProvider]) && is_array($externalMappings[$activeProvider])) {
+                $providerMapping = $externalMappings[$activeProvider];
+            }
+
             if ($externalNetwork !== null && $externalNetwork !== '') {
-                $externalMappings[$activeProvider]['network'] = $externalNetwork;
+                $providerMapping['network'] = $externalNetwork;
             } else {
-                if (isset($externalMappings[$activeProvider]['network'])) {
-                    unset($externalMappings[$activeProvider]['network']);
+                unset($providerMapping['network']);
+            }
+
+            if ($externalServiceId !== '') {
+                $providerMapping['service_id'] = $externalServiceId;
+
+                if ($externalServiceName !== '') {
+                    $providerMapping['service_name'] = $externalServiceName;
+                } else {
+                    unset($providerMapping['service_name']);
                 }
-                if (isset($externalMappings[$activeProvider]) && empty($externalMappings[$activeProvider])) {
-                    unset($externalMappings[$activeProvider]);
+
+                $mappedNetwork = $externalServiceNetwork !== '' ? $externalServiceNetwork : $externalNetwork;
+                if ($mappedNetwork !== null && $mappedNetwork !== '') {
+                    $providerMapping['network'] = $mappedNetwork;
                 }
+
+                if ($externalServiceCapacity !== '') {
+                    $providerMapping['capacity'] = $externalServiceCapacity;
+                } else {
+                    unset($providerMapping['capacity']);
+                }
+
+                if ($externalServicePrice !== null && $externalServicePrice !== '' && is_numeric($externalServicePrice)) {
+                    $providerMapping['price'] = (float) $externalServicePrice;
+                } else {
+                    unset($providerMapping['price']);
+                }
+            } else {
+                unset($providerMapping['service_id'], $providerMapping['service_name'], $providerMapping['capacity'], $providerMapping['price']);
+            }
+
+            if (! empty($providerMapping)) {
+                $externalMappings[$activeProvider] = $providerMapping;
+            } else {
+                unset($externalMappings[$activeProvider]);
             }
         }
 

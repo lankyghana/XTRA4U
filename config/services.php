@@ -79,10 +79,12 @@ return [
         // Configured by the system administrator (.env). Not editable from the admin UI.
         'base_url' => env('EXTERNAL_FULFILLMENT_BASE_URL', ''),
         'endpoint' => env('EXTERNAL_FULFILLMENT_ENDPOINT', ''),
+        'services_endpoint' => env('EXTERNAL_FULFILLMENT_SERVICES_ENDPOINT', '/services'),
     ],
 
     'xpresportal' => [
         'base_url' => env('XPRES_BASE_URL'),
+        'services_endpoint' => env('XPRES_SERVICES_ENDPOINT', '/api/v1/services'),
         'api_key' => env('XPRES_API_KEY'),
         'api_secret' => env('XPRES_API_SECRET'),
         'timeout' => env('XPRES_TIMEOUT', 30),

@@ -5,6 +5,7 @@ namespace App\Services\ExternalFulfillment;
 use App\Services\ExternalFulfillment\Contracts\ExternalFulfillmentClient;
 use App\Services\ExternalFulfillment\Providers\DatafyhubClient;
 use App\Services\ExternalFulfillment\Providers\XpresPortalClient;
+use InvalidArgumentException;
 
 final class ExternalFulfillmentClientFactory
 {
@@ -14,7 +15,8 @@ final class ExternalFulfillmentClientFactory
 
         return match ($provider) {
             'xpresportal' => new XpresPortalClient($config),
-            default => new DatafyhubClient($config),
+            'datafyhub' => new DatafyhubClient($config),
+            default => throw new InvalidArgumentException("Unsupported external fulfillment provider [{$provider}]."),
         };
     }
 }

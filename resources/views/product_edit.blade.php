@@ -7,6 +7,11 @@
 @php($metadata = $metadata ?? [])
 @php($activeExternalFulfillmentProviderLabel = isset($activeExternalFulfillmentProvider) ? Str::headline($activeExternalFulfillmentProvider) : 'External Provider')
 @php($externalNetwork = old('external_network', data_get($metadata, "external_mappings.{$activeExternalFulfillmentProvider}.network") ?? data_get($metadata, 'external_network') ?? data_get($metadata, 'datafyhub_network')))
+@php($mappedExternalServiceId = old('external_service_id', data_get($metadata, "external_mappings.{$activeExternalFulfillmentProvider}.service_id") ?? ''))
+@php($mappedExternalServiceName = old('external_service_name', data_get($metadata, "external_mappings.{$activeExternalFulfillmentProvider}.service_name") ?? ''))
+@php($mappedExternalServiceNetwork = old('external_service_network', data_get($metadata, "external_mappings.{$activeExternalFulfillmentProvider}.network") ?? ''))
+@php($mappedExternalServiceCapacity = old('external_service_capacity', data_get($metadata, "external_mappings.{$activeExternalFulfillmentProvider}.capacity") ?? ''))
+@php($mappedExternalServicePrice = old('external_service_price', data_get($metadata, "external_mappings.{$activeExternalFulfillmentProvider}.price") ?? ''))
 
 <div class="min-h-screen flex items-center justify-center bg-gray-100 py-10 px-4">
     <div class="w-full max-w-2xl bg-white rounded-2xl shadow-xl p-8 space-y-6">
@@ -68,6 +73,30 @@
                 <p class="text-xs text-gray-400 mt-1">Optional. Used only for External Fulfillment; customers won’t see this.</p>
             </div>
 
+            <div>
+                <div class="flex items-center justify-between gap-3">
+                    <label for="external_service_id" class="block text-sm font-semibold text-gray-700">Provider Service ({{ $activeExternalFulfillmentProviderLabel }})</label>
+                    <button
+                        type="button"
+                        id="external_services_refresh"
+                        class="inline-flex items-center rounded-md border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                    >
+                        Refresh Services
+                    </button>
+                </div>
+                <select name="external_service_id" id="external_service_id" class="mt-1 block w-full border-gray-200 rounded-lg shadow-sm focus:border-purple-400 focus:ring-purple-400">
+                    <option value="">Auto (recommended)</option>
+                </select>
+                <p id="external_services_status" class="text-xs text-gray-400 mt-1">Loading services...</p>
+                <p id="external_service_details" class="text-xs text-gray-500 mt-1"></p>
+
+                <input type="hidden" name="external_service_name" id="external_service_name" value="{{ $mappedExternalServiceName }}">
+                <input type="hidden" name="external_service_network" id="external_service_network" value="{{ $mappedExternalServiceNetwork }}">
+                <input type="hidden" name="external_service_capacity" id="external_service_capacity" value="{{ $mappedExternalServiceCapacity }}">
+                <input type="hidden" name="external_service_price" id="external_service_price" value="{{ $mappedExternalServicePrice }}">
+                <p class="text-xs text-gray-400 mt-1">Optional. Maps this platform product to a concrete provider package for automated fulfillment.</p>
+            </div>
+
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label for="size" class="block text-sm font-semibold text-gray-700">Package Size</label>
@@ -110,3 +139,5 @@
     </div>
 </div>
 @endsection
+
+@include('vendor.products.partials.external-services-script')

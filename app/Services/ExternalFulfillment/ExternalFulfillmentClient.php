@@ -20,4 +20,10 @@ final class ExternalFulfillmentClient implements ExternalFulfillmentClientContra
         return ExternalFulfillmentClientFactory::make($this->config)
             ->sendOrder($order, $idempotencyKey);
     }
+
+    public function getServices(): array
+    {
+        return ExternalFulfillmentClientFactory::make($this->config)
+            ->getServices();
+    }
 }
