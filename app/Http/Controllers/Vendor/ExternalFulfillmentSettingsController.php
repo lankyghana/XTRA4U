@@ -5,8 +5,11 @@ namespace App\Http\Controllers\Vendor;
 use App\Http\Controllers\Controller;
 use App\Models\Vendor;
 use App\Models\VendorSetting;
+use App\Services\ExternalFulfillment\ExternalFulfillmentConfig;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Http;
 
 class ExternalFulfillmentSettingsController extends Controller
 {
@@ -20,6 +23,14 @@ class ExternalFulfillmentSettingsController extends Controller
 
         if (! empty($settings['external_fulfillment_token'])) {
             $settings['external_fulfillment_token_masked'] = '••••••••';
+        }
+
+        if (! empty($settings['external_fulfillment.xpres.api_key'])) {
+            $settings['external_fulfillment_xpres_api_key_masked'] = '••••••••';
+        }
+
+        if (! empty($settings['external_fulfillment.xpres.api_secret'])) {
+            $settings['external_fulfillment_xpres_api_secret_masked'] = '••••••••';
         }
 
         return view('vendor.settings.external-fulfillment', [
@@ -43,7 +54,18 @@ class ExternalFulfillmentSettingsController extends Controller
             'external_fulfillment_token' => 'nullable|string|max:255',
             'external_fulfillment_timeout_seconds' => 'nullable|integer|min:1|max:120',
             'external_fulfillment_provider' => 'nullable|string|in:datafyhub,xpresportal',
+            'external_fulfillment_xpres_base_url' => 'nullable|string|max:255',
+            'external_fulfillment_xpres_api_key' => 'nullable|string|max:255',
+            'external_fulfillment_xpres_api_secret' => 'nullable|string|max:255',
+            'external_fulfillment_xpres_environment' => 'nullable|string|in:sandbox,production',
         ]);
+
+        $xpresBaseUrl = trim((string) ($request->input('external_fulfillment_xpres_base_url') ?? ''));
+        if ($xpresBaseUrl !== '' && ! filter_var($xpresBaseUrl, FILTER_VALIDATE_URL)) {
+            return back()
+                ->withErrors(['external_fulfillment_xpres_base_url' => 'Xpres base URL must be a valid URL.'])
+                ->withInput();
+        }
 
         $enabled = (bool) $request->boolean('external_fulfillment_enabled');
         $provider = (string) ($request->input('external_fulfillment_provider') ?? 'datafyhub');
@@ -75,8 +97,87 @@ class ExternalFulfillmentSettingsController extends Controller
             );
         }
 
+        VendorSetting::setForVendor(
+            $vendor->id,
+            'external_fulfillment.xpres.base_url',
+            $xpresBaseUrl,
+            'external_fulfillment'
+        );
+
+        VendorSetting::setForVendor(
+            $vendor->id,
+            'external_fulfillment.xpres.environment',
+            trim((string) ($request->input('external_fulfillment_xpres_environment') ?? '')),
+            'external_fulfillment'
+        );
+
+        if ($request->filled('external_fulfillment_xpres_api_key')) {
+            VendorSetting::setForVendor(
+                $vendor->id,
+                'external_fulfillment.xpres.api_key',
+                Crypt::encryptString((string) $request->input('external_fulfillment_xpres_api_key')),
+                'external_fulfillment'
+            );
+        }
+
+        if ($request->filled('external_fulfillment_xpres_api_secret')) {
+            VendorSetting::setForVendor(
+                $vendor->id,
+                'external_fulfillment.xpres.api_secret',
+                Crypt::encryptString((string) $request->input('external_fulfillment_xpres_api_secret')),
+                'external_fulfillment'
+            );
+        }
+
         return redirect()->route('vendor.settings.external-fulfillment')
             ->with('success', 'External fulfillment settings updated successfully.');
+    }
+
+    public function testXpresConnection(Request $request)
+    {
+        $vendor = $this->resolveVendor();
+
+        abort_if(! is_null($vendor->affiliate_vendor_id), 403, 'External fulfillment settings are only available for root vendors.');
+
+        $config = ExternalFulfillmentConfig::loadFreshForVendor($vendor);
+        $providerConfig = $config->providerConfig('xpresportal');
+
+        $baseUrl = trim((string) ($providerConfig['base_url'] ?? ''));
+        $apiKey = (string) ($providerConfig['api_key'] ?? '');
+        $apiSecret = (string) ($providerConfig['api_secret'] ?? '');
+        $environment = (string) ($providerConfig['environment'] ?? 'sandbox');
+        $timeout = (int) ($providerConfig['timeout_seconds'] ?? 10);
+
+        if ($baseUrl === '' || $apiKey === '' || $apiSecret === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Xpres credentials are incomplete.',
+            ]);
+        }
+
+        try {
+            $response = Http::timeout($timeout)
+                ->acceptJson()
+                ->withHeaders([
+                    'x-api-key' => $apiKey,
+                    'X-API-KEY' => $apiKey,
+                    'X-API-SECRET' => $apiSecret,
+                    'X-ENV' => $environment,
+                ])
+                ->get(rtrim($baseUrl, '/') . '/api/v1/offers');
+
+            return response()->json([
+                'success' => $response->successful(),
+                'message' => $response->successful()
+                    ? 'Connection successful.'
+                    : 'Connection failed. Check URL or credentials.',
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Connection failed. Check URL or credentials.',
+            ]);
+        }
     }
 
     private function resolveVendor(): Vendor

@@ -147,62 +147,380 @@ class XpresPortalClient implements ExternalFulfillmentClient
     public function getServices(): array
     {
         $providerConfig = $this->config->providerConfig('xpresportal');
-        $baseUrl = trim((string) ($providerConfig['base_url'] ?? ''));
-        $endpoint = trim((string) ($providerConfig['services_endpoint'] ?? '/api/v1/services'));
+        $baseUrl = rtrim(trim((string) ($providerConfig['base_url'] ?? '')), '/');
         $apiKey = (string) ($providerConfig['api_key'] ?? '');
         $apiSecret = (string) ($providerConfig['api_secret'] ?? '');
         $environment = (string) ($providerConfig['environment'] ?? 'sandbox');
         $timeout = (int) ($providerConfig['timeout_seconds'] ?? 30);
 
-        if ($baseUrl === '' || $endpoint === '' || $apiKey === '' || $apiSecret === '') {
+        if ($baseUrl === '' || $apiKey === '' || $apiSecret === '') {
             return [];
         }
 
-        $url = rtrim($baseUrl, '/') . '/' . ltrim($endpoint, '/');
-
         try {
-            $response = Http::timeout($timeout)
-                ->acceptJson()
-                ->withHeaders([
-                    'X-API-KEY' => $apiKey,
-                    'X-API-SECRET' => $apiSecret,
-                    'X-ENV' => $environment,
-                ])
-                ->get($url);
+            $services = [];
+            $dedupe = [];
+            $headers = $this->headers($apiKey, $apiSecret, $environment);
+            $networks = $this->resolveDiscoveryNetworks((array) config('external_fulfillment.providers.xpresportal.networks', []));
 
-            if (! $response->successful()) {
-                Log::warning('XpresPortal services fetch failed', [
-                    'status' => $response->status(),
-                    'provider' => 'xpresportal',
-                ]);
+            foreach ($networks as $network) {
+                $offers = $this->fetchOffersForNetwork($baseUrl, $network, $headers, $timeout);
 
-                return [];
+                foreach ($offers as $offer) {
+                    $packages = $this->fetchPackagesForOffer($baseUrl, $network, $offer, $headers, $timeout);
+
+                    // Safe fallback: if package endpoints are unavailable, derive packages from documented offer volumes.
+                    if (empty($packages)) {
+                        $packages = $this->expandOfferVolumesToPackages($offer);
+                    }
+
+                    foreach ($packages as $package) {
+                        $service = $this->normalizeDiscoveredService($network, $offer, $package);
+                        if (! is_array($service)) {
+                            continue;
+                        }
+
+                        $key = implode('|', [
+                            (string) ($service['id'] ?? ''),
+                            (string) ($service['network'] ?? ''),
+                            (string) ($service['capacity'] ?? ''),
+                        ]);
+
+                        if (isset($dedupe[$key])) {
+                            continue;
+                        }
+
+                        $dedupe[$key] = true;
+                        $services[] = $service;
+                    }
+                }
             }
 
-            $json = $response->json();
-            $services = data_get($json, 'services');
+            // Provider-safe fallback: if network-scoped endpoints fail, use global offers endpoint.
+            if (empty($services)) {
+                $offers = $this->fetchGlobalOffers($baseUrl, $headers, $timeout);
 
-            if (! is_array($services)) {
-                $services = data_get($json, 'data.services');
+                foreach ($offers as $offer) {
+                    $network = $this->normalizeNetwork($this->firstString($offer, ['isp', 'network', 'carrier']) ?? '');
+                    if ($network === '') {
+                        continue;
+                    }
+
+                    $packages = $this->fetchPackagesForOffer($baseUrl, $network, $offer, $headers, $timeout);
+                    if (empty($packages)) {
+                        $packages = $this->expandOfferVolumesToPackages($offer);
+                    }
+
+                    foreach ($packages as $package) {
+                        $service = $this->normalizeDiscoveredService($network, $offer, $package);
+                        if (! is_array($service)) {
+                            continue;
+                        }
+
+                        $key = implode('|', [
+                            (string) ($service['id'] ?? ''),
+                            (string) ($service['network'] ?? ''),
+                            (string) ($service['capacity'] ?? ''),
+                        ]);
+
+                        if (isset($dedupe[$key])) {
+                            continue;
+                        }
+
+                        $dedupe[$key] = true;
+                        $services[] = $service;
+                    }
+                }
             }
 
-            if (! is_array($services)) {
-                $services = data_get($json, 'data');
-            }
+            Log::info('XPRES SERVICES COUNT', [
+                'count' => count($services),
+                'provider' => 'xpresportal',
+            ]);
 
-            if (! is_array($services)) {
-                return [];
-            }
-
-            return $this->normalizeDiscoveredServices($services);
-        } catch (RequestException|ConnectionException $e) {
-            Log::warning('XpresPortal services fetch failed', [
+            return $services;
+        } catch (\Throwable $e) {
+            Log::error('XPRES getServices exception', [
                 'provider' => 'xpresportal',
                 'error' => $this->limitMessage($e->getMessage()),
             ]);
 
             return [];
         }
+    }
+
+    private function headers(string $apiKey, string $apiSecret, string $environment): array
+    {
+        return [
+            'x-api-key' => $apiKey,
+            'X-API-KEY' => $apiKey,
+            'X-API-SECRET' => $apiSecret,
+            'X-ENV' => $environment,
+            'Accept' => 'application/json',
+        ];
+    }
+
+    /** @return array<int,string> */
+    private function resolveDiscoveryNetworks(array $configuredNetworks): array
+    {
+        $normalized = array_values(array_unique(array_filter(array_map(
+            fn ($network) => $this->normalizeNetwork($network),
+            $configuredNetworks
+        ))));
+
+        if (! empty($normalized)) {
+            return $normalized;
+        }
+
+        return ['MTN', 'TELECEL', 'AIRTELTIGO'];
+    }
+
+    /** @return array<int,array<string,mixed>> */
+    private function fetchOffersForNetwork(string $baseUrl, string $network, array $headers, int $timeout): array
+    {
+        $networkPath = strtolower($network);
+        $candidates = [
+            ['url' => $baseUrl . "/api/v1/{$networkPath}/offers", 'query' => []],
+            ['url' => $baseUrl . "/api/{$networkPath}/offers", 'query' => []],
+            ['url' => $baseUrl . '/api/v1/offers', 'query' => ['network' => $networkPath]],
+            ['url' => $baseUrl . '/api/offers', 'query' => ['network' => $networkPath]],
+        ];
+
+        foreach ($candidates as $candidate) {
+            try {
+                $response = Http::timeout($timeout)
+                    ->withHeaders($headers)
+                    ->get($candidate['url'], $candidate['query']);
+
+                if (! $response->successful()) {
+                    Log::warning('XPRES offers fetch failed', [
+                        'network' => $network,
+                        'status' => $response->status(),
+                        'path' => parse_url((string) $candidate['url'], PHP_URL_PATH),
+                    ]);
+                    continue;
+                }
+
+                $offers = $this->extractList($response->json(), ['offers', 'data.offers', 'data']);
+                if (empty($offers)) {
+                    continue;
+                }
+
+                $filtered = [];
+                foreach ($offers as $offer) {
+                    if (! is_array($offer)) {
+                        continue;
+                    }
+
+                    $offerNetwork = $this->normalizeNetwork($this->firstString($offer, ['isp', 'network', 'carrier']) ?? '');
+                    if ($offerNetwork === '' || $offerNetwork === $network) {
+                        $filtered[] = $offer;
+                    }
+                }
+
+                if (! empty($filtered)) {
+                    return $filtered;
+                }
+            } catch (RequestException|ConnectionException $e) {
+                Log::warning('XPRES offers fetch exception', [
+                    'network' => $network,
+                    'path' => parse_url((string) $candidate['url'], PHP_URL_PATH),
+                    'error' => $this->limitMessage($e->getMessage()),
+                ]);
+            }
+        }
+
+        return [];
+    }
+
+    /** @return array<int,array<string,mixed>> */
+    private function fetchPackagesForOffer(string $baseUrl, string $network, array $offer, array $headers, int $timeout): array
+    {
+        $offerId = $this->firstString($offer, ['id', 'offer_id']);
+        $offerSlug = $this->firstString($offer, ['offerSlug', 'offer_slug', 'slug']);
+        $networkPath = strtolower($network);
+
+        $candidates = [];
+
+        if ($offerId) {
+            $encodedId = rawurlencode($offerId);
+            $candidates[] = ['url' => $baseUrl . "/api/v1/offers/{$encodedId}/packages", 'query' => []];
+            $candidates[] = ['url' => $baseUrl . "/api/offers/{$encodedId}/packages", 'query' => []];
+            $candidates[] = ['url' => $baseUrl . "/api/v1/{$networkPath}/offers/{$encodedId}/packages", 'query' => []];
+            $candidates[] = ['url' => $baseUrl . '/api/v1/packages', 'query' => ['offer_id' => $offerId, 'network' => $networkPath]];
+        }
+
+        if ($offerSlug) {
+            $encodedSlug = rawurlencode($offerSlug);
+            $candidates[] = ['url' => $baseUrl . "/api/v1/offers/{$encodedSlug}/packages", 'query' => []];
+            $candidates[] = ['url' => $baseUrl . "/api/offers/{$encodedSlug}/packages", 'query' => []];
+            $candidates[] = ['url' => $baseUrl . '/api/v1/packages', 'query' => ['offerSlug' => $offerSlug, 'network' => $networkPath]];
+        }
+
+        foreach ($candidates as $candidate) {
+            try {
+                $response = Http::timeout($timeout)
+                    ->withHeaders($headers)
+                    ->get($candidate['url'], $candidate['query']);
+
+                if (! $response->successful()) {
+                    Log::warning('XPRES packages fetch failed', [
+                        'network' => $network,
+                        'offer' => $offerSlug ?? $offerId,
+                        'status' => $response->status(),
+                        'path' => parse_url((string) $candidate['url'], PHP_URL_PATH),
+                    ]);
+                    continue;
+                }
+
+                $packages = $this->extractList($response->json(), ['packages', 'data.packages', 'data']);
+                if (! empty($packages)) {
+                    return $packages;
+                }
+            } catch (RequestException|ConnectionException $e) {
+                Log::warning('XPRES packages fetch exception', [
+                    'network' => $network,
+                    'offer' => $offerSlug ?? $offerId,
+                    'path' => parse_url((string) $candidate['url'], PHP_URL_PATH),
+                    'error' => $this->limitMessage($e->getMessage()),
+                ]);
+            }
+        }
+
+        return [];
+    }
+
+    /** @return array<int,array<string,mixed>> */
+    private function fetchGlobalOffers(string $baseUrl, array $headers, int $timeout): array
+    {
+        $candidates = [
+            ['url' => $baseUrl . '/api/v1/offers', 'query' => []],
+            ['url' => $baseUrl . '/api/offers', 'query' => []],
+        ];
+
+        foreach ($candidates as $candidate) {
+            try {
+                $response = Http::timeout($timeout)
+                    ->withHeaders($headers)
+                    ->get($candidate['url'], $candidate['query']);
+
+                if (! $response->successful()) {
+                    Log::warning('XPRES global offers fetch failed', [
+                        'status' => $response->status(),
+                        'path' => parse_url((string) $candidate['url'], PHP_URL_PATH),
+                    ]);
+                    continue;
+                }
+
+                $offers = $this->extractList($response->json(), ['offers', 'data.offers', 'data']);
+                if (! empty($offers)) {
+                    return $offers;
+                }
+            } catch (RequestException|ConnectionException $e) {
+                Log::warning('XPRES global offers fetch exception', [
+                    'path' => parse_url((string) $candidate['url'], PHP_URL_PATH),
+                    'error' => $this->limitMessage($e->getMessage()),
+                ]);
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * @param array<string,mixed> $offer
+     * @return array<int,array<string,mixed>>
+     */
+    private function expandOfferVolumesToPackages(array $offer): array
+    {
+        $volumes = data_get($offer, 'volumes');
+        if (! is_array($volumes)) {
+            return [];
+        }
+
+        $offerId = $this->firstString($offer, ['id', 'offer_id', 'offerSlug', 'offer_slug', 'slug', 'name']) ?? 'offer';
+        $offerName = $this->firstString($offer, ['name', 'title', 'label']) ?? 'Package';
+        $offerPrice = $this->firstNumeric($offer, ['price', 'amount', 'cost', 'rate']);
+
+        $packages = [];
+        foreach ($volumes as $volume) {
+            if (! is_scalar($volume) || (string) $volume === '') {
+                continue;
+            }
+
+            $volumeString = trim((string) $volume);
+            $packages[] = [
+                'id' => $offerId . '-' . $volumeString,
+                'name' => trim($offerName . ' ' . $volumeString),
+                'size' => $volume,
+                'volume' => $volume,
+                'price' => $offerPrice,
+            ];
+        }
+
+        return $packages;
+    }
+
+    /**
+     * @param array<string,mixed> $offer
+     * @param array<string,mixed> $package
+     * @return array<string,mixed>|null
+     */
+    private function normalizeDiscoveredService(string $network, array $offer, array $package): ?array
+    {
+        $serviceId = $this->firstString($package, ['id', 'service_id', 'code', 'key', 'reference']);
+        $offerSlug = $this->firstString($offer, ['offerSlug', 'offer_slug', 'slug']);
+        $capacity = $this->firstScalar($package, ['size', 'volume', 'capacity']);
+
+        if ($serviceId === null) {
+            $serviceId = $this->firstString($offer, ['id', 'offer_id']);
+            if ($serviceId !== null && $capacity !== null) {
+                $serviceId .= '-' . (string) $capacity;
+            }
+        }
+
+        if ($serviceId === null && $offerSlug !== null && $capacity !== null) {
+            $serviceId = $offerSlug . '-' . (string) $capacity;
+        }
+
+        $serviceName = $this->firstString($package, ['name', 'title', 'label', 'service_name']);
+        if ($serviceName === null) {
+            $offerName = $this->firstString($offer, ['name', 'title', 'label']) ?? 'Package';
+            $serviceName = $capacity !== null ? trim($offerName . ' ' . (string) $capacity) : $offerName;
+        }
+
+        if ($serviceId === null || $serviceName === null) {
+            return null;
+        }
+
+        $price = $this->firstNumeric($package, ['price', 'amount', 'cost', 'rate']);
+
+        return [
+            'id' => $serviceId,
+            'name' => $serviceName,
+            'network' => $this->normalizeNetwork($network),
+            'capacity' => $capacity,
+            'price' => $price,
+            'provider' => 'xpresportal',
+            'offer_name' => $this->firstString($offer, ['name', 'title', 'label']),
+            'offer_slug' => $offerSlug,
+        ];
+    }
+
+    /** @return array<int,array<string,mixed>> */
+    private function extractList(mixed $json, array $paths): array
+    {
+        foreach ($paths as $path) {
+            $value = data_get($json, $path);
+            if (is_array($value)) {
+                $list = array_values(array_filter($value, static fn ($item) => is_array($item)));
+                if (! empty($list)) {
+                    return $list;
+                }
+            }
+        }
+
+        return [];
     }
 
     private function normalizeMsisdn(string $msisdn): string

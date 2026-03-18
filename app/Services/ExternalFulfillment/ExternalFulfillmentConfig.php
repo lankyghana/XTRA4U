@@ -5,6 +5,7 @@ namespace App\Services\ExternalFulfillment;
 use App\Models\Setting;
 use App\Models\Vendor;
 use App\Models\VendorSetting;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Schema;
 
 final class ExternalFulfillmentConfig
@@ -88,6 +89,21 @@ final class ExternalFulfillmentConfig
         $provider = self::normalizeProvider((string) ($settings['external_fulfillment_provider'] ?? 'datafyhub'));
         $timeout = self::coerceTimeout((int) ($settings['external_fulfillment_timeout_seconds'] ?? 10));
 
+        $vendorXpresBaseUrl = self::nullableTrim((string) ($settings['external_fulfillment.xpres.base_url'] ?? ''));
+        $vendorXpresEnvironment = self::nullableTrim((string) ($settings['external_fulfillment.xpres.environment'] ?? ''));
+
+        $vendorXpresApiKey = self::decryptVendorSecret(
+            is_string($settings['external_fulfillment.xpres.api_key'] ?? null)
+                ? $settings['external_fulfillment.xpres.api_key']
+                : null
+        );
+
+        $vendorXpresApiSecret = self::decryptVendorSecret(
+            is_string($settings['external_fulfillment.xpres.api_secret'] ?? null)
+                ? $settings['external_fulfillment.xpres.api_secret']
+                : null
+        );
+
         $providers = [
             'datafyhub' => [
                 'enabled' => $enabled,
@@ -99,13 +115,13 @@ final class ExternalFulfillmentConfig
             ],
             'xpresportal' => [
                 'enabled' => $enabled,
-                'base_url' => trim((string) config('services.xpresportal.base_url', '')),
+                'base_url' => $vendorXpresBaseUrl ?? trim((string) config('services.xpresportal.base_url', '')),
                 'endpoint' => '/api/v1/orders',
                 'services_endpoint' => trim((string) config('services.xpresportal.services_endpoint', '/api/v1/services')),
-                'api_key' => (string) config('services.xpresportal.api_key', ''),
-                'api_secret' => (string) config('services.xpresportal.api_secret', ''),
+                'api_key' => $vendorXpresApiKey ?? (string) config('services.xpresportal.api_key', ''),
+                'api_secret' => $vendorXpresApiSecret ?? (string) config('services.xpresportal.api_secret', ''),
                 'timeout_seconds' => self::coerceTimeout((int) config('services.xpresportal.timeout', 30)),
-                'environment' => (string) config('services.xpresportal.environment', 'sandbox'),
+                'environment' => $vendorXpresEnvironment ?? (string) config('services.xpresportal.environment', 'sandbox'),
             ],
         ];
 
@@ -126,8 +142,7 @@ final class ExternalFulfillmentConfig
         if ($this->provider === 'xpresportal') {
             return $config['base_url'] !== ''
                 && $config['api_key'] !== ''
-                && $config['api_secret'] !== ''
-                && $config['endpoint'] !== '';
+                && $config['api_secret'] !== '';
         }
 
         return $config['base_url'] !== ''
@@ -176,5 +191,28 @@ final class ExternalFulfillmentConfig
         return in_array($normalized, ['datafyhub', 'xpresportal'], true)
             ? $normalized
             : 'datafyhub';
+    }
+
+    private static function nullableTrim(string $value): ?string
+    {
+        $trimmed = trim($value);
+
+        return $trimmed !== '' ? $trimmed : null;
+    }
+
+    private static function decryptVendorSecret(?string $encrypted): ?string
+    {
+        if (! is_string($encrypted) || trim($encrypted) === '') {
+            return null;
+        }
+
+        try {
+            $decrypted = Crypt::decryptString($encrypted);
+            $decrypted = trim($decrypted);
+
+            return $decrypted !== '' ? $decrypted : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 }

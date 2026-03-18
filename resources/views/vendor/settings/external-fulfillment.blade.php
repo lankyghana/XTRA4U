@@ -50,9 +50,9 @@
                     @enderror
                 </div>
 
-                <div>
+                <div id="datafyhub_token_block">
                     <label for="external_fulfillment_token" class="block text-sm font-medium text-gray-700 mb-2">
-                        API Token
+                        Datafyhub API Token
                     </label>
                     <input type="password" name="external_fulfillment_token" id="external_fulfillment_token"
                         class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue"
@@ -61,6 +61,96 @@
                         <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                     @enderror
                     <p class="mt-1 text-xs text-gray-500">Leave blank to keep your existing token.</p>
+                </div>
+
+                <div id="xpres_credentials_block" class="space-y-4">
+                    <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                        <p class="text-sm font-semibold text-gray-800">XpresPortal Credentials (Vendor Override)</p>
+                        <p class="mt-1 text-xs text-gray-500">
+                            These values are stored per vendor. Leave blank to fall back to global environment values.
+                        </p>
+                    </div>
+
+                    <div>
+                        <label for="external_fulfillment_xpres_base_url" class="block text-sm font-medium text-gray-700 mb-2">
+                            Xpres Base URL
+                        </label>
+                        <input
+                            type="url"
+                            name="external_fulfillment_xpres_base_url"
+                            id="external_fulfillment_xpres_base_url"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                            value="{{ old('external_fulfillment_xpres_base_url', $settings['external_fulfillment.xpres.base_url'] ?? '') }}"
+                            placeholder="https://www.xpresportal.app"
+                        >
+                        @error('external_fulfillment_xpres_base_url')
+                            <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label for="external_fulfillment_xpres_environment" class="block text-sm font-medium text-gray-700 mb-2">
+                            Xpres Environment
+                        </label>
+                        @php($xpresEnvironment = old('external_fulfillment_xpres_environment', $settings['external_fulfillment.xpres.environment'] ?? config('services.xpresportal.environment', 'sandbox')))
+                        <select
+                            name="external_fulfillment_xpres_environment"
+                            id="external_fulfillment_xpres_environment"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                        >
+                            <option value="sandbox" {{ $xpresEnvironment === 'sandbox' ? 'selected' : '' }}>sandbox</option>
+                            <option value="production" {{ $xpresEnvironment === 'production' ? 'selected' : '' }}>production</option>
+                        </select>
+                        @error('external_fulfillment_xpres_environment')
+                            <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label for="external_fulfillment_xpres_api_key" class="block text-sm font-medium text-gray-700 mb-2">
+                            Xpres API Key
+                        </label>
+                        <input
+                            type="password"
+                            name="external_fulfillment_xpres_api_key"
+                            id="external_fulfillment_xpres_api_key"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                            placeholder="{{ $settings['external_fulfillment_xpres_api_key_masked'] ?? '' }}"
+                        >
+                        @error('external_fulfillment_xpres_api_key')
+                            <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                        @enderror
+                        <p class="mt-1 text-xs text-gray-500">Leave blank to keep your existing API key.</p>
+                    </div>
+
+                    <div>
+                        <label for="external_fulfillment_xpres_api_secret" class="block text-sm font-medium text-gray-700 mb-2">
+                            Xpres API Secret
+                        </label>
+                        <input
+                            type="password"
+                            name="external_fulfillment_xpres_api_secret"
+                            id="external_fulfillment_xpres_api_secret"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                            placeholder="{{ $settings['external_fulfillment_xpres_api_secret_masked'] ?? '' }}"
+                        >
+                        @error('external_fulfillment_xpres_api_secret')
+                            <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                        @enderror
+                        <p class="mt-1 text-xs text-gray-500">Leave blank to keep your existing API secret.</p>
+                    </div>
+
+                    <div class="flex items-center gap-3">
+                        <button
+                            type="button"
+                            id="test_xpres_connection"
+                            data-url="{{ route('vendor.settings.external-fulfillment.test-xpres') }}"
+                            class="px-4 py-2 border border-brand-deep-blue text-brand-deep-blue rounded-lg font-medium hover:bg-brand-deep-blue hover:text-white transition-colors"
+                        >
+                            Test Xpres Connection
+                        </button>
+                        <p id="test_xpres_connection_result" class="text-sm"></p>
+                    </div>
                 </div>
 
                 <div>
@@ -86,3 +176,69 @@
     </div>
 </x-vendor-layout>
 @endsection
+
+@push('scripts')
+<script>
+(() => {
+    const providerSelect = document.getElementById('external_fulfillment_provider');
+    const datafyBlock = document.getElementById('datafyhub_token_block');
+    const xpresBlock = document.getElementById('xpres_credentials_block');
+    const testButton = document.getElementById('test_xpres_connection');
+    const result = document.getElementById('test_xpres_connection_result');
+
+    const syncProviderFields = () => {
+        const provider = providerSelect ? providerSelect.value : 'datafyhub';
+
+        if (datafyBlock) {
+            datafyBlock.style.display = provider === 'datafyhub' ? '' : 'none';
+        }
+
+        if (xpresBlock) {
+            xpresBlock.style.display = provider === 'xpresportal' ? '' : 'none';
+        }
+    };
+
+    if (providerSelect) {
+        providerSelect.addEventListener('change', syncProviderFields);
+        syncProviderFields();
+    }
+
+    if (!testButton || !result) {
+        return;
+    }
+
+    testButton.addEventListener('click', async () => {
+        result.textContent = 'Testing connection...';
+        result.className = 'text-sm text-gray-600';
+        testButton.disabled = true;
+
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+        try {
+            const response = await fetch(testButton.dataset.url, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': csrf,
+                },
+            });
+
+            const payload = await response.json();
+            if (payload.success) {
+                result.textContent = payload.message || 'Connection successful.';
+                result.className = 'text-sm text-green-700';
+            } else {
+                result.textContent = payload.message || 'Connection failed.';
+                result.className = 'text-sm text-red-700';
+            }
+        } catch (error) {
+            result.textContent = 'Connection failed.';
+            result.className = 'text-sm text-red-700';
+        } finally {
+            testButton.disabled = false;
+        }
+    });
+})();
+</script>
+@endpush

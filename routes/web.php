@@ -241,6 +241,8 @@ Route::middleware(['vendor.approved'])
             ->name('settings.external-fulfillment');
         Route::put('settings/external-fulfillment', [\App\Http\Controllers\Vendor\ExternalFulfillmentSettingsController::class, 'update'])
             ->name('settings.external-fulfillment.update');
+        Route::post('settings/external-fulfillment/test-xpres', [\App\Http\Controllers\Vendor\ExternalFulfillmentSettingsController::class, 'testXpresConnection'])
+            ->name('settings.external-fulfillment.test-xpres');
         Route::get('external-services', [\App\Http\Controllers\Vendor\ExternalServicesController::class, 'index'])
             ->name('external-services.index');
 

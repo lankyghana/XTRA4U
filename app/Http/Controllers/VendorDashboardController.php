@@ -1106,10 +1106,13 @@ class VendorDashboardController extends Controller
 
 		$validated = $request->validate([
 			'name' => ['required', 'string', 'max:255'],
+			'email' => ['required', 'string', 'email', 'max:255', Rule::unique('vendors', 'email')->ignore($vendor->id)],
 			'phone_number' => ['required', 'string', 'max:20'],
 			'momo_number' => ['nullable', 'string', 'max:20'],
 			'momo_provider' => ['nullable', 'string', Rule::in($providers)],
 		]);
+
+		$validated['email'] = strtolower(trim((string) $validated['email']));
 
 		$vendor->update($validated);
 
