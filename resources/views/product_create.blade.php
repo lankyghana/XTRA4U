@@ -6,6 +6,7 @@
     $mappedExternalServiceNetwork = old('external_service_network', '');
     $mappedExternalServiceCapacity = old('external_service_capacity', '');
     $mappedExternalServicePrice = old('external_service_price', '');
+    $mappedExternalServiceOfferSlug = old('external_service_offer_slug', '');
 @endphp
 
 @section('content')
@@ -89,6 +90,7 @@
                 <input type="hidden" name="external_service_network" id="external_service_network" value="{{ $mappedExternalServiceNetwork }}">
                 <input type="hidden" name="external_service_capacity" id="external_service_capacity" value="{{ $mappedExternalServiceCapacity }}">
                 <input type="hidden" name="external_service_price" id="external_service_price" value="{{ $mappedExternalServicePrice }}">
+                <input type="hidden" name="external_service_offer_slug" id="external_service_offer_slug" value="{{ $mappedExternalServiceOfferSlug }}">
                 <p class="text-xs text-gray-400 mt-1">Optional. Maps this platform product to a concrete provider package for automated fulfillment.</p>
             </div>
 

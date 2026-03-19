@@ -12,6 +12,7 @@
 @php($mappedExternalServiceNetwork = old('external_service_network', data_get($metadata, "external_mappings.{$activeExternalFulfillmentProvider}.network") ?? ''))
 @php($mappedExternalServiceCapacity = old('external_service_capacity', data_get($metadata, "external_mappings.{$activeExternalFulfillmentProvider}.capacity") ?? ''))
 @php($mappedExternalServicePrice = old('external_service_price', data_get($metadata, "external_mappings.{$activeExternalFulfillmentProvider}.price") ?? ''))
+@php($mappedExternalServiceOfferSlug = old('external_service_offer_slug', data_get($metadata, "external_mappings.{$activeExternalFulfillmentProvider}.offer_slug") ?? ''))
 
 <div class="min-h-screen flex items-center justify-center bg-gray-100 py-10 px-4">
     <div class="w-full max-w-2xl bg-white rounded-2xl shadow-xl p-8 space-y-6">
@@ -94,6 +95,7 @@
                 <input type="hidden" name="external_service_network" id="external_service_network" value="{{ $mappedExternalServiceNetwork }}">
                 <input type="hidden" name="external_service_capacity" id="external_service_capacity" value="{{ $mappedExternalServiceCapacity }}">
                 <input type="hidden" name="external_service_price" id="external_service_price" value="{{ $mappedExternalServicePrice }}">
+                <input type="hidden" name="external_service_offer_slug" id="external_service_offer_slug" value="{{ $mappedExternalServiceOfferSlug }}">
                 <p class="text-xs text-gray-400 mt-1">Optional. Maps this platform product to a concrete provider package for automated fulfillment.</p>
             </div>
 

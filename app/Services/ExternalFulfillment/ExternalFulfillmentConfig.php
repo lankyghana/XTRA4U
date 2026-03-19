@@ -141,8 +141,7 @@ final class ExternalFulfillmentConfig
 
         if ($this->provider === 'xpresportal') {
             return $config['base_url'] !== ''
-                && $config['api_key'] !== ''
-                && $config['api_secret'] !== '';
+                && $config['api_key'] !== '';
         }
 
         return $config['base_url'] !== ''

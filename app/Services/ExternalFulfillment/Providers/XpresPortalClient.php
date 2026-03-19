@@ -20,13 +20,20 @@ class XpresPortalClient implements ExternalFulfillmentClient
     public function sendOrder(Order $order, string $idempotencyKey): array
     {
         $providerConfig = $this->config->providerConfig('xpresportal');
-        $url = rtrim((string) ($providerConfig['base_url'] ?? ''), '/') . '/' . ltrim((string) ($providerConfig['endpoint'] ?? ''), '/');
+        $baseUrl = rtrim((string) ($providerConfig['base_url'] ?? ''), '/');
         $apiKey = (string) ($providerConfig['api_key'] ?? '');
         $apiSecret = (string) ($providerConfig['api_secret'] ?? '');
         $timeout = (int) ($providerConfig['timeout_seconds'] ?? 30);
         $environment = (string) ($providerConfig['environment'] ?? 'sandbox');
         $allowedNetworks = (array) config('external_fulfillment.providers.xpresportal.networks', []);
-        $serviceMapping = $this->resolveServiceMapping($order);
+
+        if ($baseUrl === '' || $apiKey === '') {
+            return [
+                'success' => false,
+                'status' => 'failed',
+                'message' => 'XpresPortal credentials are incomplete.',
+            ];
+        }
 
         $recipient = $this->normalizeMsisdn((string) $order->recipient_phone_number);
         if ($recipient === '') {
@@ -37,111 +44,118 @@ class XpresPortalClient implements ExternalFulfillmentClient
             ];
         }
 
-        $productPayload = [
-            'name' => $order->display_service_name,
-            'description' => (string) $order->service_purchased,
-        ];
+        $serviceMapping = $this->resolveServiceMapping($order);
+        $network = $this->resolveNetwork($order, $allowedNetworks);
 
-        if (($serviceMapping['service_id'] ?? '') !== '') {
-            $productPayload['service_id'] = (string) $serviceMapping['service_id'];
-        }
+        $metadata = array_filter([
+            'order_id' => $order->id,
+            'vendor_id' => $order->vendor_id,
+            'owner_vendor_id' => $order->owner_vendor_id,
+            'reseller_vendor_id' => $order->reseller_vendor_id,
+            'payment_gateway' => $order->payment_gateway,
+            'mapped_service_id' => $serviceMapping['service_id'] ?? null,
+            'mapped_service_name' => $serviceMapping['service_name'] ?? null,
+            'mapped_offer_slug' => $serviceMapping['offer_slug'] ?? null,
+        ], static fn ($value) => ! is_null($value) && $value !== '');
 
-        if (($serviceMapping['capacity'] ?? null) !== null && (string) $serviceMapping['capacity'] !== '') {
-            $productPayload['capacity'] = $serviceMapping['capacity'];
-        }
-
-        $payload = [
+        $basePayload = [
             'reference' => (string) ($order->payment_reference ?? $idempotencyKey),
             'idempotency_key' => $idempotencyKey,
-            'customer' => [
-                'phone' => $recipient,
-                'email' => (string) $order->customer_email,
-            ],
-            'network' => $this->resolveNetwork($order, $allowedNetworks),
+            'network' => $network,
             'amount' => (float) ($order->amount_paid ?? 0),
-            'product' => $productPayload,
-            'metadata' => array_filter([
-                'order_id' => $order->id,
-                'vendor_id' => $order->vendor_id,
-                'owner_vendor_id' => $order->owner_vendor_id,
-                'reseller_vendor_id' => $order->reseller_vendor_id,
-                'payment_gateway' => $order->payment_gateway,
-                'mapped_service_id' => $serviceMapping['service_id'] ?? null,
-                'mapped_service_name' => $serviceMapping['service_name'] ?? null,
-            ], static fn ($value) => ! is_null($value) && $value !== ''),
             'environment' => $environment,
+            'metadata' => $metadata,
+            'email' => (string) $order->customer_email,
         ];
 
-        if (($serviceMapping['service_id'] ?? '') !== '') {
-            $payload['service_id'] = (string) $serviceMapping['service_id'];
+        $payloadVariants = $this->buildOrderPayloadVariants(
+            $basePayload,
+            $serviceMapping,
+            $recipient,
+            (string) $order->display_service_name,
+            (string) $order->service_purchased,
+        );
+
+        $headers = $this->headers($apiKey, $apiSecret, $environment, $idempotencyKey);
+        $endpoints = $this->resolveOrderEndpoints($providerConfig, $baseUrl);
+
+        $lastErrorMessage = 'Unable to submit order to XpresPortal.';
+        $lastRaw = null;
+        $lastReference = null;
+
+        foreach ($endpoints as $url) {
+            foreach ($payloadVariants as $payload) {
+                try {
+                    $response = Http::timeout($timeout)
+                        ->acceptJson()
+                        ->asJson()
+                        ->withHeaders($headers)
+                        ->post($url, $payload);
+
+                    $json = $response->json();
+                    $status = $this->normalizeStatus(data_get($json, 'status') ?? data_get($json, 'data.status') ?? null);
+                    $remoteReference = $this->extractReference($json);
+
+                    if ($response->successful()) {
+                        if (in_array($status, ['failed', 'error', 'cancelled', 'rejected'], true)) {
+                            $errorMessage = $this->buildErrorMessage($response->status(), $json ?? $response->body());
+
+                            return [
+                                'success' => false,
+                                'status' => 'failed',
+                                'external_reference' => $remoteReference,
+                                'message' => $errorMessage,
+                                'raw' => $json,
+                            ];
+                        }
+
+                        if (in_array($status, ['pending', 'processing', 'queued', 'in_progress'], true)) {
+                            return [
+                                'success' => false,
+                                'status' => 'pending',
+                                'external_reference' => $remoteReference,
+                                'message' => 'pending',
+                                'raw' => $json,
+                            ];
+                        }
+
+                        return [
+                            'success' => true,
+                            'status' => 'success',
+                            'external_reference' => $remoteReference,
+                            'message' => 'success',
+                            'raw' => $json,
+                        ];
+                    }
+
+                    $lastErrorMessage = $this->buildErrorMessage($response->status(), $json ?? $response->body());
+                    $lastRaw = $json;
+                    $lastReference = $remoteReference;
+
+                    Log::warning('XpresPortal fulfillment attempt failed', [
+                        'order_id' => $order->id,
+                        'status' => $response->status(),
+                        'endpoint' => $url,
+                    ]);
+                } catch (RequestException|ConnectionException $e) {
+                    $lastErrorMessage = $this->limitMessage($e->getMessage());
+
+                    Log::warning('XpresPortal fulfillment attempt exception', [
+                        'order_id' => $order->id,
+                        'endpoint' => $url,
+                        'error' => $lastErrorMessage,
+                    ]);
+                }
+            }
         }
 
-        try {
-            $response = Http::timeout($timeout)
-                ->acceptJson()
-                ->asJson()
-                ->withHeaders([
-                    'X-API-KEY' => $apiKey,
-                    'X-API-SECRET' => $apiSecret,
-                    'X-ENV' => $environment,
-                    'Idempotency-Key' => $idempotencyKey,
-                ])
-                ->post($url, $payload);
-
-            $json = $response->json();
-            $status = $this->normalizeStatus(data_get($json, 'status') ?? data_get($json, 'data.status') ?? null);
-            $remoteReference = $this->extractReference($json);
-
-            if ($response->successful() && in_array($status, ['success', 'completed'], true)) {
-                return [
-                    'success' => true,
-                    'status' => 'success',
-                    'external_reference' => $remoteReference,
-                    'message' => 'success',
-                    'raw' => $json,
-                ];
-            }
-
-            if (in_array($status, ['pending', 'processing'], true)) {
-                return [
-                    'success' => false,
-                    'status' => 'pending',
-                    'external_reference' => $remoteReference,
-                    'message' => 'pending',
-                    'raw' => $json,
-                ];
-            }
-
-            $errorMessage = $this->buildErrorMessage($response->status(), $json ?? $response->body());
-
-            Log::warning('XpresPortal fulfillment failed', [
-                'order_id' => $order->id,
-                'status' => $response->status(),
-            ]);
-
-            return [
-                'success' => false,
-                'status' => 'failed',
-                'external_reference' => $remoteReference,
-                'message' => $errorMessage,
-                'raw' => $json,
-            ];
-        } catch (RequestException|ConnectionException $e) {
-            $message = $this->limitMessage($e->getMessage());
-
-            Log::error('XpresPortal fulfillment failed', [
-                'order_id' => $order->id,
-                'error' => $message,
-            ]);
-
-            return [
-                'success' => false,
-                'status' => 'failed',
-                'external_reference' => null,
-                'message' => $message,
-                'raw' => null,
-            ];
-        }
+        return [
+            'success' => false,
+            'status' => 'failed',
+            'external_reference' => $lastReference,
+            'message' => $lastErrorMessage,
+            'raw' => $lastRaw,
+        ];
     }
 
     public function getServices(): array
@@ -152,8 +166,9 @@ class XpresPortalClient implements ExternalFulfillmentClient
         $apiSecret = (string) ($providerConfig['api_secret'] ?? '');
         $environment = (string) ($providerConfig['environment'] ?? 'sandbox');
         $timeout = (int) ($providerConfig['timeout_seconds'] ?? 30);
+        $servicesEndpoint = (string) ($providerConfig['services_endpoint'] ?? '/api/v1/services');
 
-        if ($baseUrl === '' || $apiKey === '' || $apiSecret === '') {
+        if ($baseUrl === '' || $apiKey === '') {
             return [];
         }
 
@@ -161,6 +176,23 @@ class XpresPortalClient implements ExternalFulfillmentClient
             $services = [];
             $dedupe = [];
             $headers = $this->headers($apiKey, $apiSecret, $environment);
+
+            $directServices = $this->fetchDirectServices($baseUrl, $servicesEndpoint, $headers, $timeout);
+            foreach ($directServices as $service) {
+                $key = implode('|', [
+                    (string) ($service['id'] ?? ''),
+                    (string) ($service['network'] ?? ''),
+                    (string) ($service['capacity'] ?? ''),
+                ]);
+
+                if (isset($dedupe[$key])) {
+                    continue;
+                }
+
+                $dedupe[$key] = true;
+                $services[] = $service;
+            }
+
             $networks = $this->resolveDiscoveryNetworks((array) config('external_fulfillment.providers.xpresportal.networks', []));
 
             foreach ($networks as $network) {
@@ -249,15 +281,216 @@ class XpresPortalClient implements ExternalFulfillmentClient
         }
     }
 
-    private function headers(string $apiKey, string $apiSecret, string $environment): array
+    private function headers(string $apiKey, ?string $apiSecret, string $environment, ?string $idempotencyKey = null): array
     {
-        return [
+        $headers = [
             'x-api-key' => $apiKey,
             'X-API-KEY' => $apiKey,
-            'X-API-SECRET' => $apiSecret,
             'X-ENV' => $environment,
             'Accept' => 'application/json',
         ];
+
+        if (is_string($apiSecret) && trim($apiSecret) !== '') {
+            $headers['X-API-SECRET'] = $apiSecret;
+        }
+
+        if (is_string($idempotencyKey) && trim($idempotencyKey) !== '') {
+            $headers['Idempotency-Key'] = $idempotencyKey;
+            $headers['X-Idempotency-Key'] = $idempotencyKey;
+        }
+
+        return $headers;
+    }
+
+    /** @return array<int,string> */
+    private function resolveOrderEndpoints(array $providerConfig, string $baseUrl): array
+    {
+        $configuredEndpoint = trim((string) ($providerConfig['endpoint'] ?? '/api/v1/orders'));
+
+        $candidates = [
+            $configuredEndpoint,
+            '/api/v1/orders',
+            '/api/orders',
+            '/api/v1/purchase',
+            '/api/v1/transactions',
+        ];
+
+        $urls = [];
+        $seen = [];
+
+        foreach ($candidates as $candidate) {
+            if ($candidate === '') {
+                continue;
+            }
+
+            $url = str_starts_with($candidate, 'http://') || str_starts_with($candidate, 'https://')
+                ? $candidate
+                : $baseUrl . '/' . ltrim($candidate, '/');
+
+            $key = strtolower($url);
+            if (isset($seen[$key])) {
+                continue;
+            }
+
+            $seen[$key] = true;
+            $urls[] = $url;
+        }
+
+        return $urls;
+    }
+
+    /**
+     * @param array<string,mixed> $basePayload
+     * @param array{service_id:string,service_name:string,capacity:mixed,price:?float,offer_slug:string} $serviceMapping
+     * @return array<int,array<string,mixed>>
+     */
+    private function buildOrderPayloadVariants(
+        array $basePayload,
+        array $serviceMapping,
+        string $recipient,
+        string $displayServiceName,
+        string $serviceDescription,
+    ): array {
+        $docsPayload = [
+            'reference' => $basePayload['reference'] ?? null,
+            'idempotency_key' => $basePayload['idempotency_key'] ?? null,
+            'phone' => $recipient,
+            'msisdn' => $recipient,
+            'email' => $basePayload['email'] ?? null,
+            'network' => $basePayload['network'] ?? null,
+            'amount' => $basePayload['amount'] ?? null,
+            'offer_slug' => $serviceMapping['offer_slug'] !== '' ? $serviceMapping['offer_slug'] : null,
+            'offerSlug' => $serviceMapping['offer_slug'] !== '' ? $serviceMapping['offer_slug'] : null,
+            'package_id' => $serviceMapping['service_id'] !== '' ? $serviceMapping['service_id'] : null,
+            'service_id' => $serviceMapping['service_id'] !== '' ? $serviceMapping['service_id'] : null,
+            'service_name' => $serviceMapping['service_name'] !== '' ? $serviceMapping['service_name'] : null,
+            'capacity' => $serviceMapping['capacity'],
+            'price' => $serviceMapping['price'],
+            'product_name' => $displayServiceName !== '' ? $displayServiceName : null,
+            'description' => $serviceDescription !== '' ? $serviceDescription : null,
+            'metadata' => $basePayload['metadata'] ?? [],
+            'meta' => $basePayload['metadata'] ?? [],
+            'environment' => $basePayload['environment'] ?? null,
+        ];
+
+        $productPayload = [
+            'name' => $displayServiceName,
+            'description' => $serviceDescription,
+            'service_id' => $serviceMapping['service_id'] !== '' ? $serviceMapping['service_id'] : null,
+            'capacity' => $serviceMapping['capacity'],
+            'price' => $serviceMapping['price'],
+            'offer_slug' => $serviceMapping['offer_slug'] !== '' ? $serviceMapping['offer_slug'] : null,
+        ];
+
+        $legacyPayload = [
+            'reference' => $basePayload['reference'] ?? null,
+            'idempotency_key' => $basePayload['idempotency_key'] ?? null,
+            'customer' => [
+                'phone' => $recipient,
+                'email' => $basePayload['email'] ?? null,
+            ],
+            'network' => $basePayload['network'] ?? null,
+            'amount' => $basePayload['amount'] ?? null,
+            'product' => $productPayload,
+            'service_id' => $serviceMapping['service_id'] !== '' ? $serviceMapping['service_id'] : null,
+            'package_id' => $serviceMapping['service_id'] !== '' ? $serviceMapping['service_id'] : null,
+            'offer_slug' => $serviceMapping['offer_slug'] !== '' ? $serviceMapping['offer_slug'] : null,
+            'metadata' => $basePayload['metadata'] ?? [],
+            'environment' => $basePayload['environment'] ?? null,
+        ];
+
+        return [
+            $this->filterPayload($docsPayload),
+            $this->filterPayload($legacyPayload),
+        ];
+    }
+
+    /**
+     * @param array<string,mixed> $payload
+     * @return array<string,mixed>
+     */
+    private function filterPayload(array $payload): array
+    {
+        $filtered = [];
+
+        foreach ($payload as $key => $value) {
+            if (is_array($value)) {
+                $nested = $this->filterPayload($value);
+                if ($nested !== []) {
+                    $filtered[$key] = $nested;
+                }
+
+                continue;
+            }
+
+            if ($value === null || $value === '') {
+                continue;
+            }
+
+            $filtered[$key] = $value;
+        }
+
+        return $filtered;
+    }
+
+    /** @return array<int,array<string,mixed>> */
+    private function fetchDirectServices(string $baseUrl, string $servicesEndpoint, array $headers, int $timeout): array
+    {
+        $candidates = [
+            $servicesEndpoint,
+            '/api/v1/services',
+            '/api/services',
+        ];
+
+        $seen = [];
+        foreach ($candidates as $candidate) {
+            $candidate = trim((string) $candidate);
+            if ($candidate === '') {
+                continue;
+            }
+
+            $url = str_starts_with($candidate, 'http://') || str_starts_with($candidate, 'https://')
+                ? $candidate
+                : $baseUrl . '/' . ltrim($candidate, '/');
+
+            $key = strtolower($url);
+            if (isset($seen[$key])) {
+                continue;
+            }
+
+            $seen[$key] = true;
+
+            try {
+                $response = Http::timeout($timeout)
+                    ->withHeaders($headers)
+                    ->get($url);
+
+                if (! $response->successful()) {
+                    Log::warning('XPRES direct services fetch failed', [
+                        'status' => $response->status(),
+                        'path' => parse_url($url, PHP_URL_PATH),
+                    ]);
+                    continue;
+                }
+
+                $json = $response->json();
+                $services = $this->extractList($json, ['services', 'data.services', 'data']);
+                if (empty($services) && is_array($json)) {
+                    $services = array_values(array_filter($json, static fn ($item) => is_array($item)));
+                }
+
+                if (! empty($services)) {
+                    return $this->normalizeDiscoveredServices($services);
+                }
+            } catch (RequestException|ConnectionException $e) {
+                Log::warning('XPRES direct services fetch exception', [
+                    'path' => parse_url($url, PHP_URL_PATH),
+                    'error' => $this->limitMessage($e->getMessage()),
+                ]);
+            }
+        }
+
+        return [];
     }
 
     /** @return array<int,string> */
@@ -548,7 +781,7 @@ class XpresPortalClient implements ExternalFulfillmentClient
     {
         $statusString = strtolower(trim((string) ($status ?? '')));
 
-        return $statusString === '' ? 'failed' : $statusString;
+        return $statusString === '' ? 'unknown' : $statusString;
     }
 
     private function extractReference(mixed $json): ?string
@@ -617,7 +850,7 @@ class XpresPortalClient implements ExternalFulfillmentClient
         return $trimmed === '' ? '' : strtoupper(preg_replace('/\s+/', '', $trimmed));
     }
 
-    /** @return array{service_id:string,service_name:string,capacity:mixed,price:?float} */
+    /** @return array{service_id:string,service_name:string,capacity:mixed,price:?float,offer_slug:string} */
     private function resolveServiceMapping(Order $order): array
     {
         $metadata = [];
@@ -647,11 +880,17 @@ class XpresPortalClient implements ExternalFulfillmentClient
             $price = (float) $mappedPrice;
         }
 
+        $offerSlug = $this->firstString($metadata, [
+            'external_mappings.xpresportal.offer_slug',
+            'external_service_offer_slug',
+        ]) ?? '';
+
         return [
             'service_id' => $serviceId,
             'service_name' => $serviceName,
             'capacity' => $capacity,
             'price' => $price,
+            'offer_slug' => $offerSlug,
         ];
     }
 
@@ -684,6 +923,8 @@ class XpresPortalClient implements ExternalFulfillmentClient
                 'network' => $network,
                 'capacity' => $capacity,
                 'price' => $price,
+                'offer_slug' => $this->firstString($service, ['offer_slug', 'offerSlug', 'offer']),
+                'provider' => 'xpresportal',
                 'raw' => $service,
             ];
         }

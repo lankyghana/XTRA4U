@@ -148,22 +148,27 @@ class ExternalFulfillmentSettingsController extends Controller
         $environment = (string) ($providerConfig['environment'] ?? 'sandbox');
         $timeout = (int) ($providerConfig['timeout_seconds'] ?? 10);
 
-        if ($baseUrl === '' || $apiKey === '' || $apiSecret === '') {
+        if ($baseUrl === '' || $apiKey === '') {
             return response()->json([
                 'success' => false,
                 'message' => 'Xpres credentials are incomplete.',
             ]);
         }
 
+        $headers = [
+            'x-api-key' => $apiKey,
+            'X-API-KEY' => $apiKey,
+            'X-ENV' => $environment,
+        ];
+
+        if ($apiSecret !== '') {
+            $headers['X-API-SECRET'] = $apiSecret;
+        }
+
         try {
             $response = Http::timeout($timeout)
                 ->acceptJson()
-                ->withHeaders([
-                    'x-api-key' => $apiKey,
-                    'X-API-KEY' => $apiKey,
-                    'X-API-SECRET' => $apiSecret,
-                    'X-ENV' => $environment,
-                ])
+                ->withHeaders($headers)
                 ->get(rtrim($baseUrl, '/') . '/api/v1/offers');
 
             return response()->json([

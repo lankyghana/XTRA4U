@@ -8,6 +8,7 @@
     const initialServiceNetwork = @json($mappedExternalServiceNetwork ?? '');
     const initialServiceCapacity = @json($mappedExternalServiceCapacity ?? '');
     const initialServicePrice = @json($mappedExternalServicePrice ?? '');
+    const initialServiceOfferSlug = @json($mappedExternalServiceOfferSlug ?? '');
 
     const serviceSelect = document.getElementById('external_service_id');
     const refreshButton = document.getElementById('external_services_refresh');
@@ -22,6 +23,7 @@
     const networkInput = document.getElementById('external_service_network');
     const capacityInput = document.getElementById('external_service_capacity');
     const priceInput = document.getElementById('external_service_price');
+    const offerSlugInput = document.getElementById('external_service_offer_slug');
     const externalNetworkSelect = document.getElementById('external_network');
 
     const fallbackLabel = providerName ? providerName + ' service' : 'External service';
@@ -59,6 +61,7 @@
         const network = sanitizeString(raw.network || raw.carrier || raw.provider);
         const capacity = sanitizeString(raw.capacity || raw.size || raw.volume);
         const price = parseNumeric(raw.price || raw.amount || raw.cost || raw.rate);
+        const offerSlug = sanitizeString(raw.offer_slug || raw.offerSlug || raw.offer || '');
 
         return {
             id,
@@ -66,6 +69,7 @@
             network,
             capacity,
             price,
+            offerSlug,
             raw,
         };
     }
@@ -100,6 +104,7 @@
             if (networkInput) networkInput.value = '';
             if (capacityInput) capacityInput.value = '';
             if (priceInput) priceInput.value = '';
+            if (offerSlugInput) offerSlugInput.value = '';
             renderServiceDetails(null);
             return;
         }
@@ -108,6 +113,7 @@
         if (networkInput) networkInput.value = service.network || '';
         if (capacityInput) capacityInput.value = service.capacity || '';
         if (priceInput) priceInput.value = service.price || '';
+        if (offerSlugInput) offerSlugInput.value = service.offerSlug || '';
 
         if (externalNetworkSelect && service.network) {
             const preferred = service.network.toUpperCase();
@@ -136,6 +142,7 @@
         option.dataset.network = service.network || '';
         option.dataset.capacity = service.capacity || '';
         option.dataset.price = service.price || '';
+        option.dataset.offerSlug = service.offerSlug || '';
 
         return option;
     }
@@ -151,6 +158,7 @@
             network: option.dataset.network || '',
             capacity: option.dataset.capacity || '',
             price: option.dataset.price || '',
+            offerSlug: option.dataset.offerSlug || '',
         };
     }
 
@@ -208,6 +216,7 @@
                     preservedOption.dataset.network = initialServiceNetwork || '';
                     preservedOption.dataset.capacity = initialServiceCapacity || '';
                     preservedOption.dataset.price = initialServicePrice || '';
+                    preservedOption.dataset.offerSlug = initialServiceOfferSlug || '';
                     serviceSelect.appendChild(preservedOption);
                 }
 
@@ -243,6 +252,7 @@
         if (networkInput) networkInput.value = initialServiceNetwork;
         if (capacityInput) capacityInput.value = initialServiceCapacity;
         if (priceInput) priceInput.value = initialServicePrice;
+        if (offerSlugInput) offerSlugInput.value = initialServiceOfferSlug;
     }
 
     fetchServices(initialServiceId);

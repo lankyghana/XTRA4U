@@ -55,6 +55,7 @@ class ProductController extends Controller
             'external_service_network' => $this->externalNetworkValidationRule($providerNetworks),
             'external_service_capacity' => 'nullable|string|max:80',
             'external_service_price' => 'nullable|numeric|min:0',
+            'external_service_offer_slug' => 'nullable|string|max:120',
             'category' => $this->categoryValidationRule(),
             'size' => 'nullable|string|max:50',
             'validity' => 'nullable|string|max:50',
@@ -118,6 +119,7 @@ class ProductController extends Controller
             'external_service_network' => $this->externalNetworkValidationRule($providerNetworks),
             'external_service_capacity' => 'nullable|string|max:80',
             'external_service_price' => 'nullable|numeric|min:0',
+            'external_service_offer_slug' => 'nullable|string|max:120',
             'category' => $this->categoryValidationRule(),
             'size' => 'nullable|string|max:50',
             'validity' => 'nullable|string|max:50',
@@ -258,6 +260,7 @@ class ProductController extends Controller
         $externalServiceNetwork = trim((string) $request->input('external_service_network', ''));
         $externalServiceCapacity = trim((string) $request->input('external_service_capacity', ''));
         $externalServicePrice = $request->input('external_service_price');
+        $externalServiceOfferSlug = trim((string) $request->input('external_service_offer_slug', ''));
 
         if ($activeProvider !== '') {
             $providerMapping = [];
@@ -296,8 +299,14 @@ class ProductController extends Controller
                 } else {
                     unset($providerMapping['price']);
                 }
+
+                if ($externalServiceOfferSlug !== '') {
+                    $providerMapping['offer_slug'] = $externalServiceOfferSlug;
+                } else {
+                    unset($providerMapping['offer_slug']);
+                }
             } else {
-                unset($providerMapping['service_id'], $providerMapping['service_name'], $providerMapping['capacity'], $providerMapping['price']);
+                unset($providerMapping['service_id'], $providerMapping['service_name'], $providerMapping['capacity'], $providerMapping['price'], $providerMapping['offer_slug']);
             }
 
             if (! empty($providerMapping)) {

@@ -125,7 +125,7 @@
 
                     <div>
                         <label for="external_fulfillment_xpres_api_secret" class="block text-sm font-medium text-gray-700 mb-2">
-                            Xpres API Secret
+                            Xpres API Secret (Optional)
                         </label>
                         <input
                             type="password"
@@ -137,7 +137,7 @@
                         @error('external_fulfillment_xpres_api_secret')
                             <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                         @enderror
-                        <p class="mt-1 text-xs text-gray-500">Leave blank to keep your existing API secret.</p>
+                        <p class="mt-1 text-xs text-gray-500">Leave blank to keep your existing API secret. Some accounts use API key-only auth.</p>
                     </div>
 
                     <div class="flex items-center gap-3">
