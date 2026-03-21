@@ -193,42 +193,45 @@ class XpresPortalClient implements ExternalFulfillmentClient
                 $services[] = $service;
             }
 
-            $networks = $this->resolveDiscoveryNetworks((array) config('external_fulfillment.providers.xpresportal.networks', []));
+            // Only try per-network offers if direct services failed
+            if (empty($services)) {
+                $networks = $this->resolveDiscoveryNetworks((array) config('external_fulfillment.providers.xpresportal.networks', []));
 
-            foreach ($networks as $network) {
-                $offers = $this->fetchOffersForNetwork($baseUrl, $network, $headers, $timeout);
+                foreach ($networks as $network) {
+                    $offers = $this->fetchOffersForNetwork($baseUrl, $network, $headers, $timeout);
 
-                foreach ($offers as $offer) {
-                    $packages = $this->fetchPackagesForOffer($baseUrl, $network, $offer, $headers, $timeout);
+                    foreach ($offers as $offer) {
+                        $packages = $this->fetchPackagesForOffer($baseUrl, $network, $offer, $headers, $timeout);
 
-                    // Safe fallback: if package endpoints are unavailable, derive packages from documented offer volumes.
-                    if (empty($packages)) {
-                        $packages = $this->expandOfferVolumesToPackages($offer);
-                    }
-
-                    foreach ($packages as $package) {
-                        $service = $this->normalizeDiscoveredService($network, $offer, $package);
-                        if (! is_array($service)) {
-                            continue;
+                        // Safe fallback: if package endpoints are unavailable, derive packages from documented offer volumes.
+                        if (empty($packages)) {
+                            $packages = $this->expandOfferVolumesToPackages($offer);
                         }
 
-                        $key = implode('|', [
-                            (string) ($service['id'] ?? ''),
-                            (string) ($service['network'] ?? ''),
-                            (string) ($service['capacity'] ?? ''),
-                        ]);
+                        foreach ($packages as $package) {
+                            $service = $this->normalizeDiscoveredService($network, $offer, $package);
+                            if (! is_array($service)) {
+                                continue;
+                            }
 
-                        if (isset($dedupe[$key])) {
-                            continue;
+                            $key = implode('|', [
+                                (string) ($service['id'] ?? ''),
+                                (string) ($service['network'] ?? ''),
+                                (string) ($service['capacity'] ?? ''),
+                            ]);
+
+                            if (isset($dedupe[$key])) {
+                                continue;
+                            }
+
+                            $dedupe[$key] = true;
+                            $services[] = $service;
                         }
-
-                        $dedupe[$key] = true;
-                        $services[] = $service;
                     }
                 }
             }
 
-            // Provider-safe fallback: if network-scoped endpoints fail, use global offers endpoint.
+            // Provider-safe fallback: if all other methods fail, use global offers endpoint.
             if (empty($services)) {
                 $offers = $this->fetchGlobalOffers($baseUrl, $headers, $timeout);
 
@@ -285,18 +288,16 @@ class XpresPortalClient implements ExternalFulfillmentClient
     {
         $headers = [
             'x-api-key' => $apiKey,
-            'X-API-KEY' => $apiKey,
-            'X-ENV' => $environment,
             'Accept' => 'application/json',
+            'Content-Type' => 'application/json',
         ];
 
         if (is_string($apiSecret) && trim($apiSecret) !== '') {
-            $headers['X-API-SECRET'] = $apiSecret;
+            $headers['x-api-secret'] = $apiSecret;
         }
 
         if (is_string($idempotencyKey) && trim($idempotencyKey) !== '') {
-            $headers['Idempotency-Key'] = $idempotencyKey;
-            $headers['X-Idempotency-Key'] = $idempotencyKey;
+            $headers['idempotency-key'] = $idempotencyKey;
         }
 
         return $headers;
@@ -310,6 +311,11 @@ class XpresPortalClient implements ExternalFulfillmentClient
         $candidates = [
             $configuredEndpoint,
             '/api/v1/orders',
+            '/api/v1/order/mtn',
+            '/api/v1/order/telecel',
+            '/api/v1/order/airteltigo',
+            '/api/v1/order/at',
+            '/api/v1/order',
             '/api/orders',
             '/api/v1/purchase',
             '/api/v1/transactions',
@@ -351,57 +357,31 @@ class XpresPortalClient implements ExternalFulfillmentClient
         string $displayServiceName,
         string $serviceDescription,
     ): array {
-        $docsPayload = [
-            'reference' => $basePayload['reference'] ?? null,
-            'idempotency_key' => $basePayload['idempotency_key'] ?? null,
+        // Primary payload - XpresPortal API specification
+        $primaryPayload = [
+            'type' => 'single',
+            'phone' => $recipient,
+            'volume' => $serviceMapping['capacity'],
+            'offerSlug' => $serviceMapping['offer_slug'] !== '' ? $serviceMapping['offer_slug'] : null,
+        ];
+
+        // Fallback payload with alternative field names
+        $fallbackPayload = [
+            'type' => 'single',
             'phone' => $recipient,
             'msisdn' => $recipient,
-            'email' => $basePayload['email'] ?? null,
-            'network' => $basePayload['network'] ?? null,
-            'amount' => $basePayload['amount'] ?? null,
-            'offer_slug' => $serviceMapping['offer_slug'] !== '' ? $serviceMapping['offer_slug'] : null,
+            'volume' => $serviceMapping['capacity'],
             'offerSlug' => $serviceMapping['offer_slug'] !== '' ? $serviceMapping['offer_slug'] : null,
-            'package_id' => $serviceMapping['service_id'] !== '' ? $serviceMapping['service_id'] : null,
-            'service_id' => $serviceMapping['service_id'] !== '' ? $serviceMapping['service_id'] : null,
-            'service_name' => $serviceMapping['service_name'] !== '' ? $serviceMapping['service_name'] : null,
-            'capacity' => $serviceMapping['capacity'],
-            'price' => $serviceMapping['price'],
-            'product_name' => $displayServiceName !== '' ? $displayServiceName : null,
-            'description' => $serviceDescription !== '' ? $serviceDescription : null,
-            'metadata' => $basePayload['metadata'] ?? [],
-            'meta' => $basePayload['metadata'] ?? [],
-            'environment' => $basePayload['environment'] ?? null,
-        ];
-
-        $productPayload = [
-            'name' => $displayServiceName,
-            'description' => $serviceDescription,
-            'service_id' => $serviceMapping['service_id'] !== '' ? $serviceMapping['service_id'] : null,
-            'capacity' => $serviceMapping['capacity'],
-            'price' => $serviceMapping['price'],
             'offer_slug' => $serviceMapping['offer_slug'] !== '' ? $serviceMapping['offer_slug'] : null,
-        ];
-
-        $legacyPayload = [
-            'reference' => $basePayload['reference'] ?? null,
-            'idempotency_key' => $basePayload['idempotency_key'] ?? null,
-            'customer' => [
-                'phone' => $recipient,
-                'email' => $basePayload['email'] ?? null,
-            ],
-            'network' => $basePayload['network'] ?? null,
+            'service_id' => $serviceMapping['service_id'] !== '' ? $serviceMapping['service_id'] : null,
             'amount' => $basePayload['amount'] ?? null,
-            'product' => $productPayload,
-            'service_id' => $serviceMapping['service_id'] !== '' ? $serviceMapping['service_id'] : null,
-            'package_id' => $serviceMapping['service_id'] !== '' ? $serviceMapping['service_id'] : null,
-            'offer_slug' => $serviceMapping['offer_slug'] !== '' ? $serviceMapping['offer_slug'] : null,
-            'metadata' => $basePayload['metadata'] ?? [],
-            'environment' => $basePayload['environment'] ?? null,
+            'reference' => $basePayload['reference'] ?? null,
+            'email' => $basePayload['email'] ?? null,
         ];
 
         return [
-            $this->filterPayload($docsPayload),
-            $this->filterPayload($legacyPayload),
+            $this->filterPayload($primaryPayload),
+            $this->filterPayload($fallbackPayload),
         ];
     }
 
@@ -437,9 +417,8 @@ class XpresPortalClient implements ExternalFulfillmentClient
     private function fetchDirectServices(string $baseUrl, string $servicesEndpoint, array $headers, int $timeout): array
     {
         $candidates = [
-            $servicesEndpoint,
-            '/api/v1/services',
-            '/api/services',
+            '/api/v1/offers',
+            '/api/offers',
         ];
 
         $seen = [];
@@ -462,11 +441,12 @@ class XpresPortalClient implements ExternalFulfillmentClient
 
             try {
                 $response = Http::timeout($timeout)
+                    ->acceptJson()
                     ->withHeaders($headers)
                     ->get($url);
 
                 if (! $response->successful()) {
-                    Log::warning('XPRES direct services fetch failed', [
+                    Log::warning('XPRES offers fetch failed', [
                         'status' => $response->status(),
                         'path' => parse_url($url, PHP_URL_PATH),
                     ]);
@@ -474,16 +454,23 @@ class XpresPortalClient implements ExternalFulfillmentClient
                 }
 
                 $json = $response->json();
-                $services = $this->extractList($json, ['services', 'data.services', 'data']);
-                if (empty($services) && is_array($json)) {
-                    $services = array_values(array_filter($json, static fn ($item) => is_array($item)));
+                $offers = $this->extractList($json, ['offers', 'data.offers', 'data']);
+                if (empty($offers) && is_array($json)) {
+                    $offers = array_values(array_filter($json, static fn ($item) => is_array($item)));
                 }
 
-                if (! empty($services)) {
-                    return $this->normalizeDiscoveredServices($services);
+                if (! empty($offers)) {
+                    $services = [];
+                    foreach ($offers as $offer) {
+                        $service = $this->normalizeOfferToService($offer);
+                        if (is_array($service)) {
+                            $services[] = $service;
+                        }
+                    }
+                    return $services;
                 }
             } catch (RequestException|ConnectionException $e) {
-                Log::warning('XPRES direct services fetch exception', [
+                Log::warning('XPRES offers fetch exception', [
                     'path' => parse_url($url, PHP_URL_PATH),
                     'error' => $this->limitMessage($e->getMessage()),
                 ]);
@@ -692,6 +679,32 @@ class XpresPortalClient implements ExternalFulfillmentClient
         }
 
         return $packages;
+    }
+
+    /**
+     * @param array<string,mixed> $offer
+     * @return array<string,mixed>|null
+     */
+    private function normalizeOfferToService(array $offer): ?array
+    {
+        $offerSlug = $this->firstString($offer, ['offerSlug', 'offer_slug', 'slug']);
+        $network = $this->normalizeNetwork($this->firstString($offer, ['network', 'carrier', 'isp']) ?? '');
+        $name = $this->firstString($offer, ['name', 'title', 'label']);
+        $price = $this->firstNumeric($offer, ['price', 'amount', 'cost', 'rate']);
+
+        if (! $offerSlug || ! $name) {
+            return null;
+        }
+
+        return [
+            'id' => $offerSlug,
+            'name' => $name,
+            'network' => $network,
+            'capacity' => $offerSlug,
+            'price' => $price,
+            'provider' => 'xpresportal',
+            'offer_slug' => $offerSlug,
+        ];
     }
 
     /**

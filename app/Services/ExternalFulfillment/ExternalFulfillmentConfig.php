@@ -115,11 +115,11 @@ final class ExternalFulfillmentConfig
             ],
             'xpresportal' => [
                 'enabled' => $enabled,
-                'base_url' => $vendorXpresBaseUrl ?? trim((string) config('services.xpresportal.base_url', '')),
+                'base_url' => $vendorXpresBaseUrl,
                 'endpoint' => '/api/v1/orders',
                 'services_endpoint' => trim((string) config('services.xpresportal.services_endpoint', '/api/v1/services')),
-                'api_key' => $vendorXpresApiKey ?? (string) config('services.xpresportal.api_key', ''),
-                'api_secret' => $vendorXpresApiSecret ?? (string) config('services.xpresportal.api_secret', ''),
+                'api_key' => $vendorXpresApiKey,
+                'api_secret' => $vendorXpresApiSecret,
                 'timeout_seconds' => self::coerceTimeout((int) config('services.xpresportal.timeout', 30)),
                 'environment' => $vendorXpresEnvironment ?? (string) config('services.xpresportal.environment', 'sandbox'),
             ],
@@ -140,8 +140,12 @@ final class ExternalFulfillmentConfig
         }
 
         if ($this->provider === 'xpresportal') {
-            return $config['base_url'] !== ''
-                && $config['api_key'] !== '';
+            // VENDOR ISOLATION: Each vendor must explicitly configure their own credentials
+            // Form validation enforces this - no silent fallbacks allowed
+            $hasVendorBaseUrl = $config['base_url'] !== '';
+            $hasVendorApiKey = $config['api_key'] !== '';
+
+            return $hasVendorBaseUrl && $hasVendorApiKey;
         }
 
         return $config['base_url'] !== ''

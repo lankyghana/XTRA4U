@@ -79,6 +79,19 @@ class ExternalFulfillmentSettingsController extends Controller
             }
         }
 
+        if ($enabled && $provider === 'xpresportal') {
+            if (! $request->filled('external_fulfillment_xpres_api_key')) {
+                return back()
+                    ->withErrors(['external_fulfillment_xpres_api_key' => 'XpresPortal API Key is required. Each vendor must use their own credentials.'])
+                    ->withInput();
+            }
+            if (! $request->filled('external_fulfillment_xpres_base_url')) {
+                return back()
+                    ->withErrors(['external_fulfillment_xpres_base_url' => 'XpresPortal Base URL is required.'])
+                    ->withInput();
+            }
+        }
+
         VendorSetting::setForVendor($vendor->id, 'external_fulfillment_enabled', $enabled ? '1' : '0', 'external_fulfillment');
         VendorSetting::setForVendor($vendor->id, 'external_fulfillment_provider', $provider, 'external_fulfillment');
         VendorSetting::setForVendor(
@@ -157,12 +170,12 @@ class ExternalFulfillmentSettingsController extends Controller
 
         $headers = [
             'x-api-key' => $apiKey,
-            'X-API-KEY' => $apiKey,
-            'X-ENV' => $environment,
+            'Accept' => 'application/json',
+            'Content-Type' => 'application/json',
         ];
 
         if ($apiSecret !== '') {
-            $headers['X-API-SECRET'] = $apiSecret;
+            $headers['x-api-secret'] = $apiSecret;
         }
 
         try {
