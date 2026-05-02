@@ -23,13 +23,13 @@ class Vendor extends Authenticatable
     }
 
     // Vendor has many orders
-    public function orders()
+    public function orders(): HasMany
     {
         return $this->hasMany(Order::class);
     }
 
     // Vendor has many products
-    public function products()
+    public function products(): HasMany
     {
         return $this->hasMany(Product::class);
     }
