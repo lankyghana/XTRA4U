@@ -26,22 +26,19 @@ class VendorController extends Controller
             'email' => 'required|email|unique:vendors,email',
             'phone_number' => 'required|string|max:20',
             'password' => 'required|string|min:6',
-            'affiliate_vendor_code' => 'nullable|string|max:10',
+            'affiliate_vendor_code' => 'required|string|max:10',
         ]);
 
-        // Validate affiliate vendor code if provided
-        $affiliateVendorId = null;
-        if (!empty($validated['affiliate_vendor_code'])) {
-            $affiliateVendor = Vendor::where('vendor_code', strtoupper($validated['affiliate_vendor_code']))->first();
-            
-            if (!$affiliateVendor) {
-                return back()
-                    ->withInput()
-                    ->withErrors(['affiliate_vendor_code' => 'The affiliate vendor code does not exist. Please check and try again.']);
-            }
-            
-            $affiliateVendorId = $affiliateVendor->id;
+        // Validate affiliate vendor code
+        $affiliateVendor = Vendor::where('vendor_code', strtoupper($validated['affiliate_vendor_code']))->first();
+
+        if (!$affiliateVendor) {
+            return back()
+                ->withInput()
+                ->withErrors(['affiliate_vendor_code' => 'The affiliate vendor code does not exist. Please check and try again.']);
         }
+
+        $affiliateVendorId = $affiliateVendor->id;
 
         $vendorCode = $this->generateVendorCode($validated['name']);
 
@@ -85,6 +82,7 @@ class VendorController extends Controller
     // Vendor dashboard (only for approved vendors)
     public function dashboard()
     {
+        /** @var Vendor $vendor */
         $vendor = Auth::user();
         if (!$vendor || !$vendor->is_approved) {
             return redirect()->route('vendor.request.form')->withErrors(['access' => 'Access denied.']);
