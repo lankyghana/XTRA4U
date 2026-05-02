@@ -326,4 +326,27 @@ class VendorAfaController extends Controller
 
         return response()->json($stats);
     }
+
+    /**
+     * Get registration status (API endpoint for real-time updates)
+     */
+    public function getStatus(AfaRegistration $registration)
+    {
+        $vendor = $this->vendor();
+
+        // Both provider and reseller can view the registration
+        $canView = ((int) $registration->vendor_id === (int) $vendor->id)
+            || ((int) $registration->reseller_vendor_id === (int) $vendor->id);
+
+        if (!$canView) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        return response()->json([
+            'id' => $registration->id,
+            'status' => $registration->status,
+            'status_label' => $registration->status_label,
+            'updated_at' => $registration->updated_at,
+        ]);
+    }
 }
