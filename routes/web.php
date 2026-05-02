@@ -261,6 +261,7 @@ Route::middleware(['vendor.approved'])
         Route::get('afa/{registration}', [VendorAfaController::class, 'show'])->name('afa.show');
         Route::patch('afa/{registration}/status', [VendorAfaController::class, 'updateStatus'])->name('afa.update-status');
         Route::post('afa/bulk-update', [VendorAfaController::class, 'bulkUpdate'])->name('afa.bulk-update');
+        Route::get('afa/{registration}/status-api', [VendorAfaController::class, 'getStatus'])->name('afa.get-status');
         
         // Vendor Settings Routes
         Route::get('settings', [VendorDashboardController::class, 'settings'])->name('settings.index');
