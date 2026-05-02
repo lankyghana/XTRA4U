@@ -80,7 +80,7 @@ class ProductController extends Controller
     }
 
     // Show edit product form
-    public function edit($id)
+    public function edit(int|Product $id)
     {
         $product = $this->findVendorProduct($id);
         $metadata = $this->decodeDescription($product->description);
@@ -99,7 +99,7 @@ class ProductController extends Controller
     }
 
     // Update product
-    public function update(Request $request, $id)
+    public function update(Request $request, int|Product $id)
     {
         $product = $this->findVendorProduct($id);
         $metadata = $this->decodeDescription($product->description);
@@ -160,7 +160,7 @@ class ProductController extends Controller
     }
 
     // Delete product
-    public function destroy($id)
+    public function destroy(int|Product $id)
     {
         $product = $this->findVendorProduct($id);
 
@@ -184,7 +184,7 @@ class ProductController extends Controller
         return $vendor;
     }
 
-    protected function findVendorProduct($id): Product
+    protected function findVendorProduct(int|Product $id): Product
     {
         $vendor = $this->resolveVendor();
         return Product::where('vendor_id', $vendor->id)->findOrFail($id);

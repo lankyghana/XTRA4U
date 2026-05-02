@@ -143,6 +143,40 @@ Route::get('/terms', fn() => view('pages.terms'))->name('terms');
 Route::get('/Marketplace', fn () => redirect()->route('checkout.show'));
 
 Route::get('/store/{vendor:vendor_code}', [StorefrontController::class, 'showVendorStore'])->name('storefront.vendor');
+<<<<<<< Updated upstream
+=======
+
+// Result Checker Routes - Customer Facing
+Route::get('/store/{vendor:vendor_code}/result-checkers', [StorefrontController::class, 'showResultCheckers'])->name('storefront.result-checkers');
+Route::post('/store/{vendor:vendor_code}/result-checkers/checkout', [\App\Http\Controllers\ResultCheckerCheckoutController::class, 'initiateCheckout'])
+    ->middleware('throttle:20,1') // 20 checkout initiations per minute
+    ->name('result-checkers.checkout');
+Route::match(['GET', 'POST'], '/result-checkers/payment/callback/{order}', [\App\Http\Controllers\ResultCheckerPaymentCallbackController::class, 'handle'])->name('result-checkers.payment.callback');
+Route::post('/result-checkers/payment/webhook', [\App\Http\Controllers\ResultCheckerPaymentCallbackController::class, 'webhook'])->name('result-checkers.payment.webhook');
+Route::post('/webhooks/gigshub', [\App\Http\Controllers\Webhooks\GigshubWebhookController::class, 'handle'])->name('api.webhooks.gigshub');
+
+// Result Checker Status pages
+// SECURITY: Add rate limiting to prevent enumeration/brute force attacks
+Route::get('/results-checker/status', [\App\Http\Controllers\ResultCheckerStatusController::class, 'index'])->name('result-checkers.status');
+Route::post('/results-checker/status/check', [\App\Http\Controllers\ResultCheckerStatusController::class, 'check'])
+    ->middleware('throttle:10,1') // 10 requests per minute
+    ->name('result-checkers.status.check');
+Route::get('/results-checker/status/{order}', [\App\Http\Controllers\ResultCheckerStatusController::class, 'show'])
+    ->middleware('throttle:10,1') // 10 requests per minute
+    ->name('result-checkers.status.show');
+
+// Success/pending pages
+Route::get('/result-checkers/success/{order}', function (\App\Models\ResultCheckerOrder $order) {
+    $order->load('checkerType', 'vendor');
+    return view('result_checkers.success', compact('order'));
+})->name('result-checkers.success');
+
+Route::get('/result-checkers/pending-stock/{order}', function (\App\Models\ResultCheckerOrder $order) {
+    $order->load('checkerType', 'vendor');
+    return view('result_checkers.pending_stock', compact('order'));
+})->name('result-checkers.pending-stock');
+
+>>>>>>> Stashed changes
 Route::get('/vendor/request', [VendorController::class, 'showRequestForm'])->name('vendor.request.form');
 Route::get('/vendor/request/create', [VendorRequestController::class, 'create'])->name('vendor.request.create');
 Route::post('/vendor/request', [VendorRequestController::class, 'store'])->name('vendor.request.store');

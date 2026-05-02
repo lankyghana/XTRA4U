@@ -116,6 +116,24 @@ class ProcessExternalFulfillment implements ShouldQueue
                 return;
             }
 
+            // Handle "Order already exists" as success (was already sent on previous attempt)
+            if (str_contains($message, 'already exists')) {
+                Order::whereKey($order->id)->update([
+                    'external_fulfillment_status' => 'succeeded',
+                    'external_fulfillment_completed_at' => now(),
+                    'external_fulfillment_remote_reference' => 'duplicate-order-detected',
+                    'external_fulfillment_last_error' => null,
+                    'external_fulfillment_provider_used' => $providerUsed,
+                ]);
+
+                Log::info('External fulfillment succeeded (duplicate order detected)', [
+                    'order_id' => $order->id,
+                    'provider' => $providerUsed,
+                ]);
+
+                return;
+            }
+
             $errorMessage = $message !== '' ? $message : 'External fulfillment failed';
 
             Order::whereKey($order->id)->update([
