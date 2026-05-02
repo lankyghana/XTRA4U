@@ -143,8 +143,6 @@ Route::get('/terms', fn() => view('pages.terms'))->name('terms');
 Route::get('/Marketplace', fn () => redirect()->route('checkout.show'));
 
 Route::get('/store/{vendor:vendor_code}', [StorefrontController::class, 'showVendorStore'])->name('storefront.vendor');
-<<<<<<< Updated upstream
-=======
 
 // Result Checker Routes - Customer Facing
 Route::get('/store/{vendor:vendor_code}/result-checkers', [StorefrontController::class, 'showResultCheckers'])->name('storefront.result-checkers');
@@ -176,7 +174,6 @@ Route::get('/result-checkers/pending-stock/{order}', function (\App\Models\Resul
     return view('result_checkers.pending_stock', compact('order'));
 })->name('result-checkers.pending-stock');
 
->>>>>>> Stashed changes
 Route::get('/vendor/request', [VendorController::class, 'showRequestForm'])->name('vendor.request.form');
 Route::get('/vendor/request/create', [VendorRequestController::class, 'create'])->name('vendor.request.create');
 Route::post('/vendor/request', [VendorRequestController::class, 'store'])->name('vendor.request.store');
