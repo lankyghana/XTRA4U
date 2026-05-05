@@ -11,6 +11,7 @@ use App\Models\VendorNotification;
 use App\Models\VendorWithdrawal;
 use App\Models\AdminNotification;
 use App\Models\AfaRegistration;
+use App\Models\ResultCheckerOrder;
 use App\Mail\VendorWithdrawalMail;
 use App\Services\AffiliateChainService;
 use App\Services\SmsService;
@@ -91,6 +92,22 @@ class VendorDashboardController extends Controller
 		$recentWithdrawals = VendorWithdrawal::where('vendor_id', $vendorId)->latest()->take(5)->get();
 		$withdrawableBalance = $this->calculateWithdrawableBalance($vendorId, $allTimeEarnings);
 
+		// Results Checker Stats
+		$resultCheckerOrdersToday = ResultCheckerOrder::where('vendor_id', $vendorId)
+			->whereDate('created_at', now()->toDateString())
+			->count();
+		$resultCheckerRevenueToday = ResultCheckerOrder::where('vendor_id', $vendorId)
+			->whereDate('created_at', now()->toDateString())
+			->whereIn('status', ['completed', 'pending_payment'])
+			->sum('total_price');
+		$resultCheckerCompletedToday = ResultCheckerOrder::where('vendor_id', $vendorId)
+			->whereDate('created_at', now()->toDateString())
+			->where('status', 'completed')
+			->count();
+		$resultCheckerPendingStock = ResultCheckerOrder::where('vendor_id', $vendorId)
+			->where('status', 'pending_stock')
+			->count();
+
 		return view('vendor.dashboard', compact(
 			'vendor',
 			'orders',
@@ -102,7 +119,11 @@ class VendorDashboardController extends Controller
 			'commissions',
 			'recentWithdrawals',
 			'withdrawableBalance',
-			'filter'
+			'filter',
+			'resultCheckerOrdersToday',
+			'resultCheckerRevenueToday',
+			'resultCheckerCompletedToday',
+			'resultCheckerPendingStock'
 		));
 	}
 

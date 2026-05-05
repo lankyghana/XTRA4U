@@ -39,6 +39,7 @@ class ExternalFulfillmentSettingsController extends Controller
             'providers' => [
                 'datafyhub' => 'Datafyhub',
                 'xpresportal' => 'XpresPortal',
+                'gigshub' => 'GigsHub',
             ],
         ]);
     }
@@ -53,7 +54,7 @@ class ExternalFulfillmentSettingsController extends Controller
             'external_fulfillment_enabled' => 'nullable|boolean',
             'external_fulfillment_token' => 'nullable|string|max:255',
             'external_fulfillment_timeout_seconds' => 'nullable|integer|min:1|max:120',
-            'external_fulfillment_provider' => 'nullable|string|in:datafyhub,xpresportal',
+            'external_fulfillment_provider' => 'nullable|string|in:datafyhub,xpresportal,gigshub',
             'external_fulfillment_xpres_base_url' => 'nullable|string|max:255',
             'external_fulfillment_xpres_api_key' => 'nullable|string|max:255',
             'external_fulfillment_xpres_api_secret' => 'nullable|string|max:255',

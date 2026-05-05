@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\Transaction;
 use App\Models\VendorWithdrawal;
 use App\Models\AdminNotification;
+use App\Models\ResultCheckerOrder;
 use App\Services\WalletService;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Http\Request;
@@ -29,6 +30,16 @@ class AdminController extends Controller
         $manualQueueLastRequestedAt = Cache::get('queue_manual_run_requested_at');
         $manualQueueLastFinishedAt = Cache::get('queue_manual_run_last_finished_at');
 
+        // Results Checker Stats
+        $resultCheckerOrdersToday = ResultCheckerOrder::whereDate('created_at', now()->toDateString())->count();
+        $resultCheckerRevenueToday = ResultCheckerOrder::whereDate('created_at', now()->toDateString())
+            ->whereIn('status', ['completed', 'pending_payment'])
+            ->sum('total_price');
+        $resultCheckerCompletedToday = ResultCheckerOrder::whereDate('created_at', now()->toDateString())
+            ->where('status', 'completed')
+            ->count();
+        $resultCheckerPendingStock = ResultCheckerOrder::where('status', 'pending_stock')->count();
+
         return view('admin.dashboard', [
             'activeVendors' => $activeVendors,
             'pendingVendors' => $pendingVendors,
@@ -39,6 +50,10 @@ class AdminController extends Controller
             'pendingWithdrawals' => $pendingWithdrawals,
             'manualQueueLastRequestedAt' => $manualQueueLastRequestedAt,
             'manualQueueLastFinishedAt' => $manualQueueLastFinishedAt,
+            'resultCheckerOrdersToday' => $resultCheckerOrdersToday,
+            'resultCheckerRevenueToday' => $resultCheckerRevenueToday,
+            'resultCheckerCompletedToday' => $resultCheckerCompletedToday,
+            'resultCheckerPendingStock' => $resultCheckerPendingStock,
         ]);
     }
 
