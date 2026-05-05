@@ -425,6 +425,69 @@
             </div>
         </div>
     </div>
+
+    <!-- Results Checker Section -->
+    <div class="mt-8">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="bg-gradient-to-r from-cyan-50 to-blue-50 px-6 py-4 border-b border-gray-100">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-xl flex items-center justify-center">
+                        <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M7 3a1 1 0 000 2h6a1 1 0 000-2H7zM4 7a1 1 0 011-1h10a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1V7z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-900">Results Checker Activity</h3>
+                        <p class="text-xs text-gray-500">Today's results checker orders and performance</p>
+                    </div>
+                </div>
+            </div>
+            <div class="px-6 py-6">
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <!-- Orders Today -->
+                    <div class="bg-gradient-to-br from-cyan-50 to-blue-50 rounded-lg p-4 border border-cyan-100">
+                        <div class="flex flex-col gap-2">
+                            <p class="text-xs font-semibold text-gray-600 uppercase tracking-wide">Orders Today</p>
+                            <p class="text-2xl font-bold text-gray-900">{{ $resultCheckerOrdersToday }}</p>
+                        </div>
+                    </div>
+
+                    <!-- Revenue Today -->
+                    <div class="bg-gradient-to-br from-emerald-50 to-green-50 rounded-lg p-4 border border-emerald-100">
+                        <div class="flex flex-col gap-2">
+                            <p class="text-xs font-semibold text-gray-600 uppercase tracking-wide">Revenue Today</p>
+                            <p class="text-2xl font-bold text-gray-900">GHS {{ number_format($resultCheckerRevenueToday, 2) }}</p>
+                        </div>
+                    </div>
+
+                    <!-- Completed Orders -->
+                    <div class="bg-gradient-to-br from-violet-50 to-purple-50 rounded-lg p-4 border border-violet-100">
+                        <div class="flex flex-col gap-2">
+                            <p class="text-xs font-semibold text-gray-600 uppercase tracking-wide">Completed</p>
+                            <p class="text-2xl font-bold text-gray-900">{{ $resultCheckerCompletedToday }}</p>
+                        </div>
+                    </div>
+
+                    <!-- Pending Stock -->
+                    <div class="bg-gradient-to-br from-orange-50 to-amber-50 rounded-lg p-4 border border-orange-100">
+                        <div class="flex flex-col gap-2">
+                            <p class="text-xs font-semibold text-gray-600 uppercase tracking-wide">Pending Stock</p>
+                            <p class="text-2xl font-bold text-gray-900">{{ $resultCheckerPendingStock }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <a href="{{ route('storefront.result-checkers', ['vendor' => $vendor->vendor_code]) }}" class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-lg hover:shadow-lg transition-all duration-200 text-sm font-semibold">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                        Manage Results Checkers
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
 </x-vendor-layout>
 @endsection
 

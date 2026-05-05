@@ -153,6 +153,49 @@
                     </div>
                 </div>
 
+                <div id="gigshub_credentials_block" class="space-y-4">
+                    <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                        <p class="text-sm font-semibold text-gray-800">GigsHub Credentials</p>
+                        <p class="mt-1 text-xs text-gray-500">
+                            Configure your GigsHub API credentials for order fulfillment.
+                        </p>
+                    </div>
+
+                    <div>
+                        <label for="external_fulfillment_gigshub_base_url" class="block text-sm font-medium text-gray-700 mb-2">
+                            GigsHub Base URL
+                        </label>
+                        <input
+                            type="url"
+                            name="external_fulfillment_gigshub_base_url"
+                            id="external_fulfillment_gigshub_base_url"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                            value="{{ old('external_fulfillment_gigshub_base_url', $settings['external_fulfillment.gigshub.base_url'] ?? '') }}"
+                            placeholder="https://gigzhub.net/api/v1"
+                        >
+                        @error('external_fulfillment_gigshub_base_url')
+                            <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label for="external_fulfillment_gigshub_api_key" class="block text-sm font-medium text-gray-700 mb-2">
+                            GigsHub API Key
+                        </label>
+                        <input
+                            type="password"
+                            name="external_fulfillment_gigshub_api_key"
+                            id="external_fulfillment_gigshub_api_key"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                            placeholder="{{ $settings['external_fulfillment_gigshub_api_key_masked'] ?? '' }}"
+                        >
+                        @error('external_fulfillment_gigshub_api_key')
+                            <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                        @enderror
+                        <p class="mt-1 text-xs text-gray-500">Leave blank to keep your existing API key.</p>
+                    </div>
+                </div>
+
                 <div>
                     <label for="external_fulfillment_timeout_seconds" class="block text-sm font-medium text-gray-700 mb-2">
                         Timeout (seconds)
@@ -183,6 +226,7 @@
     const providerSelect = document.getElementById('external_fulfillment_provider');
     const datafyBlock = document.getElementById('datafyhub_token_block');
     const xpresBlock = document.getElementById('xpres_credentials_block');
+    const gigshubBlock = document.getElementById('gigshub_credentials_block');
     const testButton = document.getElementById('test_xpres_connection');
     const result = document.getElementById('test_xpres_connection_result');
 
@@ -195,6 +239,10 @@
 
         if (xpresBlock) {
             xpresBlock.style.display = provider === 'xpresportal' ? '' : 'none';
+        }
+
+        if (gigshubBlock) {
+            gigshubBlock.style.display = provider === 'gigshub' ? '' : 'none';
         }
     };
 
