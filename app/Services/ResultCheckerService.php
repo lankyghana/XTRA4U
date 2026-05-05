@@ -23,7 +23,7 @@ class ResultCheckerService
         DB::transaction(function () use ($order, $paymentReference, $gateway) {
             // Idempotent: if already paid, skip
             $order->refresh();
-            if ($order->paid_at) {
+            if ($order->status === 'completed' || $order->paid_at) {
                 Log::info('ResultCheckerService: Order already paid, skipping duplicate callback', [
                     'order_id' => $order->id,
                     'reference' => $paymentReference,
@@ -64,6 +64,11 @@ class ResultCheckerService
     public function allocatePinsForOrder(ResultCheckerOrder $order): bool
     {
         return DB::transaction(function () use ($order) {
+            $order->refresh();
+            if ($order->status === 'completed') {
+                return true;
+            }
+
             // Pessimistic lock: lock available pins for this service
             $availablePins = ResultCheckerPin::forService($order->service_id)
                 ->where('status', 'available')
@@ -112,6 +117,25 @@ class ResultCheckerService
     }
 
     /**
+     * Attempt to fulfill an already-paid order (recovery path).
+     */
+    public function handlePaymentSuccess(ResultCheckerOrder $order): void
+    {
+        $order->refresh();
+        if ($order->status === 'completed') {
+            return;
+        }
+
+        if (! $order->paid_at) {
+            return;
+        }
+
+        if ($this->allocatePinsForOrder($order)) {
+            $this->sendDeliveryNotification($order->refresh());
+        }
+    }
+
+    /**
      * Manual fulfillment by admin for pending_stock orders
      */
     public function fulfillPendingOrder(ResultCheckerOrder $order): array
@@ -156,6 +180,10 @@ class ResultCheckerService
      */
     public function sendDeliveryNotification(ResultCheckerOrder $order): bool
     {
+        if ($order->sms_sent_at) {
+            return true;
+        }
+
         if (!$order->delivered_pins_json || count($order->delivered_pins_json) === 0) {
             Log::warning('ResultCheckerService: No pins to send', ['order_id' => $order->id]);
             return false;

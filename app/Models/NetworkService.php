@@ -48,7 +48,7 @@ class NetworkService extends Model
     // Relationships for result checkers
     public function pins()
     {
-        return $this->hasMany(ResultCheckerPin::class, 'checker_type_id');
+        return $this->hasMany(ResultCheckerPin::class, 'service_id');
     }
 
     public function availablePins()
@@ -58,12 +58,12 @@ class NetworkService extends Model
 
     public function orders()
     {
-        return $this->hasMany(ResultCheckerOrder::class, 'checker_type_id');
+        return $this->hasMany(ResultCheckerOrder::class, 'service_id');
     }
 
     public function vendorSettings()
     {
-        return $this->hasMany(VendorResultCheckerSetting::class, 'checker_type_id');
+        return $this->hasMany(VendorResultCheckerSetting::class, 'service_id');
     }
 
     public function getAvailableStockCountAttribute(): int
