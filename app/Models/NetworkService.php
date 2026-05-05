@@ -48,7 +48,7 @@ class NetworkService extends Model
     // Relationships for result checkers
     public function pins()
     {
-        return $this->hasMany(ResultCheckerPin::class, 'service_id');
+        return $this->hasMany(ResultCheckerPin::class, 'checker_type_id');
     }
 
     public function availablePins()

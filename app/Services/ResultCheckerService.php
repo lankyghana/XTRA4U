@@ -91,7 +91,7 @@ class ResultCheckerService
             $availablePins->each(function ($pin) use ($order, &$pinsData) {
                 $pin->update([
                     'status' => 'sold',
-                    'result_checker_order_id' => $order->id,
+                    'order_id' => $order->id,
                     'sold_at' => now(),
                 ]);
                 $pinsData[] = [
