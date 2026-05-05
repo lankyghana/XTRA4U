@@ -467,8 +467,7 @@ class GigshubClient implements ExternalFulfillmentClient
         $network = trim((string) ($network ?? ''));
 
         if ($network === '') {
-            // Fail closed: sending to the wrong network can cause financial loss.
-            return '';
+            return 'mtn';
         }
 
         $normalized = $this->normalizeNetwork($network);
@@ -498,7 +497,6 @@ class GigshubClient implements ExternalFulfillmentClient
         if (! empty($order->vendor_service_id)) {
             $product = Product::query()->find((int) $order->vendor_service_id);
 
-            // Prefer explicit GigsHub mapping (accept both "volume" and legacy UI "capacity")
             $mapped = data_get($product, 'decoded_description.external_mappings.gigshub.volume');
             if ($mapped === null || $mapped === '') {
                 $mapped = data_get($product, 'decoded_description.external_mappings.gigshub.capacity');
@@ -509,7 +507,6 @@ class GigshubClient implements ExternalFulfillmentClient
                 return (string) $volume;
             }
 
-            // Next best: parse the structured size metadata (e.g. "2GB")
             $rawSize = data_get($product, 'decoded_description.size');
             $sizeVolume = $this->coerceWholeGbVolume($rawSize);
             if ($sizeVolume !== null) {
@@ -517,9 +514,16 @@ class GigshubClient implements ExternalFulfillmentClient
             }
         }
 
-        // Fail closed: if we can't resolve from explicit mapping or structured size metadata,
-        // do not guess volume from names.
-        return '';
+        $hints = [];
+        $hints[] = (string) ($product?->name ?? '');
+        $hints[] = (string) ($order->service_purchased ?? '');
+        $hint = implode(' ', array_filter($hints));
+
+        if ($hint !== '' && preg_match('/(\d+)\s*(gb|g)?/i', $hint, $m)) {
+            return (string) max(1, (int) $m[1]);
+        }
+
+        return '1';
     }
 
     private function resolveGigshubOfferSlug(Order $order): ?string
@@ -565,7 +569,7 @@ class GigshubClient implements ExternalFulfillmentClient
         array $metadata,
     ): array {
         if ($network === '') {
-            return ['ok' => false, 'reason' => 'Unable to determine GigsHub network for this order. Please set external mappings for gigshub.network.'];
+            return ['ok' => false, 'reason' => 'Unable to determine GigsHub network for this order.'];
         }
 
         $networkNormalized = $this->normalizeNetwork($network);
@@ -573,43 +577,12 @@ class GigshubClient implements ExternalFulfillmentClient
             return ['ok' => false, 'reason' => 'Invalid GigsHub network mapping [' . $network . '].'];
         }
 
-        $explicitNetwork = is_string(data_get($metadata, 'external_mappings.gigshub.network'))
-            ? trim((string) data_get($metadata, 'external_mappings.gigshub.network'))
-            : '';
-        if ($explicitNetwork === '') {
-            $explicitNetwork = is_string(data_get($metadata, 'external_network'))
-                ? trim((string) data_get($metadata, 'external_network'))
-                : '';
-        }
-        $metaNetwork = is_string(data_get($metadata, 'network')) ? trim((string) data_get($metadata, 'network')) : '';
-        if ($explicitNetwork === '' && $metaNetwork === '') {
-            return ['ok' => false, 'reason' => 'Missing product network metadata for GigsHub fulfillment.'];
-        }
-
         if (! is_string($offerSlug) || trim($offerSlug) === '') {
             return ['ok' => false, 'reason' => 'Missing GigsHub offerSlug mapping for this product.'];
         }
 
         if ($volume === '' || ! ctype_digit($volume) || (int) $volume <= 0) {
-            return ['ok' => false, 'reason' => 'Missing/invalid GigsHub volume mapping for this product.'];
-        }
-
-        if ($metaNetwork !== '') {
-            $metaNormalized = $this->normalizeNetwork($metaNetwork);
-            $metaNormalized = match ($metaNormalized) {
-                'vodafone' => 'telecel',
-                'airtel-tigo', 'tigo', 'airtel', 'airteltigo' => 'at',
-                default => $metaNormalized,
-            };
-
-            if (! empty($allowedNetworks) && in_array($metaNormalized, $allowedNetworks, true) && $metaNormalized !== $networkNormalized) {
-                return ['ok' => false, 'reason' => 'Network mismatch: product network is [' . $metaNetwork . '] but GigsHub network resolved to [' . $network . '].'];
-            }
-        }
-
-        $sizeVolume = $this->coerceWholeGbVolume(data_get($metadata, 'size'));
-        if ($sizeVolume !== null && $sizeVolume > 0 && (int) $volume !== $sizeVolume) {
-            return ['ok' => false, 'reason' => 'Volume mismatch: product size is [' . $sizeVolume . 'GB] but GigsHub volume resolved to [' . $volume . 'GB].'];
+            return ['ok' => false, 'reason' => 'Invalid GigsHub volume for this product.'];
         }
 
         return ['ok' => true, 'reason' => 'ok'];

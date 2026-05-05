@@ -91,5 +91,10 @@ return [
         'environment' => env('XPRES_ENV', 'sandbox'),
     ],
 
+    'gigshub' => [
+        'base_url' => env('GIGSHUB_BASE_URL'),
+        'api_key' => env('GIGSHUB_API_KEY'),
+        'timeout' => env('GIGSHUB_TIMEOUT', 30),
+    ],
 
 ];

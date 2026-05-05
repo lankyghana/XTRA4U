@@ -46,6 +46,12 @@ final class ExternalFulfillmentConfig
                 'timeout_seconds' => self::coerceTimeout((int) config('services.xpresportal.timeout', 30)),
                 'environment' => (string) config('services.xpresportal.environment', 'sandbox'),
             ],
+            'gigshub' => [
+                'enabled' => self::toBool($settings['external_fulfillment_enabled'] ?? null),
+                'base_url' => trim((string) config('services.gigshub.base_url', '')),
+                'api_key' => (string) config('services.gigshub.api_key', ''),
+                'timeout_seconds' => self::coerceTimeout((int) config('services.gigshub.timeout', 30)),
+            ],
         ];
 
         return new self($provider, $providers);
@@ -104,6 +110,13 @@ final class ExternalFulfillmentConfig
                 : null
         );
 
+        $vendorGigshubBaseUrl = self::nullableTrim((string) ($settings['external_fulfillment.gigshub.base_url'] ?? ''));
+        $vendorGigshubApiKey = self::decryptVendorSecret(
+            is_string($settings['external_fulfillment.gigshub.api_key'] ?? null)
+                ? $settings['external_fulfillment.gigshub.api_key']
+                : null
+        );
+
         $providers = [
             'datafyhub' => [
                 'enabled' => $enabled,
@@ -122,6 +135,12 @@ final class ExternalFulfillmentConfig
                 'api_secret' => $vendorXpresApiSecret,
                 'timeout_seconds' => self::coerceTimeout((int) config('services.xpresportal.timeout', 30)),
                 'environment' => $vendorXpresEnvironment ?? (string) config('services.xpresportal.environment', 'sandbox'),
+            ],
+            'gigshub' => [
+                'enabled' => $enabled,
+                'base_url' => $vendorGigshubBaseUrl,
+                'api_key' => $vendorGigshubApiKey,
+                'timeout_seconds' => self::coerceTimeout((int) config('services.gigshub.timeout', 30)),
             ],
         ];
 
@@ -146,6 +165,10 @@ final class ExternalFulfillmentConfig
             $hasVendorApiKey = $config['api_key'] !== '';
 
             return $hasVendorBaseUrl && $hasVendorApiKey;
+        }
+
+        if ($this->provider === 'gigshub') {
+            return $config['base_url'] !== '' && $config['api_key'] !== '';
         }
 
         return $config['base_url'] !== ''
@@ -191,7 +214,7 @@ final class ExternalFulfillmentConfig
     {
         $normalized = strtolower(trim($provider));
 
-        return in_array($normalized, ['datafyhub', 'xpresportal'], true)
+        return in_array($normalized, ['datafyhub', 'xpresportal', 'gigshub'], true)
             ? $normalized
             : 'datafyhub';
     }
