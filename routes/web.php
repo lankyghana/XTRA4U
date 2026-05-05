@@ -25,6 +25,9 @@ use App\Http\Controllers\AdminNetworkServiceController;
 use App\Http\Controllers\OrderStatusController;
 use App\Http\Controllers\AfaRegistrationController;
 use App\Http\Controllers\VendorAfaController;
+use App\Http\Controllers\ResultCheckerCheckoutController;
+use App\Http\Controllers\ResultCheckerPaymentCallbackController;
+use App\Http\Controllers\ResultCheckerStatusController;
 use Illuminate\Support\Facades\Artisan;
 
 // Admin login routes - moved to consolidated section below
@@ -146,32 +149,32 @@ Route::get('/store/{vendor:vendor_code}', [StorefrontController::class, 'showVen
 
 // Result Checker Routes - Customer Facing
 Route::get('/store/{vendor:vendor_code}/result-checkers', [StorefrontController::class, 'showResultCheckers'])->name('storefront.result-checkers');
-Route::post('/store/{vendor:vendor_code}/result-checkers/checkout', [\App\Http\Controllers\ResultCheckerCheckoutController::class, 'initiateCheckout'])
+Route::post('/store/{vendor:vendor_code}/result-checkers/checkout', [ResultCheckerCheckoutController::class, 'initiateCheckout'])
     ->middleware('throttle:20,1') // 20 checkout initiations per minute
     ->name('result-checkers.checkout');
-Route::match(['GET', 'POST'], '/result-checkers/payment/callback/{order}', [\App\Http\Controllers\ResultCheckerPaymentCallbackController::class, 'handle'])->name('result-checkers.payment.callback');
-Route::post('/result-checkers/payment/webhook', [\App\Http\Controllers\ResultCheckerPaymentCallbackController::class, 'webhook'])->name('result-checkers.payment.webhook');
+Route::match(['GET', 'POST'], '/result-checkers/payment/callback/{order}', [ResultCheckerPaymentCallbackController::class, 'handle'])->name('result-checkers.payment.callback');
+Route::post('/result-checkers/payment/webhook', [ResultCheckerPaymentCallbackController::class, 'webhook'])->name('result-checkers.payment.webhook');
 Route::post('/webhooks/gigshub', [\App\Http\Controllers\Webhooks\GigshubWebhookController::class, 'handle'])->name('api.webhooks.gigshub');
 Route::post('/webhooks/gigshub/balance-low', [\App\Http\Controllers\Webhooks\GigshubLowBalanceWebhookController::class, 'handle'])->name('webhooks.gigshub.balance-low');
 
 // Result Checker Status pages
 // SECURITY: Add rate limiting to prevent enumeration/brute force attacks
-Route::get('/results-checker/status', [\App\Http\Controllers\ResultCheckerStatusController::class, 'index'])->name('result-checkers.status');
-Route::post('/results-checker/status/check', [\App\Http\Controllers\ResultCheckerStatusController::class, 'check'])
+Route::get('/results-checker/status', [ResultCheckerStatusController::class, 'index'])->name('result-checkers.status');
+Route::post('/results-checker/status/check', [ResultCheckerStatusController::class, 'check'])
     ->middleware('throttle:10,1') // 10 requests per minute
     ->name('result-checkers.status.check');
-Route::get('/results-checker/status/{order}', [\App\Http\Controllers\ResultCheckerStatusController::class, 'show'])
+Route::get('/results-checker/status/{order}', [ResultCheckerStatusController::class, 'show'])
     ->middleware('throttle:10,1') // 10 requests per minute
     ->name('result-checkers.status.show');
 
 // Success/pending pages
 Route::get('/result-checkers/success/{order}', function (\App\Models\ResultCheckerOrder $order) {
-    $order->load('checkerType', 'vendor');
+    $order->load('service', 'vendor');
     return view('result_checkers.success', compact('order'));
 })->name('result-checkers.success');
 
 Route::get('/result-checkers/pending-stock/{order}', function (\App\Models\ResultCheckerOrder $order) {
-    $order->load('checkerType', 'vendor');
+    $order->load('service', 'vendor');
     return view('result_checkers.pending_stock', compact('order'));
 })->name('result-checkers.pending-stock');
 
@@ -229,6 +232,16 @@ Route::middleware(['vendor.approved'])
             ->name('reseller.update');
         Route::delete('reseller-products/{id}', [VendorDashboardController::class, 'removeResellerProduct'])
             ->name('reseller.destroy');
+
+        // Vendor Result Checker Routes
+        Route::prefix('result-checkers')->name('result-checkers.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\VendorResultCheckerSettingsController::class, 'index'])
+                ->name('index');
+            Route::post('/', [\App\Http\Controllers\VendorResultCheckerSettingsController::class, 'update'])
+                ->name('update');
+            Route::get('orders', [\App\Http\Controllers\VendorResultCheckerOrdersController::class, 'index'])
+                ->name('orders.index');
+        });
         
         Route::get('transactions', fn () => redirect()->route('vendor.dashboard'))
             ->name('transactions.index');
@@ -384,6 +397,24 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
     Route::post('settings/email/test', [\App\Http\Controllers\Admin\EmailSettingsController::class, 'sendTestEmail'])->name('settings.email.test');
 
     // External Fulfillment Settings
+
+    // Results Checker Admin Routes
+    Route::prefix('results-checkers')->name('result-checkers.')->group(function () {
+        Route::get('dashboard', [\App\Http\Controllers\AdminResultCheckerDashboardController::class, 'index'])
+            ->name('dashboard');
+        Route::get('pins', [\App\Http\Controllers\AdminResultCheckerPinsController::class, 'index'])
+            ->name('pins.index');
+        Route::post('pins', [\App\Http\Controllers\AdminResultCheckerPinsController::class, 'store'])
+            ->name('pins.store');
+        Route::get('orders', [\App\Http\Controllers\AdminResultCheckerOrdersController::class, 'index'])
+            ->name('orders.index');
+        Route::get('orders/{order}', [\App\Http\Controllers\AdminResultCheckerOrdersController::class, 'show'])
+            ->name('orders.show');
+        Route::post('orders/{order}/retry', [\App\Http\Controllers\AdminResultCheckerOrdersController::class, 'retry'])
+            ->name('orders.retry');
+        Route::post('orders/{order}/mark-failed', [\App\Http\Controllers\AdminResultCheckerOrdersController::class, 'markFailed'])
+            ->name('orders.mark-failed');
+    });
 
     // Manual Queue Run Trigger (scheduler-bridge)
     Route::post('queue/run', [\App\Http\Controllers\Admin\ManualQueueRunController::class, 'run'])->name('queue.run');
