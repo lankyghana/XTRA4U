@@ -25,10 +25,11 @@ class GigshubWebhookController extends Controller
             return response()->json(['success' => false, 'error' => 'Missing orderId or reference'], 400);
         }
 
-        $order = Order::query()
-            ->where('external_fulfillment_remote_reference', $orderId)
-            ->orWhere('external_fulfillment_remote_reference', $payload['reference'] ?? null)
-            ->first();
+        $query = Order::query()->where('external_fulfillment_remote_reference', $orderId);
+        if (!empty($payload['reference'])) {
+            $query->orWhere('external_fulfillment_remote_reference', $payload['reference']);
+        }
+        $order = $query->first();
 
         if (!$order) {
             Log::warning('GigsHub webhook: Order not found', [
@@ -43,16 +44,25 @@ class GigshubWebhookController extends Controller
 
         // Map GigsHub status to internal status
         $externalStatus = match ($status) {
-            'delivered' => 'succeeded',
+            'delivered', 'resolved' => 'succeeded',
             'failed', 'cancelled', 'refunded' => 'failed',
             'pending', 'processing' => 'processing',
             default => $status,
         };
 
+        if ($order->external_fulfillment_status === $externalStatus) {
+            Log::info('GigsHub webhook: Duplicate delivery (already processed)', [
+                'order_id' => $order->id,
+                'gigshub_status' => $status,
+            ]);
+
+            return response()->json(['success' => true], 200);
+        }
+
         $order->update([
             'external_fulfillment_status' => $externalStatus,
             'external_fulfillment_last_error' => $status === 'failed' ? 'Order failed at provider' : null,
-            'external_fulfillment_completed_at' => in_array($status, ['delivered', 'failed']) ? now() : $order->external_fulfillment_completed_at,
+            'external_fulfillment_completed_at' => in_array($status, ['delivered', 'failed', 'resolved', 'cancelled', 'refunded']) ? now() : $order->external_fulfillment_completed_at,
         ]);
 
         Log::info('GigsHub webhook processed', [

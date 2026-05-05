@@ -25,6 +25,10 @@ class AdminNetworkServiceController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:100'],
             'category' => ['required', 'string', Rule::in($this->categoryOptions())],
+            'service_type' => ['sometimes', 'string', Rule::in(['general', 'results_checker'])],
+            'slug' => ['nullable', 'string', 'max:100', 'unique:network_services,slug'],
+            'base_price' => ['nullable', 'numeric', 'min:0'],
+            'description' => ['nullable', 'string', 'max:500'],
             'is_active' => ['sometimes', 'boolean'],
             'image' => $this->imageValidationRules(false),
         ]);
@@ -38,9 +42,16 @@ class AdminNetworkServiceController extends Controller
             );
         }
 
+        // Auto-generate slug if not provided
+        $slug = $validated['slug'] ?? \Illuminate\Support\Str::slug($validated['name']);
+
         NetworkService::create([
             'name' => $validated['name'],
+            'slug' => $slug,
             'category' => $validated['category'],
+            'service_type' => $validated['service_type'] ?? 'general',
+            'base_price' => $validated['base_price'] ?? 0,
+            'description' => $validated['description'] ?? null,
             'is_active' => $request->boolean('is_active', true),
             'image_path' => $imagePath,
         ]);
@@ -63,6 +74,10 @@ class AdminNetworkServiceController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:100'],
             'category' => ['required', 'string', Rule::in($this->categoryOptions())],
+            'service_type' => ['sometimes', 'string', Rule::in(['general', 'results_checker'])],
+            'slug' => ['nullable', 'string', 'max:100', Rule::unique('network_services', 'slug')->ignore($network_service->id)],
+            'base_price' => ['nullable', 'numeric', 'min:0'],
+            'description' => ['nullable', 'string', 'max:500'],
             'is_active' => ['sometimes', 'boolean'],
             'image' => $this->imageValidationRules(false),
         ]);
@@ -70,6 +85,10 @@ class AdminNetworkServiceController extends Controller
         $data = [
             'name' => $validated['name'],
             'category' => $validated['category'],
+            'service_type' => $validated['service_type'] ?? $network_service->service_type,
+            'slug' => $validated['slug'] ?? $network_service->slug,
+            'base_price' => $validated['base_price'] ?? $network_service->base_price,
+            'description' => $validated['description'] ?? $network_service->description,
             'is_active' => $request->boolean('is_active', true),
         ];
 
