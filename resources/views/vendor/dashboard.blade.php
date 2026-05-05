@@ -25,6 +25,9 @@
         <div class="ml-2">
             <a href="{{ route('vendor.quick-buy.show') }}" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-full bg-green-600 text-white hover:bg-green-700">Quick Buy</a>
         </div>
+        <div class="ml-2">
+            <a href="{{ route('storefront.result-checkers', ['vendor' => $vendor->vendor_code]) }}" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-full bg-cyan-600 text-white hover:bg-cyan-700">Result Checkers</a>
+        </div>
         @endif
     </x-slot>
 
@@ -233,7 +236,9 @@
                                 </div>
                                     <script>
                                         (function () {
-                                            const form = document.querySelector('form[action="{{ route('vendor.withdrawals.store') }}"]');
+                                            const withdrawalStoreUrl = "{{ route('vendor.withdrawals.store') }}";
+                                            const nameQueryUrl = "{{ route('vendor.withdrawals.name-query') }}";
+                                            const form = document.querySelector(`form[action="${withdrawalStoreUrl}"]`);
                                             if (!form) return;
 
                                             const numberInput = form.querySelector('#momo_number');
@@ -282,7 +287,7 @@
                                                 setStatus('Verifying account name...', 'loading');
 
                                                 try {
-                                                    const response = await fetch('{{ route('vendor.withdrawals.name-query') }}', {
+                                                    const response = await fetch(nameQueryUrl, {
                                                         method: 'POST',
                                                         headers: {
                                                             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
