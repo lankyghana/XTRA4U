@@ -193,6 +193,174 @@ class GigshubClient implements ExternalFulfillmentClient
         }
     }
 
+    public function getOrderStatus(string $identifier): array
+    {
+        $providerConfig = $this->config->providerConfig('gigshub');
+        $baseUrl = rtrim((string) ($providerConfig['base_url'] ?? ''), '/');
+        $apiKey = (string) ($providerConfig['api_key'] ?? '');
+        $timeout = (int) ($providerConfig['timeout_seconds'] ?? 30);
+
+        if ($baseUrl === '' || $apiKey === '' || $identifier === '') {
+            return [
+                'success' => false,
+                'message' => 'Invalid configuration or identifier',
+            ];
+        }
+
+        $url = $baseUrl . '/api/v1/order/status/' . urlencode($identifier);
+
+        try {
+            $response = Http::timeout($timeout)
+                ->acceptJson()
+                ->withHeaders([
+                    'x-api-key' => $apiKey,
+                ])
+                ->get($url)
+                ->throw();
+
+            $json = $response->json();
+
+            return [
+                'success' => true,
+                'order' => data_get($json, 'order'),
+                'raw' => $json,
+            ];
+        } catch (RequestException|ConnectionException $e) {
+            $response = $e instanceof RequestException ? $e->response : null;
+            $status = $response?->status();
+            $body = $response?->json() ?? $response?->body();
+
+            Log::warning('GigsHub order status check failed', [
+                'identifier' => $identifier,
+                'status' => $status,
+                'error' => $this->limitMessage($e->getMessage()),
+            ]);
+
+            return [
+                'success' => false,
+                'message' => $this->limitMessage($e->getMessage()),
+                'raw' => $body,
+            ];
+        }
+    }
+
+    public function getBulkOrderStatus(array $identifiers): array
+    {
+        $providerConfig = $this->config->providerConfig('gigshub');
+        $baseUrl = rtrim((string) ($providerConfig['base_url'] ?? ''), '/');
+        $apiKey = (string) ($providerConfig['api_key'] ?? '');
+        $timeout = (int) ($providerConfig['timeout_seconds'] ?? 30);
+
+        if ($baseUrl === '' || $apiKey === '' || empty($identifiers)) {
+            return [
+                'success' => false,
+                'message' => 'Invalid configuration or empty identifiers',
+            ];
+        }
+
+        if (count($identifiers) > 100) {
+            return [
+                'success' => false,
+                'message' => 'Maximum 100 identifiers allowed per request',
+            ];
+        }
+
+        $url = $baseUrl . '/api/v1/order/status/bulk';
+
+        try {
+            $response = Http::timeout($timeout)
+                ->acceptJson()
+                ->asJson()
+                ->withHeaders([
+                    'x-api-key' => $apiKey,
+                ])
+                ->post($url, [
+                    'identifiers' => $identifiers,
+                ])
+                ->throw();
+
+            $json = $response->json();
+
+            return [
+                'success' => true,
+                'total' => data_get($json, 'total'),
+                'found' => data_get($json, 'found'),
+                'notFound' => data_get($json, 'notFound'),
+                'orders' => data_get($json, 'orders', []),
+                'raw' => $json,
+            ];
+        } catch (RequestException|ConnectionException $e) {
+            $response = $e instanceof RequestException ? $e->response : null;
+            $status = $response?->status();
+            $body = $response?->json() ?? $response?->body();
+
+            Log::warning('GigsHub bulk order status check failed', [
+                'count' => count($identifiers),
+                'status' => $status,
+                'error' => $this->limitMessage($e->getMessage()),
+            ]);
+
+            return [
+                'success' => false,
+                'message' => $this->limitMessage($e->getMessage()),
+                'raw' => $body,
+            ];
+        }
+    }
+
+    public function getBalance(): array
+    {
+        $providerConfig = $this->config->providerConfig('gigshub');
+        $baseUrl = rtrim((string) ($providerConfig['base_url'] ?? ''), '/');
+        $apiKey = (string) ($providerConfig['api_key'] ?? '');
+        $timeout = (int) ($providerConfig['timeout_seconds'] ?? 30);
+
+        if ($baseUrl === '' || $apiKey === '') {
+            return [
+                'success' => false,
+                'message' => 'Invalid configuration',
+            ];
+        }
+
+        $url = $baseUrl . '/api/v1/balance';
+
+        try {
+            $response = Http::timeout($timeout)
+                ->acceptJson()
+                ->withHeaders([
+                    'x-api-key' => $apiKey,
+                ])
+                ->get($url)
+                ->throw();
+
+            $json = $response->json();
+
+            return [
+                'success' => true,
+                'balance' => data_get($json, 'balance'),
+                'currency' => data_get($json, 'currency'),
+                'name' => data_get($json, 'name'),
+                'timestamp' => data_get($json, 'timestamp'),
+                'raw' => $json,
+            ];
+        } catch (RequestException|ConnectionException $e) {
+            $response = $e instanceof RequestException ? $e->response : null;
+            $status = $response?->status();
+            $body = $response?->json() ?? $response?->body();
+
+            Log::warning('GigsHub balance check failed', [
+                'status' => $status,
+                'error' => $this->limitMessage($e->getMessage()),
+            ]);
+
+            return [
+                'success' => false,
+                'message' => $this->limitMessage($e->getMessage()),
+                'raw' => $body,
+            ];
+        }
+    }
+
     private function extractReference(mixed $json): ?string
     {
         // GigsHub returns: orderId, reference, id
