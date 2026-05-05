@@ -33,6 +33,10 @@ class ExternalFulfillmentSettingsController extends Controller
             $settings['external_fulfillment_xpres_api_secret_masked'] = '••••••••';
         }
 
+        if (! empty($settings['external_fulfillment.gigshub.api_key'])) {
+            $settings['external_fulfillment_gigshub_api_key_masked'] = '••••••••';
+        }
+
         return view('vendor.settings.external-fulfillment', [
             'vendor' => $vendor,
             'settings' => $settings,
@@ -59,6 +63,8 @@ class ExternalFulfillmentSettingsController extends Controller
             'external_fulfillment_xpres_api_key' => 'nullable|string|max:255',
             'external_fulfillment_xpres_api_secret' => 'nullable|string|max:255',
             'external_fulfillment_xpres_environment' => 'nullable|string|in:sandbox,production',
+            'external_fulfillment_gigshub_base_url' => 'nullable|string|max:255',
+            'external_fulfillment_gigshub_api_key' => 'nullable|string|max:255',
         ]);
 
         $xpresBaseUrl = trim((string) ($request->input('external_fulfillment_xpres_base_url') ?? ''));
@@ -89,6 +95,19 @@ class ExternalFulfillmentSettingsController extends Controller
             if (! $request->filled('external_fulfillment_xpres_base_url')) {
                 return back()
                     ->withErrors(['external_fulfillment_xpres_base_url' => 'XpresPortal Base URL is required.'])
+                    ->withInput();
+            }
+        }
+
+        if ($enabled && $provider === 'gigshub') {
+            if (! $request->filled('external_fulfillment_gigshub_base_url')) {
+                return back()
+                    ->withErrors(['external_fulfillment_gigshub_base_url' => 'GigsHub Base URL is required.'])
+                    ->withInput();
+            }
+            if (! $request->filled('external_fulfillment_gigshub_api_key')) {
+                return back()
+                    ->withErrors(['external_fulfillment_gigshub_api_key' => 'GigsHub API Key is required.'])
                     ->withInput();
             }
         }
@@ -139,6 +158,23 @@ class ExternalFulfillmentSettingsController extends Controller
                 $vendor->id,
                 'external_fulfillment.xpres.api_secret',
                 Crypt::encryptString((string) $request->input('external_fulfillment_xpres_api_secret')),
+                'external_fulfillment'
+            );
+        }
+
+        $gigshubBaseUrl = trim((string) ($request->input('external_fulfillment_gigshub_base_url') ?? ''));
+        VendorSetting::setForVendor(
+            $vendor->id,
+            'external_fulfillment.gigshub.base_url',
+            $gigshubBaseUrl,
+            'external_fulfillment'
+        );
+
+        if ($request->filled('external_fulfillment_gigshub_api_key')) {
+            VendorSetting::setForVendor(
+                $vendor->id,
+                'external_fulfillment.gigshub.api_key',
+                Crypt::encryptString((string) $request->input('external_fulfillment_gigshub_api_key')),
                 'external_fulfillment'
             );
         }

@@ -17,6 +17,7 @@ use App\Services\AffiliateChainService;
 use App\Services\SmsService;
 use App\Services\TransactionService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -28,7 +29,7 @@ use Illuminate\Validation\ValidationException;
 
 class VendorDashboardController extends Controller
 {
-	protected $transactionService;
+	protected TransactionService $transactionService;
 
 	public function __construct(TransactionService $transactionService)
 	{
@@ -154,7 +155,7 @@ class VendorDashboardController extends Controller
 	 *             This method is kept only to preserve backward compatibility
 	 *             if referenced elsewhere.
 	 */
-	private function getFilteredStats($transactions, string $filter): array
+	private function getFilteredStats(Collection $transactions, string $filter): array
 	{
 		$now = now();
 
@@ -1011,7 +1012,7 @@ class VendorDashboardController extends Controller
 	}
 
 	// Update reseller product
-	public function updateResellerProduct(Request $request, $id)
+	public function updateResellerProduct(Request $request, int $id)
 	{
 		$vendor = $this->resolveVendor();
 
@@ -1033,7 +1034,7 @@ class VendorDashboardController extends Controller
 	}
 
 	// Remove reseller product
-	public function removeResellerProduct($id)
+	public function removeResellerProduct(int $id)
 	{
 		$vendor = $this->resolveVendor();
 

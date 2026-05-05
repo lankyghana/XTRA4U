@@ -64,7 +64,7 @@ class AdminController extends Controller
         return view('admin.vendor_requests', compact('pendingVendors'));
     }
 
-    public function approveVendor($id)
+    public function approveVendor(int $id)
     {
         $vendor = Vendor::findOrFail($id);
         $vendor->is_approved = true;
@@ -82,7 +82,7 @@ class AdminController extends Controller
     }
 
     // Suspend vendor
-    public function suspendVendor($id)
+    public function suspendVendor(int $id)
     {
         $vendor = Vendor::findOrFail($id);
         if (Gate::denies('suspend', $vendor)) {
