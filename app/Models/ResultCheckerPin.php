@@ -10,11 +10,11 @@ class ResultCheckerPin extends Model
     protected $table = 'result_checker_pins';
 
     protected $fillable = [
-        'checker_type_id',
+        'service_id',
         'pin',
         'serial',
         'status',
-        'order_id',
+        'result_checker_order_id',
         'sold_at',
     ];
 
@@ -26,12 +26,12 @@ class ResultCheckerPin extends Model
 
     public function service(): BelongsTo
     {
-        return $this->belongsTo(NetworkService::class, 'checker_type_id');
+        return $this->belongsTo(NetworkService::class, 'service_id');
     }
 
     public function order(): BelongsTo
     {
-        return $this->belongsTo(ResultCheckerOrder::class, 'order_id');
+        return $this->belongsTo(ResultCheckerOrder::class, 'result_checker_order_id');
     }
 
     public function isAvailable(): bool
@@ -56,7 +56,7 @@ class ResultCheckerPin extends Model
 
     public function scopeForService($query, int $serviceId)
     {
-        return $query->where('checker_type_id', $serviceId);
+        return $query->where('service_id', $serviceId);
     }
 
     public function scopeSold($query)

@@ -65,7 +65,7 @@ class ResultCheckerService
     {
         return DB::transaction(function () use ($order) {
             $order->refresh();
-            if ($order->status === 'completed') {
+            if ($order->status === 'completed' || $order->pins()->exists()) {
                 return true;
             }
 
@@ -91,7 +91,7 @@ class ResultCheckerService
             $availablePins->each(function ($pin) use ($order, &$pinsData) {
                 $pin->update([
                     'status' => 'sold',
-                    'order_id' => $order->id,
+                    'result_checker_order_id' => $order->id,
                     'sold_at' => now(),
                 ]);
                 $pinsData[] = [
@@ -226,7 +226,7 @@ class ResultCheckerService
     {
         $checker = $order->service->name ?? 'Result Checker';
         $pinList = implode(
-            '\n',
+            "\n",
             array_map(fn($p) => "PIN: {$p['pin']}\nSERIAL: {$p['serial']}", $pins)
         );
 
