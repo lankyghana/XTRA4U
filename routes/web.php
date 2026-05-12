@@ -1,4 +1,3 @@
-
 <?php
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AdminLoginController;
@@ -29,6 +28,8 @@ use App\Http\Controllers\ResultCheckerCheckoutController;
 use App\Http\Controllers\ResultCheckerPaymentCallbackController;
 use App\Http\Controllers\ResultCheckerStatusController;
 use Illuminate\Support\Facades\Artisan;
+use App\Http\Controllers\AdminResultCheckerPinController;
+use App\Http\Controllers\AdminResultCheckerPricingTierController;
 
 // Admin login routes - moved to consolidated section below
 
@@ -423,3 +424,10 @@ Route::get('/vendor/product/create', [ProductController::class, 'create'])->name
 Route::post('/vendor/product', [ProductController::class, 'store'])->name('product.store');
 Route::get('/vendor/product/{id}/edit', [ProductController::class, 'edit'])->name('product.edit');
 Route::put('/vendor/product/{id}', [ProductController::class, 'update'])->name('product.update');
+Route::middleware(['web', 'admin.only'])->prefix('admin')->name('admin.')->group(function () {
+    Route::post('result-checker-pricing-tiers', [AdminResultCheckerPricingTierController::class, 'store'])->name('result-checker-pricing-tiers.store');
+    Route::delete('result-checker-pricing-tiers/{tier}', [AdminResultCheckerPricingTierController::class, 'destroy'])->name('result-checker-pricing-tiers.destroy');
+    Route::get('results-checkers/pins', [AdminResultCheckerPinController::class, 'index'])->name('result-checkers.pins.index');
+    Route::post('results-checkers/pins', [AdminResultCheckerPinController::class, 'store'])->name('result-checkers.pins.store');
+    Route::patch('results-checkers/base-price', [AdminResultCheckerPinController::class, 'updateBasePrice'])->name('result-checkers.base-price.update');
+});

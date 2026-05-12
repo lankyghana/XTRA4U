@@ -56,7 +56,8 @@ class ResultCheckerCheckoutController extends Controller
                 }
 
                 // Calculate pricing
-                $unitPrice = $service->base_price + $vendorSetting->profit_amount;
+                $basePrice = $service->getPriceForQuantity((int) $validated['quantity']);
+                $unitPrice = $basePrice + $vendorSetting->profit_amount;
                 $totalPrice = $unitPrice * $validated['quantity'];
 
                 // Create order with pending_payment status
