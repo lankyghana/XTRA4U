@@ -3,9 +3,14 @@
 @section('content')
 <x-admin-layout title="Result Checkers" subtitle="Stock visibility and service totals" active="result-checkers">
     <div class="space-y-6">
-        <div>
-            <h2 class="text-lg font-semibold text-gray-900">Stock Overview</h2>
-            <p class="text-sm text-gray-500">Track available inventory per result checker service.</p>
+        <div class="flex items-center justify-between">
+            <div>
+                <h2 class="text-lg font-semibold text-gray-900">Stock Overview</h2>
+                <p class="text-sm text-gray-500">Track available inventory per result checker service.</p>
+            </div>
+            <a href="{{ route('admin.result-checkers.pins.index') }}" class="inline-flex items-center px-4 py-2 bg-brand-deep-blue text-white rounded-md text-sm font-semibold hover:bg-opacity-90">
+                Manage PINs
+            </a>
         </div>
 
         <x-table :headers="['Service', 'Total Pins', 'Used Pins', 'Remaining Stock']">

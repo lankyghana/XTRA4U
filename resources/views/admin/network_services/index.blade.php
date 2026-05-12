@@ -40,6 +40,17 @@
                                 <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
                             @enderror
                         </div>
+                        <div>
+                            <label for="service_type" class="block text-sm font-semibold text-gray-700">Service Type</label>
+                            <select id="service_type" name="service_type"
+                                    class="mt-1 block w-full rounded-lg border-gray-200 shadow-sm focus:border-purple-500 focus:ring-purple-500">
+                                <option value="general" {{ old('service_type', 'general') === 'general' ? 'selected' : '' }}>General</option>
+                                <option value="results_checker" {{ old('service_type') === 'results_checker' ? 'selected' : '' }}>Result Checker</option>
+                            </select>
+                            @error('service_type')
+                                <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
+                            @enderror
+                        </div>
                     </div>
                     <div>
                         <label for="image" class="block text-sm font-semibold text-gray-700 mb-2">Image</label>

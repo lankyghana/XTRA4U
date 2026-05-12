@@ -8,7 +8,7 @@
             <p class="text-sm text-gray-500">Monitor order amounts, statuses, and fulfillment dates.</p>
         </div>
 
-        <x-table :headers="['Order ID', 'Vendor', 'Service', 'Amount Paid', 'Status', 'Date']">
+        <x-table :headers="['Order ID', 'Vendor', 'Service', 'Amount Paid', 'Status', 'Date', '']">
             @forelse ($orders as $order)
                 <tr class="hover:bg-gray-50">
                     <td class="px-6 py-4 text-sm font-medium text-gray-900">#{{ $order->id }}</td>
@@ -19,6 +19,9 @@
                         {{ $order->status ?? 'N/A' }}
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-500">{{ $order->created_at?->format('Y-m-d') }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">
+                        <a href="{{ route('admin.orders.show', $order) }}" class="text-indigo-600 hover:text-indigo-900">View</a>
+                    </td>
                 </tr>
             @empty
                 <tr>
