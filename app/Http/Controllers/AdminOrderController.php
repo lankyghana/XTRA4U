@@ -19,6 +19,12 @@ class AdminOrderController extends Controller
 		return view('admin.orders', compact('orders'));
 	}
 
+    public function show(Order $order)
+    {
+        $order->load(['vendor', 'service', 'pins']);
+        return view('admin.order_show', compact('order'));
+    }
+
 	public function update(Request $request, Order $order)
 	{
 		$data = $request->validate([

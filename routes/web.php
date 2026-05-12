@@ -362,7 +362,7 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
     Route::post('vendors/{vendor}/approve', [AdminVendorController::class, 'approve'])->name('vendors.approve');
     Route::post('vendors/{vendor}/reject', [AdminVendorController::class, 'reject'])->name('vendors.reject');
 	Route::post('vendors/{vendor}/disable-affiliate', [AdminVendorController::class, 'disableAffiliate'])->name('vendors.disable-affiliate');
-        Route::resource('orders', AdminOrderController::class)->only(['index']);
+        Route::resource('orders', AdminOrderController::class)->only(['index', 'show']);
 	Route::post('orders/{order}/confirm-payment', [AdminOrderController::class, 'confirmPayment'])
 		->name('orders.confirm-payment');
         Route::resource('transactions', AdminTransactionController::class)->only(['index']);

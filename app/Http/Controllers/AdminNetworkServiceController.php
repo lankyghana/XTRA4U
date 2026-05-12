@@ -33,6 +33,16 @@ class AdminNetworkServiceController extends Controller
             'image' => $this->imageValidationRules(false),
         ]);
 
+        $exists = NetworkService::where('name', $validated['name'])
+            ->where('category', $validated['category'])
+            ->exists();
+
+        if ($exists) {
+            return back()
+                ->withErrors(['name' => 'A service with this name already exists in the selected category.'])
+                ->withInput();
+        }
+
         $imagePath = null;
         if ($request->hasFile('image')) {
             $imagePath = $this->secureImageUpload(
@@ -81,6 +91,17 @@ class AdminNetworkServiceController extends Controller
             'is_active' => ['sometimes', 'boolean'],
             'image' => $this->imageValidationRules(false),
         ]);
+
+        $exists = NetworkService::where('name', $validated['name'])
+            ->where('category', $validated['category'])
+            ->where('id', '!=', $network_service->id)
+            ->exists();
+
+        if ($exists) {
+            return back()
+                ->withErrors(['name' => 'A service with this name already exists in the selected category.'])
+                ->withInput();
+        }
 
         $data = [
             'name' => $validated['name'],
