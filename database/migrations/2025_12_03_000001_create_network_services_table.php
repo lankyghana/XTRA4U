@@ -11,7 +11,12 @@ return new class extends Migration
         Schema::create('network_services', function (Blueprint $table) {
             $table->id();
             $table->string('name', 100);
+            $table->string('slug', 100)->unique();
             $table->string('category', 60);
+            $table->string('service_type', 60);
+            $table->decimal('base_price', 8, 2)->default(0);
+            $table->text('description')->nullable();
+            $table->string('image_path')->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();
 

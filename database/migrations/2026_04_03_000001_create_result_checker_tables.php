@@ -64,11 +64,18 @@ class CreateResultCheckerTables extends Migration
 
         // 4. Add checker type support to network_services table
         Schema::table('network_services', function (Blueprint $table) {
-            // Add checker type support
-            $table->boolean('is_checker_type')->default(false)->after('category')->index();
-            $table->decimal('base_price', 10, 2)->nullable()->after('is_checker_type');
-            $table->string('checker_code')->nullable()->after('base_price')->unique();
-            $table->text('checker_description')->nullable()->after('checker_code');
+            if (!Schema::hasColumn('network_services', 'is_checker_type')) {
+                $table->boolean('is_checker_type')->default(false)->after('category')->index();
+            }
+            if (!Schema::hasColumn('network_services', 'base_price')) {
+                $table->decimal('base_price', 10, 2)->nullable()->after('is_checker_type');
+            }
+            if (!Schema::hasColumn('network_services', 'checker_code')) {
+                $table->string('checker_code')->nullable()->after('base_price')->unique();
+            }
+            if (!Schema::hasColumn('network_services', 'checker_description')) {
+                $table->text('checker_description')->nullable()->after('checker_code');
+            }
         });
     }
 
