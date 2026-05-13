@@ -116,6 +116,8 @@ final class ExternalFulfillmentConfig
                 ? $settings['external_fulfillment.gigshub.api_key']
                 : null
         );
+        $systemGigshubBaseUrl = trim((string) config('services.gigshub.base_url', ''));
+        $systemGigshubApiKey = trim((string) config('services.gigshub.api_key', ''));
 
         $providers = [
             'datafyhub' => [
@@ -138,8 +140,8 @@ final class ExternalFulfillmentConfig
             ],
             'gigshub' => [
                 'enabled' => $enabled,
-                'base_url' => $vendorGigshubBaseUrl,
-                'api_key' => $vendorGigshubApiKey,
+                'base_url' => $vendorGigshubBaseUrl ?? $systemGigshubBaseUrl,
+                'api_key' => $vendorGigshubApiKey ?? $systemGigshubApiKey,
                 'timeout_seconds' => self::coerceTimeout((int) config('services.gigshub.timeout', 30)),
             ],
         ];
@@ -168,6 +170,28 @@ final class ExternalFulfillmentConfig
         }
 
         if ($this->provider === 'gigshub') {
+            return $config['base_url'] !== '' && $config['api_key'] !== '';
+        }
+
+        return $config['base_url'] !== ''
+            && $config['token'] !== ''
+            && $config['endpoint'] !== '';
+    }
+
+    public function isServiceDiscoveryReady(): bool
+    {
+        $provider = $this->provider;
+        $config = $this->providerConfig($provider);
+        if ($config === []) {
+            $provider = 'datafyhub';
+            $config = $this->providerConfig('datafyhub');
+        }
+
+        if ($provider === 'xpresportal') {
+            return $config['base_url'] !== '' && $config['api_key'] !== '';
+        }
+
+        if ($provider === 'gigshub') {
             return $config['base_url'] !== '' && $config['api_key'] !== '';
         }
 
@@ -238,7 +262,8 @@ final class ExternalFulfillmentConfig
 
             return $decrypted !== '' ? $decrypted : null;
         } catch (\Throwable $e) {
-            return null;
+            $fallback = trim($encrypted);
+            return $fallback !== '' ? $fallback : null;
         }
     }
 }

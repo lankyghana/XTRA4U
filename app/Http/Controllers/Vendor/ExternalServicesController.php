@@ -19,10 +19,11 @@ class ExternalServicesController extends Controller
         $config = ExternalFulfillmentConfig::loadFreshForVendor($vendor);
         $provider = $config->provider ?? 'datafyhub';
 
-        if (! $config->isReady()) {
+        if (! $config->isServiceDiscoveryReady()) {
             return response()->json([
                 'provider' => $provider,
                 'services' => [],
+                'message' => 'External fulfillment settings are incomplete for ' . $provider . '.',
             ]);
         }
 

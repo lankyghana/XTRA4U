@@ -20,7 +20,7 @@ class GigshubClient implements ExternalFulfillmentClient
     public function sendOrder(Order $order, string $idempotencyKey): array
     {
         $providerConfig = $this->config->providerConfig('gigshub');
-        $baseUrl = rtrim((string) ($providerConfig['base_url'] ?? ''), '/');
+        $baseUrl = $this->normalizeBaseUrl((string) ($providerConfig['base_url'] ?? ''));
         $apiKey = (string) ($providerConfig['api_key'] ?? '');
         $timeout = (int) ($providerConfig['timeout_seconds'] ?? 30);
 
@@ -137,7 +137,7 @@ class GigshubClient implements ExternalFulfillmentClient
     public function getServices(): array
     {
         $providerConfig = $this->config->providerConfig('gigshub');
-        $baseUrl = rtrim(trim((string) ($providerConfig['base_url'] ?? '')), '/');
+        $baseUrl = $this->normalizeBaseUrl((string) ($providerConfig['base_url'] ?? ''));
         $apiKey = (string) ($providerConfig['api_key'] ?? '');
         $timeout = (int) ($providerConfig['timeout_seconds'] ?? 30);
 
@@ -196,7 +196,7 @@ class GigshubClient implements ExternalFulfillmentClient
     public function getOrderStatus(string $identifier): array
     {
         $providerConfig = $this->config->providerConfig('gigshub');
-        $baseUrl = rtrim((string) ($providerConfig['base_url'] ?? ''), '/');
+        $baseUrl = $this->normalizeBaseUrl((string) ($providerConfig['base_url'] ?? ''));
         $apiKey = (string) ($providerConfig['api_key'] ?? '');
         $timeout = (int) ($providerConfig['timeout_seconds'] ?? 30);
 
@@ -247,7 +247,7 @@ class GigshubClient implements ExternalFulfillmentClient
     public function getBulkOrderStatus(array $identifiers): array
     {
         $providerConfig = $this->config->providerConfig('gigshub');
-        $baseUrl = rtrim((string) ($providerConfig['base_url'] ?? ''), '/');
+        $baseUrl = $this->normalizeBaseUrl((string) ($providerConfig['base_url'] ?? ''));
         $apiKey = (string) ($providerConfig['api_key'] ?? '');
         $timeout = (int) ($providerConfig['timeout_seconds'] ?? 30);
 
@@ -311,7 +311,7 @@ class GigshubClient implements ExternalFulfillmentClient
     public function getBalance(): array
     {
         $providerConfig = $this->config->providerConfig('gigshub');
-        $baseUrl = rtrim((string) ($providerConfig['base_url'] ?? ''), '/');
+        $baseUrl = $this->normalizeBaseUrl((string) ($providerConfig['base_url'] ?? ''));
         $apiKey = (string) ($providerConfig['api_key'] ?? '');
         $timeout = (int) ($providerConfig['timeout_seconds'] ?? 30);
 
@@ -372,6 +372,18 @@ class GigshubClient implements ExternalFulfillmentClient
         }
 
         return null;
+    }
+
+    private function normalizeBaseUrl(string $baseUrl): string
+    {
+        $trimmed = rtrim(trim($baseUrl), '/');
+        if ($trimmed === '') {
+            return '';
+        }
+
+        $trimmed = preg_replace('#/api/v1$#i', '', $trimmed) ?? $trimmed;
+
+        return rtrim($trimmed, '/');
     }
 
     private function limitMessage(string $message): string
