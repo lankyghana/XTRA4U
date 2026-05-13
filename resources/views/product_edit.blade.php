@@ -98,6 +98,18 @@
                 <input type="hidden" name="external_service_offer_slug" id="external_service_offer_slug" value="{{ $mappedExternalServiceOfferSlug }}">
                 <p class="text-xs text-gray-400 mt-1">Optional. Maps this platform product to a concrete provider package for automated fulfillment.</p>
             </div>
+            <div
+                id="external-services-config"
+                class="hidden"
+                data-endpoint="{{ $externalServicesEndpoint ?? '' }}"
+                data-provider="{{ $activeExternalFulfillmentProvider ?? '' }}"
+                data-service-id="{{ $mappedExternalServiceId ?? '' }}"
+                data-service-name="{{ $mappedExternalServiceName ?? '' }}"
+                data-service-network="{{ $mappedExternalServiceNetwork ?? '' }}"
+                data-service-capacity="{{ $mappedExternalServiceCapacity ?? '' }}"
+                data-service-price="{{ $mappedExternalServicePrice ?? '' }}"
+                data-service-offer-slug="{{ $mappedExternalServiceOfferSlug ?? '' }}"
+            ></div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>

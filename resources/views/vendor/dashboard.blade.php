@@ -25,9 +25,6 @@
         <div class="ml-2">
             <a href="{{ route('vendor.quick-buy.show') }}" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-full bg-green-600 text-white hover:bg-green-700">Quick Buy</a>
         </div>
-        <div class="ml-2">
-            <a href="{{ route('storefront.result-checkers', ['vendor' => $vendor->vendor_code]) }}" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-full bg-cyan-600 text-white hover:bg-cyan-700">Result Checkers</a>
-        </div>
         @endif
     </x-slot>
 
@@ -482,14 +479,6 @@
                     </div>
                 </div>
 
-                <div class="mt-4">
-                    <a href="{{ route('storefront.result-checkers', ['vendor' => $vendor->vendor_code]) }}" class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-lg hover:shadow-lg transition-all duration-200 text-sm font-semibold">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                        </svg>
-                        Manage Results Checkers
-                    </a>
-                </div>
             </div>
         </div>
     </div>

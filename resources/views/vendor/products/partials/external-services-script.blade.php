@@ -1,14 +1,15 @@
 @push('scripts')
 <script>
 (function () {
-    const endpoint = @json($externalServicesEndpoint ?? '');
-    const providerName = @json($activeExternalFulfillmentProvider ?? '');
-    const initialServiceId = @json($mappedExternalServiceId ?? '');
-    const initialServiceName = @json($mappedExternalServiceName ?? '');
-    const initialServiceNetwork = @json($mappedExternalServiceNetwork ?? '');
-    const initialServiceCapacity = @json($mappedExternalServiceCapacity ?? '');
-    const initialServicePrice = @json($mappedExternalServicePrice ?? '');
-    const initialServiceOfferSlug = @json($mappedExternalServiceOfferSlug ?? '');
+    const configEl = document.getElementById('external-services-config');
+    const endpoint = configEl ? (configEl.dataset.endpoint || '') : '';
+    const providerName = configEl ? (configEl.dataset.provider || '') : '';
+    const initialServiceId = configEl ? (configEl.dataset.serviceId || '') : '';
+    const initialServiceName = configEl ? (configEl.dataset.serviceName || '') : '';
+    const initialServiceNetwork = configEl ? (configEl.dataset.serviceNetwork || '') : '';
+    const initialServiceCapacity = configEl ? (configEl.dataset.serviceCapacity || '') : '';
+    const initialServicePrice = configEl ? (configEl.dataset.servicePrice || '') : '';
+    const initialServiceOfferSlug = configEl ? (configEl.dataset.serviceOfferSlug || '') : '';
 
     const serviceSelect = document.getElementById('external_service_id');
     const refreshButton = document.getElementById('external_services_refresh');
@@ -188,6 +189,7 @@
 
             const data = await response.json();
             const rawServices = Array.isArray(data.services) ? data.services : [];
+            const responseMessage = typeof data.message === 'string' ? data.message.trim() : '';
             const services = rawServices
                 .map((item, index) => normalizeService(item, index))
                 .filter((item) => item && item.id);
@@ -226,9 +228,13 @@
                 applySelection(null);
             }
 
-            setStatus('Loaded ' + services.length + ' services.', false);
-            statusEl.classList.remove('text-gray-400', 'text-red-600');
-            statusEl.classList.add('text-green-600');
+            if (responseMessage && services.length === 0) {
+                setStatus(responseMessage, true);
+            } else {
+                setStatus('Loaded ' + services.length + ' services.', false);
+                statusEl.classList.remove('text-gray-400', 'text-red-600');
+                statusEl.classList.add('text-green-600');
+            }
         } catch (error) {
             setStatus('Unable to load services right now.', true);
             applySelection(optionToService(serviceSelect.selectedOptions[0]));
