@@ -26,7 +26,7 @@
                 </ul>
             </div>
         @endif
-        <form method="POST" action="{{ route('product.store') }}" class="space-y-6">
+        <form method="POST" action="{{ route('product.store') }}" enctype="multipart/form-data" class="space-y-6">
             @csrf
             <div>
                 <label for="name" class="block text-sm font-semibold text-gray-700">Product Name</label>
@@ -137,6 +137,12 @@
                 <label for="notes" class="block text-sm font-semibold text-gray-700">Customer-facing Notes</label>
                 <textarea name="notes" id="notes" rows="3" class="mt-1 block w-full border-gray-200 rounded-lg shadow-sm focus:border-purple-400 focus:ring-purple-400" placeholder="Shown on storefront cards">{{ old('notes') }}</textarea>
                 <p class="mt-1 text-xs text-gray-400">These fields will be serialized into JSON so the storefront can render metadata like network, size, validity, and promotions.</p>
+            </div>
+
+            <div>
+                <label for="image" class="block text-sm font-semibold text-gray-700">Product Image</label>
+                <input type="file" name="image" id="image" accept="image/*" class="mt-1 block w-full border-gray-200 rounded-lg shadow-sm focus:border-purple-400 focus:ring-purple-400">
+                <p class="mt-1 text-xs text-gray-400">Optional. JPG, PNG, or GIF up to 2MB.</p>
             </div>
 
             <button type="submit" class="w-full bg-[#7C3AED] text-white py-3 px-4 rounded-xl font-semibold shadow-md hover:bg-purple-700 transition">Create Product</button>

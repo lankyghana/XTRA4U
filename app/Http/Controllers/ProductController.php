@@ -9,6 +9,7 @@ use App\Models\Vendor;
 use App\Services\ExternalFulfillment\ExternalFulfillmentConfig;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class ProductController extends Controller
@@ -48,6 +49,7 @@ class ProductController extends Controller
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:500',
             'price' => 'required|numeric|min:0',
+            'image' => 'nullable|image|mimes:jpeg,png,gif|max:2048',
             'network' => $this->networkValidationRule(),
             'external_network' => $this->externalNetworkValidationRule($providerNetworks),
             'external_service_id' => 'nullable|string|max:120',
@@ -63,6 +65,11 @@ class ProductController extends Controller
             'notes' => 'nullable|string|max:255',
         ]);
 
+        $imagePath = null;
+        if ($request->hasFile('image')) {
+            $imagePath = $request->file('image')->store('products', 'public');
+        }
+
         Product::create([
             'vendor_id' => $vendor->id,
             'name' => $validated['name'],
@@ -73,6 +80,7 @@ class ProductController extends Controller
                 $activeExternalFulfillmentProvider,
             ),
             'price' => $validated['price'],
+            'image_path' => $imagePath,
             'is_active' => true,
         ]);
 
@@ -112,6 +120,7 @@ class ProductController extends Controller
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:500',
             'price' => 'required|numeric|min:0',
+            'image' => 'nullable|image|mimes:jpeg,png,gif|max:2048',
             'network' => $this->networkValidationRule($existingNetwork),
             'external_network' => $this->externalNetworkValidationRule($providerNetworks),
             'external_service_id' => 'nullable|string|max:120',
@@ -128,12 +137,21 @@ class ProductController extends Controller
             'is_active' => 'nullable|boolean',
         ]);
 
+        $imagePath = $product->image_path;
+        if ($request->hasFile('image')) {
+            if ($product->image_path) {
+                Storage::disk('public')->delete($product->image_path);
+            }
+            $imagePath = $request->file('image')->store('products', 'public');
+        }
+
         $oldPrice = $product->price;
         $newPrice = $validated['price'];
 
         $product->update([
             'name' => $validated['name'],
             'price' => $newPrice,
+            'image_path' => $imagePath,
             'description' => $this->buildStructuredDescription(
                 $request,
                 $validated['description'] ?? null,
@@ -163,6 +181,10 @@ class ProductController extends Controller
     public function destroy(int|Product $id)
     {
         $product = $this->findVendorProduct($id);
+
+        if ($product->image_path) {
+            Storage::disk('public')->delete($product->image_path);
+        }
 
         // ResellerProduct rows are removed by FK cascade (see migration).
         $product->delete();

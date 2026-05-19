@@ -89,7 +89,7 @@ class VendorDashboardController extends Controller
 			->take(50)
 			->values();
 		$products = Product::where('vendor_id', $vendorId)->orderBy('name')->get();
-		$storeLink = route('storefront.vendor', ['vendor' => $vendor]);
+		$storeLink = route('storefront.vendor', ['vendor' => $vendor->vendor_code ?? $vendor->id]);
 		$recentWithdrawals = VendorWithdrawal::where('vendor_id', $vendorId)->latest()->take(5)->get();
 		$withdrawableBalance = $this->calculateWithdrawableBalance($vendorId, $allTimeEarnings);
 
@@ -806,8 +806,12 @@ class VendorDashboardController extends Controller
 
 		// Normalize ledger entries
 		$ledgerItems = $ledgerEntries->map(function ($e) {
+			$purpose = strtolower((string) ($e->metadata['purpose'] ?? ''));
+			$isTopup = $e->type === 'credit' && in_array($purpose, ['wallet_topup', 'topup', 'top-up'], true);
+
 			return (object) [
-				'type' => $e->type === 'credit' ? ($e->metadata['purpose'] ?? 'Top-up') : 'Withdrawal',
+				'type' => $e->type === 'debit' ? 'Withdrawal' : ($isTopup ? 'Top-up' : (string) ($e->metadata['purpose'] ?? 'Credit')),
+				'history_type' => $e->type === 'debit' ? 'withdrawals' : ($isTopup ? 'topups' : 'other'),
 				'amount' => $e->amount,
 				'status' => 'completed',
 				'reference' => $e->metadata['reference'] ?? null,
@@ -819,6 +823,7 @@ class VendorDashboardController extends Controller
 		$withdrawalItems = $withdrawals->getCollection()->map(function ($w) {
 			return (object) [
 				'type' => 'Withdrawal',
+				'history_type' => 'withdrawals',
 				'amount' => $w->amount,
 				'status' => $w->status,
 				'reference' => $w->reference,
@@ -856,6 +861,8 @@ class VendorDashboardController extends Controller
 			: ($user instanceof Vendor ? $user : null);
 
 		abort_unless($vendor, 403, 'Vendor account required.');
+
+		$vendor->ensureVendorCode();
 
 		return $vendor;
 	}

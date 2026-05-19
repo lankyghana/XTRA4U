@@ -78,6 +78,35 @@ class StorefrontController extends Controller
 
 		$services = $this->buildServicePayload($products, $defaultCategory);
 		
+		// Add Result Checker NetworkServices to the services collection
+		$resultCheckers = NetworkService::where('service_type', 'results_checker')
+			->where('is_active', true)
+			->get();
+		
+		foreach ($resultCheckers as $checker) {
+			$resultCheckerService = [
+				'key' => 'results_checker_' . $checker->id,
+				'name' => $checker->name,
+				'category' => $checker->category,
+				'logo' => $checker->image_path ?? '/images/default-provider.png',
+				'is_results_checker' => true,
+				'packages' => [
+					[
+						'id' => 'result_checker_' . $checker->id,
+						'name' => $checker->name,
+						'price' => (float) ($checker->base_price ?? 0),
+						'size' => null,
+						'validity' => null,
+						'tag' => null,
+						'notes' => $checker->description ?? 'Result Checker Service',
+						'is_results_checker' => true,
+						'service_id' => $checker->id,
+					]
+				],
+			];
+			$services->push($resultCheckerService);
+		}
+		
 		// Add AFA Registration as a service if vendor has it enabled (direct or reseller)
 		$afaPrice = null;
 		$afaUrl = null;

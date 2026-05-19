@@ -8,7 +8,6 @@ use App\Models\AdminNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Str;
 
 class VendorController extends Controller
 {
@@ -40,7 +39,7 @@ class VendorController extends Controller
 
         $affiliateVendorId = $affiliateVendor->id;
 
-        $vendorCode = $this->generateVendorCode($validated['name']);
+        $vendorCode = Vendor::generateUniqueCode($validated['name']);
 
         $vendor = Vendor::create([
             'name' => $validated['name'],
@@ -115,27 +114,4 @@ class VendorController extends Controller
         return view('vendor_dashboard', compact('vendor', 'totalSales', 'totalEarnings', 'orders', 'products', 'storeLink'));
     }
 
-    /**
-     * Generate a unique vendor code based on business name + random alphanumeric
-     * Format: First 3-4 letters of name + 6 random alphanumeric characters
-     * Example: "Daniel Kwadwo Takyi" -> "DANI7X9K2L" or "MTN Ghana" -> "MTN4A8C9D2"
-     */
-    private function generateVendorCode(string $name): string
-    {
-        // Extract first letters of name (remove spaces, take first 3-4 chars, uppercase)
-        $namePrefix = strtoupper(substr(preg_replace('/[^a-zA-Z]/', '', $name), 0, 4));
-        
-        // Keep trying until we get a unique code
-        do {
-            // Generate random alphanumeric string (6 characters)
-            $randomSuffix = strtoupper(Str::random(6));
-            $vendorCode = $namePrefix . $randomSuffix;
-            
-            // Check if this code already exists
-            $exists = Vendor::where('vendor_code', $vendorCode)->exists();
-        } while ($exists);
-        
-        return $vendorCode;
-    }
 }
-

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 class Vendor extends Authenticatable
 {
@@ -101,4 +102,28 @@ class Vendor extends Authenticatable
     protected $hidden = [
         'password',
     ];
+
+    public static function generateUniqueCode(string $name): string
+    {
+        $namePrefix = strtoupper(substr(preg_replace('/[^a-zA-Z]/', '', $name), 0, 4));
+        $namePrefix = $namePrefix !== '' ? $namePrefix : 'VEND';
+
+        do {
+            $randomSuffix = strtoupper(Str::random(6));
+            $vendorCode = $namePrefix . $randomSuffix;
+            $exists = self::where('vendor_code', $vendorCode)->exists();
+        } while ($exists);
+
+        return $vendorCode;
+    }
+
+    public function ensureVendorCode(): void
+    {
+        if ($this->vendor_code) {
+            return;
+        }
+
+        $this->vendor_code = self::generateUniqueCode($this->name ?? 'Vendor');
+        $this->save();
+    }
 }

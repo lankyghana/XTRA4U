@@ -56,10 +56,8 @@
                         const cat = String(this.selectedCategory.value || '').toLowerCase().trim();
                         return (this.services || []).filter((s) => {
                             const sc = String(s.category || '').toLowerCase().trim();
-                            if (!sc && !cat) return true;
-                            if (sc === cat) return true;
-                            if (sc.includes(cat) || cat.includes(sc)) return true;
-                            return false;
+                            // Exact category match only (no fuzzy includes matching)
+                            return sc === cat;
                         });
                     } catch (e) {
                         return [];
@@ -110,7 +108,7 @@
                             const key = String(cat.value || '').toLowerCase().trim();
                             return (this.services || []).some((service) => {
                                 const sc = String(service.category || '').toLowerCase().trim();
-                                return sc === key || sc.includes(key) || key.includes(sc);
+                                return sc === key;  // Exact match only
                             });
                         });
                         if (firstAvailable) {
@@ -192,6 +190,7 @@
                         return;
                     }
                     
+                    // If this is a result checker service, proceed normally but mark it
                     this.selectedService = svc;
                     this.selectedPackage = null;
                     this.showAllPackages = true;
@@ -200,6 +199,9 @@
 
                 selectPackage(pkg) {
                     if (!pkg) return;
+                    
+                    // If this is a result checker package, proceed normally
+                    // Result checker checkout will be handled by the form submission
                     
                     // If this is an AFA package, redirect to AFA registration page
                     if (pkg.is_afa && pkg.afa_url) {

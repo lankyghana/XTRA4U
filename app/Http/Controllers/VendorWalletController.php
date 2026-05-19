@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Vendor;
 use App\Services\PaymentService;
 use App\Services\WalletService;
 use Illuminate\Http\Request;
@@ -25,29 +26,32 @@ class VendorWalletController extends Controller
     }
 
     // Initiate top-up via existing gateway; callback_url will point to `wallet.topup.callback`
+    // SECURITY: Only the authenticated vendor can initiate top-ups for their own wallet.
+    // We never accept vendor_id from the request - it is derived solely from the authenticated user.
     public function initiateTopup(Request $request)
     {
+        $vendor = $this->resolveAuthenticatedVendor();
         $validated = $request->validate([
-            'vendor_id' => 'required|exists:vendors,id',
             'amount' => 'required|numeric|min:0.01',
             'return_url' => 'nullable|url',
             'payer_phone' => 'nullable|string',
             'network' => 'nullable|string',
         ]);
 
+        $vendorId = (int) $vendor->id;
         $reference = Str::uuid()->toString();
 
         // Persist a short-lived mapping so callbacks that don't return metadata
         // (some gateways don't echo back custom metadata) can still be reconciled.
         Cache::put("wallet_topup:{$reference}", [
-            'vendor_id' => $validated['vendor_id'],
+            'vendor_id' => $vendorId,
             'amount' => (float) $validated['amount'],
         ], now()->addHours(6));
 
         // Also persist a DB record for stronger auditability and reconciliation.
         WalletTopup::create([
             'reference' => $reference,
-            'vendor_id' => $validated['vendor_id'],
+            'vendor_id' => $vendorId,
             'amount' => (float) $validated['amount'],
             'metadata' => ['purpose' => 'wallet_topup'],
             'status' => 'initiated',
@@ -57,9 +61,8 @@ class VendorWalletController extends Controller
 
         // Include vendor phone when available so inline gateways that require
         // a MoMo number (e.g. BulkClix) can initiate direct MoMo prompts.
-        $vendor = \App\Models\Vendor::find((int) $validated['vendor_id']);
         $metadata = [
-            'vendor_id' => $validated['vendor_id'],
+            'vendor_id' => $vendorId,
             'purpose' => 'wallet_topup',
         ];
 
@@ -78,7 +81,7 @@ class VendorWalletController extends Controller
             $metadata['network'] = strtoupper(trim((string) $network));
         }
 
-        $result = $this->paymentService->initiateGenericPayment($request->user()?->email ?? 'noreply@xtra4u.com', (float) $validated['amount'], $callbackUrl, $reference, $metadata);
+        $result = $this->paymentService->initiateGenericPayment($vendor->email ?? 'noreply@xtra4u.com', (float) $validated['amount'], $callbackUrl, $reference, $metadata);
 
         if (! $result['success']) {
             return response()->json(['success' => false, 'message' => $result['message'] ?? 'Failed to initiate top-up'], 400);
@@ -88,6 +91,8 @@ class VendorWalletController extends Controller
             'success' => true,
             'reference' => $result['reference'] ?? $reference,
             'authorization_url' => $result['authorization_url'] ?? null,
+            'flow_type' => $result['flow_type'] ?? null,
+            'gateway_name' => $result['gateway_name'] ?? null,
         ]);
     }
 
@@ -275,12 +280,15 @@ class VendorWalletController extends Controller
         return redirect(url('/vendor/wallet?tab=topups'))->with('status', 'Wallet topped up.');
     }
 
-    // Basic ledger view (vendor-only)
-    public function ledger(Request $request, int $vendorId)
+    // Wallet ledger view (authenticated vendor only, no URL parameters)
+    // SECURITY: Only the authenticated vendor can view their own wallet ledger.
+    // The vendor_id is derived solely from authentication, preventing cross-vendor access.
+    public function ledger(Request $request)
     {
-        // Auth checks can be added; this is a minimal endpoint
+        $vendor = $this->resolveAuthenticatedVendor();
+        $vendorId = (int) $vendor->id;
+
         $entries = \App\Models\WalletLedger::where('vendor_id', $vendorId)->orderByDesc('id')->limit(200)->get();
-        $vendor = \App\Models\Vendor::find($vendorId);
 
         $walletService = app(\App\Services\WalletService::class);
         $withdrawable = $walletService->getWithdrawableBalance($vendorId);
@@ -326,8 +334,32 @@ class VendorWalletController extends Controller
     // Polling endpoint for client-side verification of a top-up by reference.
     public function topupStatus(Request $request, string $reference)
     {
+        $vendor = $this->resolveAuthenticatedVendor();
+
         // Quick DB check: if we have a completed record, short-circuit
         $topup = WalletTopup::where('reference', $reference)->first();
+        if ($topup && (int) $topup->vendor_id !== (int) $vendor->id) {
+            Log::warning('Wallet topup status cross-vendor access blocked', [
+                'authenticated_vendor_id' => $vendor->id,
+                'topup_vendor_id' => (int) $topup->vendor_id,
+                'reference' => $reference,
+                'ip' => $request->ip(),
+            ]);
+            return response()->json(['success' => false, 'message' => 'Top-up not found.'], 404);
+        }
+
+        if (! $topup) {
+            $cached = Cache::get("wallet_topup:{$reference}");
+            if (! is_array($cached) || (int) ($cached['vendor_id'] ?? 0) !== (int) $vendor->id) {
+                Log::warning('Wallet topup status unknown reference access blocked', [
+                    'authenticated_vendor_id' => $vendor->id,
+                    'reference' => $reference,
+                    'ip' => $request->ip(),
+                ]);
+                return response()->json(['success' => false, 'message' => 'Top-up not found.'], 404);
+            }
+        }
+
         if ($topup && $topup->status === 'completed') {
             return response()->json([
                 'success' => true,
@@ -353,13 +385,13 @@ class VendorWalletController extends Controller
         }
 
         $normalized = 'pending';
-        if ($result['success'] ?? false) {
-            $low = is_string($rawStatus) ? strtolower($rawStatus) : '';
-            if (strpos($low, 'complete') !== false || strpos($low, 'success') !== false) $normalized = 'completed';
-            if (strpos($low, 'fail') !== false || strpos($low, 'failed') !== false || strpos($low, 'error') !== false) $normalized = 'failed';
-        } else {
-            // If gateway explicitly reports success=false but provides data, keep pending
-            $normalized = 'pending';
+        $low = is_string($rawStatus) ? strtolower($rawStatus) : '';
+        if (strpos($low, 'complete') !== false || strpos($low, 'success') !== false) {
+            $normalized = 'completed';
+        } elseif (strpos($low, 'cancel') !== false) {
+            $normalized = 'cancelled';
+        } elseif (strpos($low, 'fail') !== false || strpos($low, 'error') !== false) {
+            $normalized = 'failed';
         }
 
         // If gateway indicates the payment is completed, attempt to reconcile
@@ -374,7 +406,7 @@ class VendorWalletController extends Controller
             $topupRecord = WalletTopup::where('reference', $reference)->first();
             if (! $topupRecord) {
                 $cached = Cache::get("wallet_topup:{$reference}");
-                if ($cached && is_array($cached)) {
+                if ($cached && is_array($cached) && (int) ($cached['vendor_id'] ?? 0) === (int) $vendor->id) {
                     $topupRecord = WalletTopup::create([
                         'reference' => $reference,
                         'vendor_id' => $cached['vendor_id'],
@@ -382,7 +414,7 @@ class VendorWalletController extends Controller
                         'status' => 'initiated',
                         'metadata' => ['purpose' => 'wallet_topup'],
                     ]);
-                } elseif (is_array($meta) && ! empty($meta['vendor_id'])) {
+                } elseif (is_array($meta) && ! empty($meta['vendor_id']) && (int) $meta['vendor_id'] === (int) $vendor->id) {
                     // If gateway provided metadata, create a DB record from it
                     $topupRecord = WalletTopup::create([
                         'reference' => $reference,
@@ -428,5 +460,19 @@ class VendorWalletController extends Controller
             'raw' => $result,
             'reference' => $reference,
         ]);
+    }
+
+    private function resolveAuthenticatedVendor(): Vendor
+    {
+        $vendorGuardUser = Auth::guard('vendor')->user();
+        $user = Auth::user();
+
+        $vendor = $vendorGuardUser instanceof Vendor
+            ? $vendorGuardUser
+            : ($user instanceof Vendor ? $user : null);
+
+        abort_unless($vendor, 403, 'Vendor account required.');
+
+        return $vendor;
     }
 }

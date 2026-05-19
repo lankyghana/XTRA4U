@@ -299,8 +299,8 @@ Route::middleware(['vendor.approved'])
         // Polling endpoint for client-side verification of inline top-ups
         Route::get('wallet/topup/status/{reference}', [\App\Http\Controllers\VendorWalletController::class, 'topupStatus'])
             ->name('wallet.topup.status');
-        Route::get('wallet/{vendor}', [\App\Http\Controllers\VendorWalletController::class, 'ledger'])
-            ->whereNumber('vendor')
+        // Wallet ledger endpoint (no vendor_id parameter - uses authenticated context only)
+        Route::get('wallet/ledger', [\App\Http\Controllers\VendorWalletController::class, 'ledger'])
             ->name('wallet.ledger');
         // Lightweight balance endpoint (used by quick-buy UI polling)
         Route::get('wallet/balance', [\App\Http\Controllers\VendorWalletController::class, 'balance'])
@@ -313,9 +313,6 @@ Route::middleware(['vendor.approved'])
         // NOTE: the actual payment gateway callback for top-ups should be public
         // and not require vendor authentication. The topup callback route is
         // defined outside the `vendor.approved` group below as `vendor.wallet.topup.callback`.
-        Route::get('wallet/{vendor}', [\App\Http\Controllers\VendorWalletController::class, 'ledger'])
-            ->whereNumber('vendor')
-            ->name('wallet.ledger');
     });
 Route::get('/checkout', [CheckoutController::class, 'show'])->name('checkout.show');
 Route::post('/checkout', [CheckoutController::class, 'process'])->name('checkout.process');

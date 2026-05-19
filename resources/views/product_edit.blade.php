@@ -30,7 +30,7 @@
                 </ul>
             </div>
         @endif
-        <form method="POST" action="{{ route('product.update', $product->id) }}" class="space-y-6">
+        <form method="POST" action="{{ route('product.update', $product->id) }}" enctype="multipart/form-data" class="space-y-6">
             @csrf
             @method('PUT')
             <div>
@@ -146,6 +146,19 @@
             <div class="flex items-center gap-3">
                 <input type="checkbox" name="is_active" id="is_active" value="1" {{ old('is_active', $product->is_active) ? 'checked' : '' }} class="h-4 w-4 text-purple-600 border-gray-300 rounded">
                 <label for="is_active" class="text-sm font-semibold text-gray-700">Active</label>
+            </div>
+
+            @if($product->image_url)
+                <div>
+                    <p class="text-sm font-semibold text-gray-700 mb-2">Current Image</p>
+                    <img src="{{ $product->image_url }}" alt="{{ $product->name }}" class="w-24 h-24 object-cover rounded-lg">
+                </div>
+            @endif
+
+            <div>
+                <label for="image" class="block text-sm font-semibold text-gray-700">Product Image</label>
+                <input type="file" name="image" id="image" accept="image/*" class="mt-1 block w-full border-gray-200 rounded-lg shadow-sm focus:border-purple-400 focus:ring-purple-400">
+                <p class="mt-1 text-xs text-gray-400">Optional. JPG, PNG, or GIF up to 2MB. {{ $product->image_url ? 'Upload a new image to replace the current one.' : '' }}</p>
             </div>
 
             <button type="submit" class="w-full bg-[#7C3AED] text-white py-3 px-4 rounded-xl font-semibold shadow-md hover:bg-purple-700 transition">Update Product</button>

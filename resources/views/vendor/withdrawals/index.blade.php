@@ -307,6 +307,10 @@
                                                     showMessage('Top-up failed. Please try again or contact support.', 'error');
                                                 }
                                             });
+                                            if (data.reference) {
+                                                showMessage('Payment initiated. Waiting for confirmation...', 'success');
+                                                pollTopupStatus(data.reference);
+                                            }
                                             setLoading(false);
                                             inProgress = false;
                                             return;
@@ -319,11 +323,16 @@
                                         }
 
                                         if (data.success) {
-                                            showMessage('\u2714\uFE0F Wallet topped up successfully', 'success');
-                                            await refreshWalletSummary(true);
-                                            amountInput.value = '';
-                                            if (gatewayHidden) gatewayHidden.value = '';
-                                            gatewayButtons.forEach(b => b.classList.remove('ring','ring-2','ring-purple-400'));
+                                            if (data.reference) {
+                                                showMessage('Payment initiated. Waiting for confirmation...', 'success');
+                                                pollTopupStatus(data.reference);
+                                            } else {
+                                                showMessage('\u2714\uFE0F Wallet topped up successfully', 'success');
+                                                await refreshWalletSummary(true);
+                                                amountInput.value = '';
+                                                if (gatewayHidden) gatewayHidden.value = '';
+                                                gatewayButtons.forEach(b => b.classList.remove('ring','ring-2','ring-purple-400'));
+                                            }
                                             setLoading(false);
                                             inProgress = false;
                                             return;
@@ -341,7 +350,7 @@
 
                                 async function refreshWalletSummary(showSuccess) {
                                     try {
-                                        const res = await fetch('{{ url('/vendor/wallet/' . $vendor->id) }}');
+                                        const res = await fetch('{{ route('wallet.ledger') }}');
                                         const json = await res.json();
                                         if (json.success) {
                                             const wb = document.getElementById('wallet-balance');
@@ -405,6 +414,11 @@
 
                                                 if (j.status === 'failed') {
                                                     showMessage('Top-up failed. Please try again or contact support.', 'error');
+                                                    return;
+                                                }
+
+                                                if (j.status === 'cancelled') {
+                                                    showMessage('Top-up was cancelled. Please try again when ready.', 'error');
                                                     return;
                                                 }
                                             }
@@ -503,6 +517,9 @@
                                                     }
                                                     modalConfirm.disabled = false;
                                                 });
+                                                if (data.reference) {
+                                                    pollTopupStatus(data.reference);
+                                                }
                                                 return;
                                             }
 
@@ -513,9 +530,14 @@
                                             }
 
                                             if (data.success) {
-                                                feedbackEl.textContent = 'Wallet topped up successfully.';
-                                                await refreshWalletSummary(true);
-                                                closeTopupModal();
+                                                if (data.reference) {
+                                                    feedbackEl.textContent = 'Payment initiated. Waiting for confirmation...';
+                                                    pollTopupStatus(data.reference);
+                                                } else {
+                                                    feedbackEl.textContent = 'Wallet topped up successfully.';
+                                                    await refreshWalletSummary(true);
+                                                    closeTopupModal();
+                                                }
                                                 modalConfirm.disabled = false;
                                                 return;
                                             }
@@ -711,7 +733,7 @@
                 <div id="history" class="overflow-hidden rounded-lg border border-gray-200">
                     <x-table :headers="['Type', 'Reference', 'Date', 'Amount', 'Status']">
                         @forelse ($history as $item)
-                            <tr class="hover:bg-gray-50 transition-colors duration-150 history-row" data-type="{{ strtolower(str_replace(' ', '-', $item->type)) }}">
+                            <tr class="hover:bg-gray-50 transition-colors duration-150 history-row" data-type="{{ $item->history_type ?? (strtolower(str_replace(' ', '-', $item->type)) === 'top-up' || strtolower(str_replace(' ', '-', $item->type)) === 'wallet_topup' ? 'topups' : (strtolower(str_replace(' ', '-', $item->type)) === 'withdrawal' ? 'withdrawals' : 'other')) }}">
                                 <td class="px-6 py-4 text-sm font-medium text-gray-900">{{ $item->type }}</td>
                                 <td class="px-6 py-4 text-sm text-gray-500">{{ $item->reference ?? '-' }}</td>
                                 <td class="px-6 py-4 text-sm text-gray-500">{{ optional($item->date)->format('M d, Y • h:i A') }}</td>
@@ -736,8 +758,8 @@
                             rows.forEach(r => {
                                 if (val === 'all') { r.style.display = ''; return; }
                                 const type = r.getAttribute('data-type');
-                                if (val === 'topups' && type === 'top-up') r.style.display = '';
-                                else if (val === 'withdrawals' && type === 'withdrawal') r.style.display = '';
+                                if (val === 'topups' && type === 'topups') r.style.display = '';
+                                else if (val === 'withdrawals' && type === 'withdrawals') r.style.display = '';
                                 else r.style.display = 'none';
                             });
                         });

@@ -11,6 +11,7 @@ class Product extends Model
         'name',
         'description',
         'price',
+        'image_path',
         'is_active',
         'is_resellable',
         'min_base_price',
@@ -32,6 +33,11 @@ class Product extends Model
     public function resellerProducts()
     {
         return $this->hasMany(ResellerProduct::class);
+    }
+
+    public function getImageUrlAttribute(): ?string
+    {
+        return $this->image_path ? asset('storage/' . $this->image_path) : null;
     }
 
     public function getDecodedDescriptionAttribute(): array
