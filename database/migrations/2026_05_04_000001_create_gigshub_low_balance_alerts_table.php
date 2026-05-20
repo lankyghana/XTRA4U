@@ -15,7 +15,7 @@ return new class extends Migration
             $table->string('currency')->default('GHS');
             $table->text('message')->nullable();
             $table->timestamp('acknowledged_at')->nullable();
-            $table->foreignId('acknowledged_by')->nullable()->constrained('admins')->nullOnDelete();
+            $table->foreignId('acknowledged_by')->nullable()->constrained('admins')->onDelete('set null');
             $table->timestamps();
             $table->index('acknowledged_at');
             $table->index('created_at');
