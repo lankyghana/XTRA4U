@@ -8,7 +8,8 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('gigshub_low_balance_alerts', function (Blueprint $table) {
+        if (!Schema::hasTable('gigshub_low_balance_alerts')) {
+            Schema::create('gigshub_low_balance_alerts', function (Blueprint $table) {
             $table->id();
             $table->decimal('balance', 10, 2);
             $table->decimal('threshold', 10, 2);
@@ -19,7 +20,8 @@ return new class extends Migration
             $table->timestamps();
             $table->index('acknowledged_at');
             $table->index('created_at');
-        });
+            });
+        }
     }
 
     public function down(): void

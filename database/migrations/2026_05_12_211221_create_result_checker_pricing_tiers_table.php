@@ -11,7 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('result_checker_pricing_tiers', function (Blueprint $table) {
+        if (!Schema::hasTable('result_checker_pricing_tiers')) {
+            Schema::create('result_checker_pricing_tiers', function (Blueprint $table) {
             $table->id();
             $table->foreignId('network_service_id')->constrained('network_services')->onDelete('cascade');
             $table->integer('min_quantity')->default(1);
@@ -20,7 +21,8 @@ return new class extends Migration
             $table->timestamps();
 
             $table->unique(['network_service_id', 'min_quantity', 'max_quantity']);
-        });
+            });
+        }
     }
 
     /**
