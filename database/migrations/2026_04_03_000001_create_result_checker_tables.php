@@ -9,7 +9,8 @@ class CreateResultCheckerTables extends Migration
     public function up(): void
     {
         // 1. Create result_checker_orders table
-        Schema::create('result_checker_orders', function (Blueprint $table) {
+        if (!Schema::hasTable('result_checker_orders')) {
+            Schema::create('result_checker_orders', function (Blueprint $table) {
             $table->id();
             $table->foreignId('vendor_id')->constrained('vendors')->onDelete('cascade');
             $table->foreignId('service_id')->constrained('network_services')->onDelete('cascade');
@@ -31,10 +32,12 @@ class CreateResultCheckerTables extends Migration
             $table->index(['vendor_id', 'status']);
             $table->index(['service_id', 'status']);
             $table->index(['payment_reference']);
-        });
+            });
+        }
 
         // 2. Create result_checker_pins table
-        Schema::create('result_checker_pins', function (Blueprint $table) {
+        if (!Schema::hasTable('result_checker_pins')) {
+            Schema::create('result_checker_pins', function (Blueprint $table) {
             $table->id();
             $table->foreignId('service_id')->constrained('network_services')->onDelete('cascade');
             $table->string('pin', 50)->index();
@@ -47,10 +50,12 @@ class CreateResultCheckerTables extends Migration
             $table->unique(['service_id', 'pin', 'serial']);
             $table->index(['status', 'service_id']);
             $table->index(['result_checker_order_id']);
-        });
+            });
+        }
 
         // 3. Create vendor_result_checker_settings table
-        Schema::create('vendor_result_checker_settings', function (Blueprint $table) {
+        if (!Schema::hasTable('vendor_result_checker_settings')) {
+            Schema::create('vendor_result_checker_settings', function (Blueprint $table) {
             $table->id();
             $table->foreignId('vendor_id')->constrained('vendors')->onDelete('cascade');
             $table->foreignId('service_id')->constrained('network_services')->onDelete('cascade');
@@ -60,7 +65,8 @@ class CreateResultCheckerTables extends Migration
 
             $table->unique(['vendor_id', 'service_id']);
             $table->index(['vendor_id', 'is_active']);
-        });
+            });
+        }
 
         // 4. Add checker type support to network_services table
         Schema::table('network_services', function (Blueprint $table) {
