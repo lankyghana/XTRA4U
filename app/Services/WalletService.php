@@ -83,11 +83,13 @@ class WalletService
 
             // Load only top-ups that still have available amount (amount > consumed)
             // Limit to 50 rows to keep memory bounded
+            // Lock rows to prevent race conditions during concurrent debits
             $topups = \App\Models\WalletTopup::where('vendor_id', $vendorId)
                 ->where('status', 'completed')
                 ->whereColumn('amount', '>', 'consumed')
                 ->orderBy('created_at')
                 ->limit(50)
+                ->lockForUpdate()
                 ->get();
 
             $available = 0.0;

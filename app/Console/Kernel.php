@@ -25,7 +25,9 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        // $schedule->command('inspire')->hourly();
+        // Cleanup old wallet topups (consumed & abandoned initiated records)
+        // Runs hourly to keep tables bounded and reconciliation clean
+        $schedule->command('wallet:cleanup-topups --days=1')->hourly();
     }
 
     /**

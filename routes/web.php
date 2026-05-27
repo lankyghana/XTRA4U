@@ -295,9 +295,11 @@ Route::middleware(['vendor.approved'])
 
         // Vendor wallet top-up and ledger
         Route::post('wallet/topup', [\App\Http\Controllers\VendorWalletController::class, 'initiateTopup'])
+            ->middleware('throttle:20,1')
             ->name('wallet.topup');
         // Polling endpoint for client-side verification of inline top-ups
         Route::get('wallet/topup/status/{reference}', [\App\Http\Controllers\VendorWalletController::class, 'topupStatus'])
+            ->middleware('throttle:60,1')
             ->name('wallet.topup.status');
         // Wallet ledger endpoint (no vendor_id parameter - uses authenticated context only)
         Route::get('wallet/ledger', [\App\Http\Controllers\VendorWalletController::class, 'ledger'])
@@ -319,6 +321,7 @@ Route::post('/checkout', [CheckoutController::class, 'process'])->name('checkout
 Route::post('/checkout/verify', [CheckoutController::class, 'verify'])->name('checkout.verify');
 // Public wallet top-up callback (payment gateway will call/redirect here)
 Route::match(['GET','POST'], '/vendor/wallet/topup/callback/{reference}', [\App\Http\Controllers\VendorWalletController::class, 'topupCallback'])
+    ->middleware('throttle:10,1')
     ->name('vendor.wallet.topup.callback');
 // Backwards-compatibility: preserve existing external bookmarks and old links.
 // Requests to the old path `/vendor/withdrawals` are permanently redirected

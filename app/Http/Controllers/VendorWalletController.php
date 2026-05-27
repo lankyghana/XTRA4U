@@ -370,10 +370,15 @@ class VendorWalletController extends Controller
             ]);
         }
 
-        // Ask the payment service to verify. Let the gateway return its
-        // canonical structure; we'll normalize a few common keys.
+        // Cache gateway verification for 10 seconds to reduce API calls during polling.
+        // Multiple concurrent polls for the same reference will use cached result,
+        // dramatically reducing load on payment gateway during frontend polling loops.
         try {
-            $result = $this->paymentService->checkPaymentStatus($reference);
+            $result = Cache::remember(
+                "topup_status:{$reference}",
+                now()->addSeconds(10),
+                fn() => $this->paymentService->checkPaymentStatus($reference)
+            );
         } catch (\Throwable $e) {
             return response()->json(['success' => false, 'message' => 'Verification failed', 'error' => $e->getMessage()], 500);
         }

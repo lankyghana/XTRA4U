@@ -171,7 +171,6 @@
                                             <button type="button" class="topup-chip flex-1 sm:flex-none text-center text-sm px-3 py-2 rounded-md border border-gray-200 bg-white hover:bg-gray-50 min-w-0">+200</button>
                                         </div>
 
-                                        <input type="hidden" name="vendor_id" value="{{ $vendor->id }}" />
                                         <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                                             <div>
                                                 <label for="wallet-topup-phone" class="block text-sm font-medium text-gray-700">MoMo number</label>
