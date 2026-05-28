@@ -133,7 +133,7 @@ class MoolrePayoutService implements HandlesPayouts
                 'Accept' => 'application/json',
             ])->post($this->baseUrl() . '/open/transact/validate', $validatePayload);
 
-            $validateData = $validateResponse->json();
+            $validateData = $validateResponse->json() ?? [];
 
             if (!$validateResponse->successful() || (int) ($validateData['status'] ?? 0) !== 1) {
                 $apiKey = $this->apiKey();
@@ -183,7 +183,7 @@ class MoolrePayoutService implements HandlesPayouts
                 'Accept' => 'application/json',
             ])->post($this->baseUrl() . '/open/transact/transfer', $transferPayload);
 
-            $transferData = $transferResponse->json();
+            $transferData = $transferResponse->json() ?? [];
             $message = $this->responseMessage($transferData, 'Transfer failed.');
             $transactionId = data_get($transferData, 'data.transactionid');
 
