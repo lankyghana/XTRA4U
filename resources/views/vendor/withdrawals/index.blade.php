@@ -61,6 +61,167 @@
                     </div>
                 </div>
 
+                <!-- ===== DEPOSIT SUCCESS MODAL ===== -->
+                <div id="deposit-success-modal" class="fixed inset-0 z-[60] hidden items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Deposit successful">
+                    <!-- Backdrop -->
+                    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" id="deposit-success-backdrop"></div>
+
+                    <!-- Confetti canvas -->
+                    <canvas id="confetti-canvas" class="absolute inset-0 pointer-events-none z-10" style="width:100%;height:100%;"></canvas>
+
+                    <!-- Card -->
+                    <div id="deposit-success-card" class="relative z-20 bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8 text-center"
+                         style="transform:scale(0.85) translateY(24px);opacity:0;transition:transform 0.4s cubic-bezier(.34,1.56,.64,1),opacity 0.3s ease;">
+
+                        <!-- Animated checkmark ring -->
+                        <div class="mx-auto mb-5" style="width:80px;height:80px;position:relative;">
+                            <svg viewBox="0 0 80 80" class="absolute inset-0" style="width:80px;height:80px;">
+                                <circle cx="40" cy="40" r="36" fill="none" stroke="#e9d5ff" stroke-width="7"/>
+                                <circle id="success-ring" cx="40" cy="40" r="36" fill="none" stroke="#7c3aed" stroke-width="7"
+                                        stroke-linecap="round"
+                                        stroke-dasharray="226" stroke-dashoffset="226"
+                                        style="transform:rotate(-90deg);transform-origin:center;transition:stroke-dashoffset 0.7s cubic-bezier(.4,0,.2,1) 0.15s;"/>
+                            </svg>
+                            <!-- Checkmark icon -->
+                            <div id="success-check" class="absolute inset-0 flex items-center justify-center"
+                                 style="opacity:0;transform:scale(0.5);transition:opacity 0.3s ease 0.6s,transform 0.3s cubic-bezier(.34,1.56,.64,1) 0.6s;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width:36px;height:36px;">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                            </div>
+                        </div>
+
+                        <p class="text-sm font-semibold tracking-widest text-purple-500 uppercase mb-1">Deposit Successful</p>
+                        <h2 class="text-3xl font-extrabold text-gray-900 mb-1" id="success-amount-display">GHS 0.00</h2>
+                        <p class="text-sm text-gray-500 mb-5">has been added to your wallet</p>
+
+                        <div class="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl px-5 py-4 mb-6 border border-purple-100">
+                            <p class="text-xs text-purple-600 font-medium mb-1">New Top-Up Balance</p>
+                            <p class="text-xl font-bold text-purple-900" id="success-balance-display">GHS —</p>
+                        </div>
+
+                        <div class="flex flex-col gap-2">
+                            <button id="deposit-success-close" type="button"
+                                class="w-full rounded-xl bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white font-semibold py-3 transition-colors">
+                                Great, thanks! 🎉
+                            </button>
+                            <button type="button" onclick="window.location.href='?tab=topups'" 
+                                class="w-full rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-3 text-sm transition-colors">
+                                View balance details
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <style>
+                #deposit-success-modal.is-open { display: flex; }
+                #deposit-success-modal.is-open #deposit-success-card {
+                    transform: scale(1) translateY(0) !important;
+                    opacity: 1 !important;
+                }
+                </style>
+
+                <script>
+                (function(){
+                    /* ---- Confetti engine ---- */
+                    function launchConfetti() {
+                        const canvas = document.getElementById('confetti-canvas');
+                        if (!canvas) return;
+                        canvas.width = window.innerWidth;
+                        canvas.height = window.innerHeight;
+                        const ctx = canvas.getContext('2d');
+                        const colors = ['#7c3aed','#a78bfa','#f472b6','#34d399','#fbbf24','#60a5fa','#f87171'];
+                        const pieces = Array.from({length: 90}, () => ({
+                            x: Math.random() * canvas.width,
+                            y: Math.random() * canvas.height * 0.3 - canvas.height * 0.2,
+                            r: Math.random() * 7 + 3,
+                            d: Math.random() * 80 + 60,
+                            color: colors[Math.floor(Math.random() * colors.length)],
+                            tilt: Math.floor(Math.random() * 10) - 10,
+                            tiltAngleIncrement: (Math.random() * 0.07 + 0.05),
+                            tiltAngle: 0,
+                            vy: Math.random() * 3 + 2,
+                            vx: Math.random() * 4 - 2,
+                            opacity: 1,
+                        }));
+                        let frame;
+                        let startTime = null;
+                        const duration = 3200;
+                        function draw(ts) {
+                            if (!startTime) startTime = ts;
+                            const elapsed = ts - startTime;
+                            ctx.clearRect(0, 0, canvas.width, canvas.height);
+                            pieces.forEach(p => {
+                                p.tiltAngle += p.tiltAngleIncrement;
+                                p.y += p.vy;
+                                p.x += p.vx;
+                                p.tilt = Math.sin(p.tiltAngle) * 12;
+                                p.opacity = Math.max(0, 1 - (elapsed / duration));
+                                ctx.beginPath();
+                                ctx.lineWidth = p.r;
+                                ctx.strokeStyle = p.color;
+                                ctx.globalAlpha = p.opacity;
+                                ctx.moveTo(p.x + p.tilt + p.r / 3, p.y);
+                                ctx.lineTo(p.x + p.tilt, p.y + p.tilt + p.r / 5);
+                                ctx.stroke();
+                            });
+                            ctx.globalAlpha = 1;
+                            if (elapsed < duration) {
+                                frame = requestAnimationFrame(draw);
+                            } else {
+                                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                            }
+                        }
+                        if (frame) cancelAnimationFrame(frame);
+                        frame = requestAnimationFrame(draw);
+                    }
+
+                    /* ---- Show success modal ---- */
+                    window.showDepositSuccessModal = function(amount, newBalance) {
+                        const modal = document.getElementById('deposit-success-modal');
+                        const amountEl = document.getElementById('success-amount-display');
+                        const balanceEl = document.getElementById('success-balance-display');
+                        const ring = document.getElementById('success-ring');
+                        const check = document.getElementById('success-check');
+                        if (!modal) return;
+
+                        // Fill in values
+                        amountEl.textContent = 'GHS ' + parseFloat(amount || 0).toFixed(2);
+                        balanceEl.textContent = newBalance != null ? 'GHS ' + parseFloat(newBalance).toFixed(2) : 'GHS —';
+
+                        // Reset animations
+                        ring.style.strokeDashoffset = '226';
+                        check.style.opacity = '0';
+                        check.style.transform = 'scale(0.5)';
+
+                        // Show modal
+                        modal.classList.add('is-open');
+
+                        // Trigger ring animation
+                        requestAnimationFrame(() => {
+                            requestAnimationFrame(() => {
+                                ring.style.strokeDashoffset = '0';
+                                setTimeout(() => {
+                                    check.style.opacity = '1';
+                                    check.style.transform = 'scale(1)';
+                                }, 620);
+                            });
+                        });
+
+                        launchConfetti();
+                    };
+
+                    /* ---- Close handler ---- */
+                    function closeDepositSuccess() {
+                        const modal = document.getElementById('deposit-success-modal');
+                        if (!modal) return;
+                        modal.classList.remove('is-open');
+                    }
+                    document.getElementById('deposit-success-close')?.addEventListener('click', closeDepositSuccess);
+                    document.getElementById('deposit-success-backdrop')?.addEventListener('click', closeDepositSuccess);
+                })();
+                </script>
+
                         <div class="mt-4 md:mt-0 flex items-center gap-3">
                     <div class="flex items-center gap-2">
                         <a id="quick-topups" href="?tab=topups" class="px-4 py-2 rounded-full text-sm font-medium {{ $activeTab === 'topups' ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 border border-gray-200 shadow-sm hover:shadow-md' }}">Top Ups</a>
@@ -294,21 +455,22 @@
                                             InlinePaymentManager.open({
                                                 reference: data.reference,
                                                 authorization_url: data.authorization_url ?? null,
-                                                gateway_name: data.gateway_name ?? null
+                                                gateway_name: data.gateway_name ?? null,
+                                                flow_type: data.payment_type === 'wallet_topup' ? 'wallet_topup' : 'checkout'
                                             }, async (status) => {
                                                 if (status === 'paid') {
-                                                    showMessage('\u2714\uFE0F Wallet topped up successfully', 'success');
-                                                    await refreshWalletSummary(true);
+                                                    const summary = await refreshWalletSummary(false);
                                                     amountInput.value = '';
                                                     if (gatewayHidden) gatewayHidden.value = '';
                                                     gatewayButtons.forEach(b => b.classList.remove('ring','ring-2','ring-purple-400'));
+                                                    showDepositSuccessModal(amount, summary?.topupBalance);
                                                 } else if (status === 'failed') {
                                                     showMessage('Top-up failed. Please try again or contact support.', 'error');
                                                 }
                                             });
                                             if (data.reference) {
                                                 showMessage('Payment initiated. Waiting for confirmation...', 'success');
-                                                pollTopupStatus(data.reference);
+                                                pollTopupStatus(data.reference, amount);
                                             }
                                             setLoading(false);
                                             inProgress = false;
@@ -324,13 +486,13 @@
                                         if (data.success) {
                                             if (data.reference) {
                                                 showMessage('Payment initiated. Waiting for confirmation...', 'success');
-                                                pollTopupStatus(data.reference);
+                                                pollTopupStatus(data.reference, amount);
                                             } else {
-                                                showMessage('\u2714\uFE0F Wallet topped up successfully', 'success');
-                                                await refreshWalletSummary(true);
+                                                const summary = await refreshWalletSummary(false);
                                                 amountInput.value = '';
                                                 if (gatewayHidden) gatewayHidden.value = '';
                                                 gatewayButtons.forEach(b => b.classList.remove('ring','ring-2','ring-purple-400'));
+                                                showDepositSuccessModal(amount, summary?.topupBalance);
                                             }
                                             setLoading(false);
                                             inProgress = false;
@@ -349,39 +511,23 @@
 
                                 async function refreshWalletSummary(showSuccess) {
                                     try {
-                                        const res = await fetch('{{ route('wallet.ledger') }}');
+                                        const res = await fetch('{{ route('vendor.wallet.balance') }}');
                                         const json = await res.json();
                                         if (json.success) {
                                             const wb = document.getElementById('wallet-balance');
-                                            if (wb) wb.textContent = 'GHS ' + (json.balance || 0).toFixed(2);
-                                            const lu = document.getElementById('wallet-last-updated');
-                                            if (lu) lu.textContent = 'Last updated: ' + (json.last_updated || 'just now');
-                                            if (typeof json.withdrawable_balance !== 'undefined') {
-                                                const el = document.getElementById('withdrawable-balance');
-                                                if (el) el.textContent = 'GHS ' + (json.withdrawable_balance || 0).toFixed(2);
-                                            }
+                                            if (wb) wb.textContent = 'GHS ' + (json.wallet_balance || 0).toFixed(2);
                                             if (typeof json.vendor_topups_total !== 'undefined') {
-                                                const el2 = document.getElementById('vendor-topups-total');
+                                                const el2 = document.getElementById('topups-balance');
                                                 if (el2) el2.textContent = 'GHS ' + (json.vendor_topups_total || 0).toFixed(2);
                                             }
-                                            if (typeof json.approved_total !== 'undefined') {
-                                                const ap = document.getElementById('approved-total');
-                                                if (ap) ap.textContent = 'GHS ' + (json.approved_total || 0).toFixed(2);
-                                            }
-                                            if (showSuccess) {
-                                                const successEl = document.getElementById('wallet-success');
-                                                successEl.textContent = '\u2714\uFE0F Wallet topped up successfully. Your new balance is GHS ' + (json.balance || 0).toFixed(2);
-                                                successEl.classList.remove('hidden');
-                                                successEl.focus?.();
-                                                successEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                                setTimeout(() => { successEl.classList.add('hidden'); }, 4000);
-                                            }
+                                            return { topupBalance: json.vendor_topups_total };
                                         }
                                     } catch (e) {}
+                                    return null;
                                 }
 
                                 // Poll a top-up reference until the gateway/callback marks it completed or failed.
-                                async function pollTopupStatus(reference) {
+                                async function pollTopupStatus(reference, amount) {
                                     const pollInterval = 2500; // ms
                                     const timeoutMs = 120000; // 2 minutes
                                     const started = Date.now();
@@ -403,11 +549,11 @@
                                                 }
 
                                                 if (j.status === 'completed') {
-                                                    showMessage('\u2714\uFE0F Wallet topped up successfully', 'success');
-                                                    await refreshWalletSummary(true);
+                                                    const summary = await refreshWalletSummary(false);
                                                     amountInput.value = '';
                                                     if (gatewayHidden) gatewayHidden.value = '';
                                                     gatewayButtons.forEach(b => b.classList.remove('ring','ring-2','ring-purple-400'));
+                                                    showDepositSuccessModal(amount, summary?.topupBalance);
                                                     return;
                                                 }
 

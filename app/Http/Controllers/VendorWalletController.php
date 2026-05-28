@@ -84,15 +84,35 @@ class VendorWalletController extends Controller
         $result = $this->paymentService->initiateGenericPayment($vendor->email ?? 'noreply@xtra4u.com', (float) $validated['amount'], $callbackUrl, $reference, $metadata);
 
         if (! $result['success']) {
+            // Clean up the DB record and cache if gateway rejected the initiation
+            WalletTopup::where('reference', $reference)->delete();
+            Cache::forget("wallet_topup:{$reference}");
             return response()->json(['success' => false, 'message' => $result['message'] ?? 'Failed to initiate top-up'], 400);
+        }
+
+        // The gateway may return a different reference (e.g. BulkClix generates its own transaction ID
+        // like XTRA4U-BCX-xxx from our UUID). If so, update the DB record and cache to use the gateway's
+        // reference so that status polling and callbacks resolve correctly.
+        $gatewayReference = $result['reference'] ?? null;
+        if ($gatewayReference && $gatewayReference !== $reference) {
+            // Migrate the WalletTopup record to the gateway reference
+            WalletTopup::where('reference', $reference)->update(['reference' => $gatewayReference]);
+            // Migrate the cache mapping
+            $cached = Cache::get("wallet_topup:{$reference}");
+            Cache::forget("wallet_topup:{$reference}");
+            if (is_array($cached)) {
+                Cache::put("wallet_topup:{$gatewayReference}", $cached, now()->addHours(6));
+            }
+            $reference = $gatewayReference;
         }
 
         return response()->json([
             'success' => true,
-            'reference' => $result['reference'] ?? $reference,
+            'reference' => $reference,
             'authorization_url' => $result['authorization_url'] ?? null,
-            'flow_type' => $result['flow_type'] ?? null,
+            'flow_type' => $result['flow_type'] ?? 'inline',
             'gateway_name' => $result['gateway_name'] ?? null,
+            'payment_type' => 'wallet_topup',
         ]);
     }
 

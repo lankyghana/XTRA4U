@@ -81,7 +81,7 @@
 
     const InlinePaymentManager = {
         open(opts = {}, onComplete) {
-            const { reference, authorization_url = null, gateway_name = null } = opts || {};
+            const { reference, authorization_url = null, gateway_name = null, flow_type = 'checkout', callback_url = null } = opts || {};
             if (!reference) {
                 console.warn('InlinePaymentManager.open called without reference');
                 return;
@@ -104,8 +104,24 @@
                     InlinePaymentManager.close();
                     restoreSubmits();
                     if (typeof onComplete === 'function') onComplete('paid');
-                    // Redirect to canonical success page (server is authoritative)
-                    window.location.href = '/checkout/success';
+
+                    // For wallet top-ups, invoke callback to credit wallet before redirecting
+                    if (flow_type === 'wallet_topup') {
+                        const cbUrl = callback_url || `/vendor/wallet/topup/callback/${encodeURIComponent(reference)}`;
+                        fetch(cbUrl, { headers: { 'Accept': 'application/json' } })
+                            .then(() => {
+                                // Callback processed, redirect to wallet dashboard
+                                window.location.href = '/vendor/wallet?tab=topups';
+                            })
+                            .catch(err => {
+                                console.error('Wallet callback error:', err);
+                                // Even on error, redirect to wallet to show balance
+                                window.location.href = '/vendor/wallet?tab=topups';
+                            });
+                    } else {
+                        // For checkout flow, redirect to checkout success
+                        window.location.href = '/checkout/success';
+                    }
                 } else if (status === 'failed') {
                     stopPolling();
                     InlinePaymentManager.close();
