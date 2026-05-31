@@ -165,13 +165,11 @@
                                                     View
                                                 </a>
                                                 @php
-                                                    // Fulfillment ownership:
-                                                    // reseller orders are managed by reseller; direct orders by provider.
-                                                    $canManage = $reg->is_reseller_order
-                                                        ? ((int) $reg->reseller_vendor_id === (int) $vendor->id)
-                                                        : ((int) $reg->vendor_id === (int) $vendor->id);
+                                                    // Only the main provider (vendor_id) may change status.
+                                                    // Resellers always have view-only access, even for reseller orders.
+                                                    $canManage = ((int) $reg->vendor_id === (int) $vendor->id);
                                                 @endphp
-                                                @if(!in_array($reg->status, ['completed', 'cancelled']))
+                                                @if(!in_array($reg->status, ['completed', 'cancelled', 'rejected']))
                                                     @if($canManage)
                                                         <form method="POST" action="{{ route('vendor.afa.update-status', $reg) }}" class="inline-block">
                                                             @csrf
@@ -192,7 +190,7 @@
                                                             </select>
                                                         </form>
                                                     @else
-                                                        <span class="text-xs text-gray-400" title="Only the provider can manage this registration">
+                                                        <span class="text-xs text-gray-400" title="{{ $reg->is_reseller_order ? 'Status is managed by the main provider' : 'View only' }}">
                                                             <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
                                                             </svg>

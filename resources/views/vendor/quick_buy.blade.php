@@ -32,6 +32,8 @@
                         'tag' => is_string($tag) ? trim($tag) : null,
                         'category' => is_string($categoryLabel) ? trim($categoryLabel) : 'Wallet Favorites',
                         'logo' => $logo,
+                        'is_afa' => $product->is_afa ?? false,
+                        'afa_url' => $product->afa_url ?? null,
                     ];
                 })->values(),
             ];
@@ -393,7 +395,7 @@ document.addEventListener('alpine:init', () => {
             products.forEach(p => {
                 const key = (p.network && String(p.network).trim()) ? String(p.network).trim() : 'Other';
                 if (!byService[key]) {
-                    byService[key] = { value: key, label: key, count: 0, logo: p.logo || null };
+                    byService[key] = { value: key, label: key, count: 0, logo: p.logo || null, is_afa: p.is_afa, afa_url: p.afa_url };
                 }
                 byService[key].count += 1;
                 if (!byService[key].logo && p.logo) {
@@ -405,6 +407,12 @@ document.addEventListener('alpine:init', () => {
         },
 
         selectService(value) {
+            const services = this.servicesForSelectedCategory();
+            const svc = services.find(s => String(s.value) === String(value));
+            if (svc && svc.is_afa && svc.afa_url) {
+                window.location.href = svc.afa_url;
+                return;
+            }
             this.serviceFilter = value;
             this.productId = null;
             this.packageLocked = false;
@@ -428,6 +436,11 @@ document.addEventListener('alpine:init', () => {
         },
 
         selectProduct(id) {
+            const prod = (this.products || []).find(pr => String(pr.id) === String(id));
+            if (prod && prod.is_afa && prod.afa_url) {
+                window.location.href = prod.afa_url;
+                return;
+            }
             this.productId = id;
             this.packageLocked = true;
         },

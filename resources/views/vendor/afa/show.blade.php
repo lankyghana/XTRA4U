@@ -61,7 +61,7 @@
                                 @endif
                             </div>
                         </div>
-                        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-white/20 text-white backdrop-blur-sm">
+                        <span id="afa-header-status-badge" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-white/20 text-white backdrop-blur-sm">
                             {{ $registration->status_label }}
                         </span>
                     </div>
@@ -144,19 +144,20 @@
                         <h3 class="text-lg font-semibold text-gray-900 mb-4">Status & Actions</h3>
                         
                         <div class="mb-6">
-                            <span class="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium {{ $registration->status_color['bg'] }} {{ $registration->status_color['text'] }}">
+                            <span id="afa-sidebar-status-badge" class="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium {{ $registration->status_color['bg'] }} {{ $registration->status_color['text'] }}">
                                 {{ $registration->status_label }}
                             </span>
                         </div>
 
                         @php
-                            // Check if current vendor can manage this registration
-                            $canManage = (
-                                ((int) $registration->vendor_id === (int) $vendor->id)
-                            );
+                            // Only the main provider (vendor_id) may ever update AFA status.
+                            // Resellers have view-only access regardless of order type.
+                            $canManage = ((int) $registration->vendor_id === (int) $vendor->id);
+                            $isResellerViewer = $registration->is_reseller_order
+                                && ((int) $registration->reseller_vendor_id === (int) $vendor->id);
                         @endphp
 
-                        @if(!in_array($registration->status, ['completed', 'cancelled']))
+                        @if(!in_array($registration->status, ['completed', 'cancelled', 'rejected']))
                             @if($canManage)
                                 <form method="POST" action="{{ route('vendor.afa.update-status', $registration) }}" class="space-y-3">
                                     @csrf
@@ -179,6 +180,128 @@
                                         Update Status
                                     </button>
                                 </form>
+                            @elseif($isResellerViewer)
+                                {{-- Reseller view: live-polling read-only status panel --}}
+                                <div class="rounded-lg border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-4" id="reseller-status-panel">
+                                    <div class="flex items-start gap-3">
+                                        <div class="flex-shrink-0 mt-0.5">
+                                            <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                            </svg>
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <p class="text-sm font-semibold text-blue-900">Live Order Status</p>
+                                            <p class="text-xs text-blue-600 mt-0.5">Status is managed by the main provider. This panel updates automatically.</p>
+                                            <div class="mt-3 flex items-center gap-2">
+                                                <span id="live-status-badge"
+                                                      class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold {{ $registration->status_color['bg'] }} {{ $registration->status_color['text'] }}">
+                                                    {{ $registration->status_label }}
+                                                </span>
+                                                <span id="live-status-pulse" class="inline-flex h-2 w-2 rounded-full bg-blue-400 animate-pulse" title="Auto-refreshing"></span>
+                                                <span id="live-status-timestamp" class="text-xs text-blue-400">Just loaded</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <script>
+                                (function () {
+                                    var statusUrl    = '{{ route('vendor.afa.get-status', $registration) }}';
+                                    var liveBadge    = document.getElementById('live-status-badge');
+                                    var headerBadge  = document.getElementById('afa-header-status-badge');
+                                    var sidebarBadge = document.getElementById('afa-sidebar-status-badge');
+                                    var panel        = document.getElementById('reseller-status-panel');
+                                    var ts           = document.getElementById('live-status-timestamp');
+                                    var pulse        = document.getElementById('live-status-pulse');
+                                    var lastStatus   = '{{ $registration->status }}';
+
+                                    // Colour maps for the coloured sidebar badge
+                                    var colorMap = {
+                                        'pending':    { bg: 'bg-yellow-100', text: 'text-yellow-800' },
+                                        'processing': { bg: 'bg-blue-100',   text: 'text-blue-800'   },
+                                        'approved':   { bg: 'bg-green-100',  text: 'text-green-800'  },
+                                        'completed':  { bg: 'bg-green-100',  text: 'text-green-800'  },
+                                        'rejected':   { bg: 'bg-red-100',    text: 'text-red-800'    },
+                                        'cancelled':  { bg: 'bg-gray-100',   text: 'text-gray-800'   },
+                                    };
+
+                                    function applyAllBadges(status, label) {
+                                        var colors = colorMap[status] || { bg: 'bg-gray-100', text: 'text-gray-800' };
+
+                                        // Live panel badge
+                                        liveBadge.className = 'inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ' + colors.bg + ' ' + colors.text;
+                                        liveBadge.textContent = label;
+
+                                        // Header badge (white-tinted, always visible in card header)
+                                        if (headerBadge) {
+                                            headerBadge.textContent = label;
+                                        }
+
+                                        // Sidebar static badge above the panel
+                                        if (sidebarBadge) {
+                                            sidebarBadge.className = 'inline-flex items-center px-4 py-2 rounded-full text-sm font-medium ' + colors.bg + ' ' + colors.text;
+                                            sidebarBadge.textContent = label;
+                                        }
+                                    }
+
+                                    function onTerminal(status, label) {
+                                        clearInterval(timer);
+                                        pulse.classList.add('hidden');
+
+                                        if (status === 'rejected') {
+                                            // Replace the live panel with a clear rejection notice
+                                            panel.innerHTML =
+                                                '<div class="flex items-start gap-3">' +
+                                                    '<div class="flex-shrink-0 mt-0.5">' +
+                                                        '<svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
+                                                            '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>' +
+                                                        '</svg>' +
+                                                    '</div>' +
+                                                    '<div>' +
+                                                        '<p class="text-sm font-semibold text-red-900">Registration Rejected</p>' +
+                                                        '<p class="text-xs text-red-600 mt-0.5">This order has been rejected by the main provider.</p>' +
+                                                    '</div>' +
+                                                '</div>';
+                                            panel.className = 'rounded-lg border border-red-200 bg-gradient-to-br from-red-50 to-pink-50 p-4';
+                                        } else {
+                                            ts.textContent = 'Final status: ' + label;
+                                        }
+                                    }
+
+                                    function poll() {
+                                        fetch(statusUrl, { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } })
+                                            .then(function (r) { return r.json(); })
+                                            .then(function (data) {
+                                                if (data && data.status) {
+                                                    applyAllBadges(data.status, data.status_label);
+
+                                                    if (data.status !== lastStatus) {
+                                                        lastStatus = data.status;
+                                                        // Flash pulse green on change
+                                                        pulse.classList.remove('bg-blue-400');
+                                                        pulse.classList.add('bg-green-400');
+                                                        setTimeout(function () {
+                                                            pulse.classList.remove('bg-green-400');
+                                                            pulse.classList.add('bg-blue-400');
+                                                        }, 3000);
+                                                    }
+
+                                                    var now = new Date();
+                                                    if (ts) ts.textContent = 'Updated ' + now.toLocaleTimeString();
+
+                                                    // Stop polling and render terminal UI on final states
+                                                    if (data.status === 'completed' || data.status === 'cancelled' || data.status === 'rejected') {
+                                                        onTerminal(data.status, data.status_label);
+                                                    }
+                                                }
+                                            })
+                                            .catch(function () { /* silent — retry on next tick */ });
+                                    }
+
+                                    // Poll every 15 seconds
+                                    var timer = setInterval(poll, 15000);
+                                })();
+                                </script>
                             @else
                                 <div class="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-lg p-4">
                                     <div class="flex items-start">
@@ -187,7 +310,7 @@
                                         </svg>
                                         <div>
                                             <p class="text-sm font-medium text-amber-900">Status Management Restricted</p>
-                                            <p class="text-xs text-amber-700 mt-1">Only the provider can manage this registration's fulfillment status.</p>
+                                            <p class="text-xs text-amber-700 mt-1">Only the main provider can manage this registration's fulfillment status.</p>
                                         </div>
                                     </div>
                                 </div>

@@ -114,11 +114,45 @@ class VendorQuickBuyController extends Controller
             ->sortBy('created_at')
             ->values();
 
+        // Inject AFA Registration if enabled
+        $afaEnabled = $vendor->afa_enabled && $vendor->afa_price > 0;
+        $resellerAfaEnabled = $vendor->afa_reseller_enabled && $vendor->afa_selling_price > 0 && $vendor->afa_source_vendor_id;
+
+        if ($afaEnabled || $resellerAfaEnabled) {
+            $afaPrice = $afaEnabled ? $vendor->afa_price : $vendor->afa_selling_price;
+            
+            $afaProduct = (object) [
+                'id' => 'afa_registration',
+                'name' => 'AFA Registration',
+                'description' => 'Complete AFA Registration with ID verification',
+                'display_description' => 'Complete AFA Registration with ID verification',
+                'base_price' => (float) $afaPrice,
+                'selling_price' => (float) $afaPrice,
+                'price' => (float) $afaPrice,
+                'category' => 'afa',
+                'network' => 'AFA',
+                'package_size' => null,
+                'validity' => null,
+                'tag' => ($resellerAfaEnabled && !$afaEnabled) ? 'Reseller' : 'Official',
+                'network_logo' => '/images/afa-logo.png',
+                'created_at' => now(),
+                'is_reseller' => false,
+                'is_afa' => true,
+                'afa_url' => route('afa.register', $vendor->vendor_code),
+            ];
+            
+            $products->push($afaProduct);
+        }
+
         // Attach network logos based on network service table
         $products = $products->map(function ($p) use ($networkServices) {
             $networkKey = strtolower($p->network ?? '');
             $logo = $networkKey && isset($networkServices[$networkKey]) ? $networkServices[$networkKey]->image_url : null;
-            $p->network_logo = $logo;
+            if ($logo) {
+                $p->network_logo = $logo;
+            } elseif (!isset($p->network_logo)) {
+                $p->network_logo = null;
+            }
             return $p;
         });
 

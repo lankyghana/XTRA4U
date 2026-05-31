@@ -100,17 +100,13 @@ class VendorAfaController extends Controller
     {
         $vendor = $this->vendor();
 
-        $isResellerOrder = (bool) $registration->is_reseller_order;
-
-        // Fulfillment ownership rule:
-        // - If this is a reseller order, only the reseller may manage it
-        // - Otherwise (direct order), only the provider may manage it
-        $canManage = $isResellerOrder
-            ? ((int) $registration->reseller_vendor_id === (int) $vendor->id)
-            : ((int) $registration->vendor_id === (int) $vendor->id);
+        // Authorization rule: ONLY the main provider (vendor_id) may update status,
+        // regardless of whether this is a reseller order or a direct order.
+        // Resellers have view-only access and must never modify fulfillment status.
+        $canManage = ((int) $registration->vendor_id === (int) $vendor->id);
 
         if (!$canManage) {
-            $errorMessage = 'You are not authorized to manage this registration.';
+            $errorMessage = 'You are not authorized to manage this registration. Only the main provider can update AFA order statuses.';
             return back()->with('error', $errorMessage);
         }
 
