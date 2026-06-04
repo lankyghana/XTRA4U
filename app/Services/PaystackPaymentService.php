@@ -51,65 +51,120 @@ class PaystackPaymentService implements CollectsPayments, HandlesGenericPayments
     }
 
     /**
-     * Initiate payment (customer pays)
+     * Normalize an amount returned by Paystack (in kobo/pesewas) to GHS.
+     * Paystack always returns amounts in the smallest currency unit (×100).
+     * Call this wherever you read `data.amount` from a Paystack API response.
+     *
+     * Usage:
+     *   $order->amount_paid = PaystackPaymentService::normalizeAmount($rawAmount);
      */
-    public function requestPayment(Order $order, string $email, float $amount): array
+    public static function normalizeAmount(float $koboAmount): float
     {
-        $reference = 'XTRA4U-' . uniqid() . '-' . $order->id;
-        $payload = [
-            'email' => $email,
-            'amount' => intval($amount * 100), // Paystack expects amount in kobo/pesewas
-            'reference' => $reference,
-            'callback_url' => route('payment.callback'),
-        ];
+        return $koboAmount / 100;
+    }
+
+    /**
+     * Generate a unique, consistently-formatted Paystack transaction reference.
+     *
+     * Format: XTRA4U-{UPPERCASE_HEX_UNIQID}-{suffix}
+     *   - With an Order:   suffix = order ID   (e.g. XTRA4U-5F3E2A1B4C-42)
+     *   - Without an Order: suffix = unix timestamp (e.g. XTRA4U-5F3E2A1B4C-1717459260)
+     *
+     * Using strtoupper(uniqid()) everywhere means references look identical in
+     * Paystack dashboard and Laravel logs regardless of which flow created them.
+     */
+    private function generateReference(?int $orderId = null): string
+    {
+        $suffix = $orderId !== null ? (string) $orderId : (string) time();
+        return 'XTRA4U-' . strtoupper(uniqid()) . '-' . $suffix;
+    }
+
+    /**
+     * Shared internal helper: POST to /transaction/initialize and return a
+     * normalised result array. Handles the HTTP call, JSON decoding, warning/
+     * error logging, and exception catching in one place.
+     *
+     * Both requestPayment() (Order-bound) and initiatePayment() (generic) call
+     * this method; each handles its own pre/post logic around the shared call.
+     *
+     * @param  array  $payload  Already-built Paystack payload (email, amount, reference, …)
+     * @return array  ['success' => bool, 'message' => string, 'reference' => string,
+     *                 'authorization_url' => string|null, …]
+     */
+    private function callPaystackInitialize(array $payload): array
+    {
         try {
             $response = $this->getHttpClient()
                 ->post($this->paymentUrl . '/transaction/initialize', $payload);
             $data = $response->json();
 
             if ($response->successful() && ($data['status'] ?? false)) {
-                // Persist reference for later verification
-                $order->update([
-                    'payment_reference' => $reference,
-                    'payment_status' => 'pending',
-                    'payment_gateway' => 'paystack',
-                ]);
-
                 return [
-                    'success' => true,
-                    'message' => $data['message'] ?? 'Payment initialized.',
-                    'reference' => $reference,
+                    'success'           => true,
+                    'message'           => $data['message'] ?? 'Payment initialized.',
+                    'reference'         => $payload['reference'],
                     'authorization_url' => $data['data']['authorization_url'] ?? null,
                 ];
             }
 
-            Log::warning('Paystack init failed', [
-                'order_id' => $order->id,
-                'payload' => $payload,
-                'body' => $response->body(),
-                'json' => $data,
+            Log::warning('Paystack transaction/initialize failed', [
+                'payload'     => $payload,
+                'body'        => $response->body(),
+                'json'        => $data,
                 'http_status' => $response->status(),
             ]);
 
             return [
-                'success' => false,
-                'message' => $data['message'] ?? 'Failed to initialize payment.',
-                'reference' => $reference,
+                'success'     => false,
+                'message'     => $data['message'] ?? 'Failed to initialize payment.',
+                'reference'   => $payload['reference'],
                 'http_status' => $response->status(),
-                'errors' => $data['data'] ?? null,
+                'errors'      => $data['data'] ?? null,
             ];
         } catch (\Exception $e) {
-            Log::error('Paystack Payment Exception', [
-                'order_id' => $order->id,
+            Log::error('Paystack transaction/initialize exception', [
                 'payload' => $payload,
-                'error' => $e->getMessage(),
+                'error'   => $e->getMessage(),
             ]);
+
             return [
-                'success' => false,
-                'message' => 'Error initializing payment.',
-                'reference' => $reference,
+                'success'   => false,
+                'message'   => 'Error initializing payment: ' . $e->getMessage(),
+                'reference' => $payload['reference'],
             ];
         }
+    }
+
+    /**
+     * Initiate payment for an Order (customer checkout).
+     * Persists the reference + payment_status on the Order before returning.
+     */
+    public function requestPayment(Order $order, string $email, float $amount): array
+    {
+        $reference = $this->generateReference($order->id);
+
+        $payload = [
+            'email'        => $email,
+            'amount'       => intval($amount * 100), // Paystack expects amount in kobo/pesewas
+            'reference'    => $reference,
+            'callback_url' => route('payment.callback'),
+        ];
+
+        $result = $this->callPaystackInitialize($payload);
+
+        if ($result['success']) {
+            // Persist reference for later verification
+            $order->update([
+                'payment_reference' => $reference,
+                'payment_status'    => 'pending',
+                'payment_gateway'   => 'paystack',
+            ]);
+        } else {
+            // Log order context on failure (callPaystackInitialize logs payload-level detail)
+            Log::warning('Paystack requestPayment failed', ['order_id' => $order->id]);
+        }
+
+        return $result;
     }
 
     /**
@@ -142,59 +197,22 @@ class PaystackPaymentService implements CollectsPayments, HandlesGenericPayments
     }
 
     /**
-     * Initiate generic payment (for AFA, etc.)
+     * Initiate a generic payment (for AFA registrations, wallet top-ups, etc.)
+     * No Order model is involved; caller supplies the callback URL and optional metadata.
      */
     public function initiatePayment(string $email, float $amount, string $callbackUrl, ?string $reference = null, array $metadata = []): array
     {
-        $reference = $reference ?? 'XTRA4U-' . strtoupper(uniqid()) . '-' . time();
-        
+        $reference = $reference ?? $this->generateReference();
+
         $payload = [
-            'email' => $email,
-            'amount' => intval($amount * 100), // Paystack expects amount in kobo/pesewas
-            'reference' => $reference,
+            'email'        => $email,
+            'amount'       => intval($amount * 100), // Paystack expects amount in kobo/pesewas
+            'reference'    => $reference,
             'callback_url' => $callbackUrl,
-            'metadata' => $metadata,
+            'metadata'     => $metadata,
         ];
-        
-        try {
-            $response = $this->getHttpClient()
-                ->post($this->paymentUrl . '/transaction/initialize', $payload);
-            $data = $response->json();
 
-            if ($response->successful() && ($data['status'] ?? false)) {
-                return [
-                    'success' => true,
-                    'message' => $data['message'] ?? 'Payment initialized.',
-                    'reference' => $reference,
-                    'authorization_url' => $data['data']['authorization_url'] ?? null,
-                ];
-            }
-
-            Log::warning('Paystack generic payment init failed', [
-                'payload' => $payload,
-                'body' => $response->body(),
-                'json' => $data,
-                'http_status' => $response->status(),
-            ]);
-
-            return [
-                'success' => false,
-                'message' => $data['message'] ?? 'Failed to initialize payment.',
-                'reference' => $reference,
-                'http_status' => $response->status(),
-                'errors' => $data['data'] ?? null,
-            ];
-        } catch (\Exception $e) {
-            Log::error('Paystack Generic Payment Exception', [
-                'payload' => $payload,
-                'error' => $e->getMessage(),
-            ]);
-            return [
-                'success' => false,
-                'message' => 'Error initializing payment: ' . $e->getMessage(),
-                'reference' => $reference,
-            ];
-        }
+        return $this->callPaystackInitialize($payload);
     }
 
     /**

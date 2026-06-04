@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Order;
 use App\Services\PaymentService;
+use App\Services\PaystackPaymentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -58,14 +59,13 @@ class PaymentCallbackController extends Controller
 		}
 
 		// Update order amount if gateway returned it.
+		// Paystack returns amounts in kobo/pesewas (×100); normalizeAmount() handles the conversion.
 		$amount = data_get($verification, 'data.amount');
 		if ($amount) {
 			$numericAmount = (float) $amount;
-			if (($order->payment_gateway ?? null) === 'paystack') {
-				$order->amount_paid = $numericAmount / 100;
-			} else {
-				$order->amount_paid = $numericAmount;
-			}
+			$order->amount_paid = ($order->payment_gateway ?? null) === 'paystack'
+				? PaystackPaymentService::normalizeAmount($numericAmount)
+				: $numericAmount;
 		}
 
 		// Complete order flows (wallet, notifications, transactions)
