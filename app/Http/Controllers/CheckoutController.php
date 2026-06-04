@@ -8,6 +8,7 @@ use App\Models\ResellerProduct;
 use App\Models\NetworkService;
 use App\Models\PaymentGatewayConfig;
 use App\Services\PaymentService;
+use App\Services\PaystackPaymentService;
 use Illuminate\Support\Facades\Auth;
 use App\Services\GatewayManager;
 use Illuminate\Http\Request;
@@ -15,11 +16,13 @@ use Barryvdh\DomPDF\Facade\Pdf;
 
 class CheckoutController extends Controller
 {
-	protected $paymentService;
+	protected PaymentService $paymentService;
+	protected GatewayManager $gatewayManager;
 
-	public function __construct()
+	public function __construct(PaymentService $paymentService, GatewayManager $gatewayManager)
 	{
-		$this->paymentService = new PaymentService();
+		$this->paymentService = $paymentService;
+		$this->gatewayManager = $gatewayManager;
 	}
 
 	public function show()
@@ -158,7 +161,7 @@ class CheckoutController extends Controller
 
 	public function process(Request $request)
 	{
-		$gatewayName = (new GatewayManager())->getDefaultGatewayName(PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION) ?? 'paystack';
+		$gatewayName = $this->gatewayManager->getDefaultGatewayName(PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION) ?? 'paystack';
 
 		$validated = $request->validate([
 			'vendor_id' => 'required|exists:vendors,id',
@@ -310,14 +313,13 @@ class CheckoutController extends Controller
 			]);
 		}
 
+		// Paystack returns amounts in kobo/pesewas (×100); normalizeAmount() handles the conversion.
 		$amount = data_get($verification, 'data.amount');
 		if ($amount) {
 			$numericAmount = (float) $amount;
-			if (($order->payment_gateway ?? null) === 'paystack') {
-				$order->amount_paid = $numericAmount / 100;
-			} else {
-				$order->amount_paid = $numericAmount;
-			}
+			$order->amount_paid = ($order->payment_gateway ?? null) === 'paystack'
+				? PaystackPaymentService::normalizeAmount($numericAmount)
+				: $numericAmount;
 		}
 
 		$this->paymentService->completeOrder($order);
