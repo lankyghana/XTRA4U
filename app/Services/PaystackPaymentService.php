@@ -51,6 +51,20 @@ class PaystackPaymentService implements CollectsPayments, HandlesGenericPayments
     }
 
     /**
+     * Convert a GHS amount to Paystack pesewas (smallest currency unit).
+     *
+     * Uses round() instead of intval() to avoid IEEE 754 floating-point
+     * truncation errors (e.g. 18.40 * 100 = 1839.999... → intval = 1839).
+     *
+     * Usage:
+     *   'amount' => PaystackPaymentService::toKobo($amount)
+     */
+    public static function toKobo(float $amount): int
+    {
+        return (int) round($amount * 100);
+    }
+
+    /**
      * Normalize an amount returned by Paystack (in kobo/pesewas) to GHS.
      * Paystack always returns amounts in the smallest currency unit (×100).
      * Call this wherever you read `data.amount` from a Paystack API response.
@@ -145,7 +159,7 @@ class PaystackPaymentService implements CollectsPayments, HandlesGenericPayments
 
         $payload = [
             'email'        => $email,
-            'amount'       => intval($amount * 100), // Paystack expects amount in kobo/pesewas
+            'amount'       => self::toKobo($amount), // Paystack expects amount in kobo/pesewas
             'reference'    => $reference,
             'callback_url' => route('payment.callback'),
         ];
@@ -206,7 +220,7 @@ class PaystackPaymentService implements CollectsPayments, HandlesGenericPayments
 
         $payload = [
             'email'        => $email,
-            'amount'       => intval($amount * 100), // Paystack expects amount in kobo/pesewas
+            'amount'       => self::toKobo($amount), // Paystack expects amount in kobo/pesewas
             'reference'    => $reference,
             'callback_url' => $callbackUrl,
             'metadata'     => $metadata,
