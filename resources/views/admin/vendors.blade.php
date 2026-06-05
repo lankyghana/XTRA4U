@@ -100,9 +100,15 @@
                             <x-badge variant="pending">Pending</x-badge>
                         @endif
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium" x-data="{ showAdjust: false }">
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium" x-data="{ showAdjust: false, showEdit: false }">
                         <div class="flex flex-wrap justify-end gap-2">
-                            <button type="button" @click="showAdjust = !showAdjust" class="px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold">
+                            {{-- Edit Contact button --}}
+                            <button type="button" @click="showEdit = !showEdit; showAdjust = false"
+                                class="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-semibold">
+                                Edit Contact
+                            </button>
+                            <button type="button" @click="showAdjust = !showAdjust; showEdit = false"
+                                class="px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold">
                                 Adjust Balance
                             </button>
                             @if ($vendor->affiliate_vendor_id)
@@ -137,6 +143,52 @@
                             </form>
                         </div>
 
+                        {{-- ── Edit Contact Panel ── --}}
+                        <div class="mt-3 text-left" x-show="showEdit" x-cloak>
+                            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+                                <div class="flex items-center justify-between text-xs text-blue-700 font-semibold">
+                                    <span>Edit Contact Details</span>
+                                    <button type="button" class="text-blue-400 hover:text-blue-600" @click="showEdit = false">✕ Close</button>
+                                </div>
+                                <form method="POST" action="{{ route('admin.vendors.update', $vendor) }}" class="space-y-3">
+                                    @csrf
+                                    @method('PATCH')
+                                    <div>
+                                        <label class="block text-xs font-semibold text-gray-700 mb-1">Email</label>
+                                        <input
+                                            type="email"
+                                            name="email"
+                                            value="{{ old('email', $vendor->email) }}"
+                                            required
+                                            class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                                            placeholder="vendor@example.com"
+                                        >
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-semibold text-gray-700 mb-1">Phone Number</label>
+                                        <input
+                                            type="text"
+                                            name="phone_number"
+                                            value="{{ old('phone_number', $vendor->phone_number) }}"
+                                            class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                                            placeholder="024xxxxxxx"
+                                        >
+                                    </div>
+                                    <div class="flex justify-end gap-2 pt-1">
+                                        <button type="button" @click="showEdit = false"
+                                            class="px-3 py-1.5 rounded-md text-xs font-medium border border-gray-300 text-gray-600 hover:bg-gray-100">
+                                            Cancel
+                                        </button>
+                                        <button type="submit"
+                                            class="px-4 py-1.5 rounded-md text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700">
+                                            Save Changes
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        {{-- ── Adjust Balance Panel ── --}}
                         <div class="mt-3 text-left" x-show="showAdjust" x-cloak>
                             <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
                                 <div class="flex items-center justify-between text-xs text-gray-600">

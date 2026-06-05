@@ -49,14 +49,27 @@ class AdminVendorController extends Controller
 	public function update(Request $request, Vendor $vendor): RedirectResponse
 	{
 		$data = $request->validate([
-			'name' => ['sometimes', 'string', 'max:255'],
-			'email' => ['sometimes', 'email', 'max:255'],
-			'phone_number' => ['sometimes', 'string', 'max:40'],
+			'name'         => ['sometimes', 'string', 'max:255'],
+			'email'        => ['sometimes', 'email', 'max:255', 'unique:vendors,email,' . $vendor->id],
+			'phone_number' => ['sometimes', 'nullable', 'string', 'max:40'],
 		]);
 
-		$vendor->update(array_filter($data));
+		// Trim whitespace from string fields before persisting.
+		foreach (['name', 'email', 'phone_number'] as $field) {
+			if (isset($data[$field])) {
+				$data[$field] = trim($data[$field]);
+			}
+		}
 
-		return back()->with('status', 'Vendor details updated successfully.');
+		$vendor->update(array_filter($data, fn ($v) => $v !== null));
+
+		Log::info('Admin updated vendor contact details', [
+			'admin_id'  => auth()->id(),
+			'vendor_id' => $vendor->id,
+			'fields'    => array_keys($data),
+		]);
+
+		return back()->with('status', 'Vendor contact details updated successfully.');
 	}
 
 	public function destroy(Vendor $vendor): RedirectResponse
