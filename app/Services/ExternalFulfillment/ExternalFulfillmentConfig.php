@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Schema;
 final class ExternalFulfillmentConfig
 {
     public function __construct(
-        public string $provider,
+        public ?string $provider, // Deprecated: used only as fallback
         /** @var array<string,array<string,mixed>> */
         public array $providers,
     ) {
@@ -29,7 +29,7 @@ final class ExternalFulfillmentConfig
 
         $providers = [
             'datafyhub' => [
-                'enabled' => self::toBool($settings['external_fulfillment_enabled'] ?? null),
+                'enabled' => self::toBool($settings['external_fulfillment_datafyhub_enabled'] ?? $settings['external_fulfillment_enabled'] ?? null),
                 'base_url' => trim((string) config('services.external_fulfillment.base_url', '')),
                 'endpoint' => trim((string) config('services.external_fulfillment.endpoint', '')),
                 'services_endpoint' => trim((string) config('services.external_fulfillment.services_endpoint', '/services')),
@@ -37,7 +37,7 @@ final class ExternalFulfillmentConfig
                 'timeout_seconds' => $timeout,
             ],
             'xpresportal' => [
-                'enabled' => self::toBool($settings['external_fulfillment_enabled'] ?? null),
+                'enabled' => self::toBool($settings['external_fulfillment_xpresportal_enabled'] ?? $settings['external_fulfillment_enabled'] ?? null),
                 'base_url' => trim((string) config('services.xpresportal.base_url', '')),
                 'endpoint' => '/api/v1/orders',
                 'services_endpoint' => trim((string) config('services.xpresportal.services_endpoint', '/api/v1/services')),
@@ -47,7 +47,7 @@ final class ExternalFulfillmentConfig
                 'environment' => (string) config('services.xpresportal.environment', 'sandbox'),
             ],
             'gigshub' => [
-                'enabled' => self::toBool($settings['external_fulfillment_enabled'] ?? null),
+                'enabled' => self::toBool($settings['external_fulfillment_gigshub_enabled'] ?? $settings['external_fulfillment_enabled'] ?? null),
                 'base_url' => trim((string) config('services.gigshub.base_url', '')),
                 'api_key' => (string) config('services.gigshub.api_key', ''),
                 'timeout_seconds' => self::coerceTimeout((int) config('services.gigshub.timeout', 30)),
@@ -91,8 +91,14 @@ final class ExternalFulfillmentConfig
 
         $settings = VendorSetting::getGroupFreshForVendor((int) $vendor->id, 'external_fulfillment');
 
-        $enabled = self::toBool($settings['external_fulfillment_enabled'] ?? null);
-        $provider = self::normalizeProvider((string) ($settings['external_fulfillment_provider'] ?? 'datafyhub'));
+        $globalEnabled = self::toBool($settings['external_fulfillment_enabled'] ?? null);
+        $legacyProvider = self::normalizeProvider((string) ($settings['external_fulfillment_provider'] ?? 'datafyhub'));
+        
+        $datafyhubEnabled = isset($settings['external_fulfillment_datafyhub_enabled']) ? self::toBool($settings['external_fulfillment_datafyhub_enabled']) : ($globalEnabled && $legacyProvider === 'datafyhub');
+        $xpresportalEnabled = isset($settings['external_fulfillment_xpresportal_enabled']) ? self::toBool($settings['external_fulfillment_xpresportal_enabled']) : ($globalEnabled && $legacyProvider === 'xpresportal');
+        $gigshubEnabled = isset($settings['external_fulfillment_gigshub_enabled']) ? self::toBool($settings['external_fulfillment_gigshub_enabled']) : ($globalEnabled && $legacyProvider === 'gigshub');
+
+        $provider = $legacyProvider;
         $timeout = self::coerceTimeout((int) ($settings['external_fulfillment_timeout_seconds'] ?? 10));
 
         $vendorXpresBaseUrl = self::nullableTrim((string) ($settings['external_fulfillment.xpres.base_url'] ?? ''));
@@ -121,7 +127,7 @@ final class ExternalFulfillmentConfig
 
         $providers = [
             'datafyhub' => [
-                'enabled' => $enabled,
+                'enabled' => $globalEnabled && $datafyhubEnabled,
                 'base_url' => $baseUrlFromConfig,
                 'endpoint' => $endpointFromConfig,
                 'services_endpoint' => trim((string) config('services.external_fulfillment.services_endpoint', '/services')),
@@ -129,7 +135,7 @@ final class ExternalFulfillmentConfig
                 'timeout_seconds' => $timeout,
             ],
             'xpresportal' => [
-                'enabled' => $enabled,
+                'enabled' => $globalEnabled && $xpresportalEnabled,
                 'base_url' => $vendorXpresBaseUrl,
                 'endpoint' => '/api/v1/orders',
                 'services_endpoint' => trim((string) config('services.xpresportal.services_endpoint', '/api/v1/services')),
@@ -139,7 +145,7 @@ final class ExternalFulfillmentConfig
                 'environment' => $vendorXpresEnvironment ?? (string) config('services.xpresportal.environment', 'sandbox'),
             ],
             'gigshub' => [
-                'enabled' => $enabled,
+                'enabled' => $globalEnabled && $gigshubEnabled,
                 'base_url' => $vendorGigshubBaseUrl ?? $systemGigshubBaseUrl,
                 'api_key' => $vendorGigshubApiKey ?? $systemGigshubApiKey,
                 'timeout_seconds' => self::coerceTimeout((int) config('services.gigshub.timeout', 30)),
@@ -151,25 +157,29 @@ final class ExternalFulfillmentConfig
 
     public function isReady(): bool
     {
-        $config = $this->providerConfig($this->provider);
-        if ($config === []) {
-            $config = $this->providerConfig('datafyhub');
+        foreach (['datafyhub', 'xpresportal', 'gigshub'] as $p) {
+            if ($this->isProviderReady($p)) {
+                return true;
+            }
         }
+        return false;
+    }
+
+    public function isProviderReady(string $provider): bool
+    {
+        $config = $this->providerConfig($provider);
 
         if (! ($config['enabled'] ?? false)) {
             return false;
         }
 
-        if ($this->provider === 'xpresportal') {
-            // VENDOR ISOLATION: Each vendor must explicitly configure their own credentials
-            // Form validation enforces this - no silent fallbacks allowed
+        if ($provider === 'xpresportal') {
             $hasVendorBaseUrl = $config['base_url'] !== '';
             $hasVendorApiKey = $config['api_key'] !== '';
-
             return $hasVendorBaseUrl && $hasVendorApiKey;
         }
 
-        if ($this->provider === 'gigshub') {
+        if ($provider === 'gigshub') {
             return $config['base_url'] !== '' && $config['api_key'] !== '';
         }
 
@@ -180,11 +190,19 @@ final class ExternalFulfillmentConfig
 
     public function isServiceDiscoveryReady(): bool
     {
-        $provider = $this->provider;
+        foreach (['datafyhub', 'xpresportal', 'gigshub'] as $p) {
+            if ($this->isProviderServiceDiscoveryReady($p)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public function isProviderServiceDiscoveryReady(string $provider): bool
+    {
         $config = $this->providerConfig($provider);
-        if ($config === []) {
-            $provider = 'datafyhub';
-            $config = $this->providerConfig('datafyhub');
+        if (! ($config['enabled'] ?? false)) {
+            return false;
         }
 
         if ($provider === 'xpresportal') {

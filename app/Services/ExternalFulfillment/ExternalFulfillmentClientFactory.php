@@ -10,9 +10,9 @@ use InvalidArgumentException;
 
 final class ExternalFulfillmentClientFactory
 {
-    public static function make(ExternalFulfillmentConfig $config): ExternalFulfillmentClient
+    public static function make(ExternalFulfillmentConfig $config, ?string $providerOverride = null): ExternalFulfillmentClient
     {
-        $provider = $config->provider ?? 'datafyhub';
+        $provider = $providerOverride ?? $config->provider ?? 'datafyhub';
 
         return match ($provider) {
             'xpresportal' => new XpresPortalClient($config),
