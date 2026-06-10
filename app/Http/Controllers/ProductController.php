@@ -87,7 +87,6 @@ class ProductController extends Controller
         return redirect()->route('vendor.products.index')->with('success', 'Product created successfully.');
     }
 
-    // Show edit product form
     public function edit(int|Product $id)
     {
         $product = $this->findVendorProduct($id);
@@ -95,6 +94,16 @@ class ProductController extends Controller
         $networkOptions = $this->getNetworkOptions();
         $vendor = $this->resolveVendor();
         [$activeExternalFulfillmentProvider, $providerNetworks] = $this->resolveExternalFulfillmentContext($vendor);
+
+        if (isset($metadata['external_mappings']) && is_array($metadata['external_mappings'])) {
+            foreach (['datafyhub', 'xpresportal', 'gigshub'] as $p) {
+                if (isset($metadata['external_mappings'][$p]['service_id'])) {
+                    $metadata['external_mappings'][$p]['service_id'] = $p . '::' . $metadata['external_mappings'][$p]['service_id'];
+                    $activeExternalFulfillmentProvider = $p;
+                    break;
+                }
+            }
+        }
 
         return view('product_edit', [
             'product' => $product,
@@ -284,6 +293,14 @@ class ProductController extends Controller
         $externalServicePrice = $request->input('external_service_price');
         $externalServiceOfferSlug = trim((string) $request->input('external_service_offer_slug', ''));
 
+        if (strpos($externalServiceId, '::') !== false) {
+            $parts = explode('::', $externalServiceId, 2);
+            if (in_array($parts[0], ['datafyhub', 'xpresportal', 'gigshub'])) {
+                $activeProvider = $parts[0];
+                $externalServiceId = $parts[1];
+            }
+        }
+
         if ($activeProvider !== '') {
             $providerMapping = [];
             if (isset($externalMappings[$activeProvider]) && is_array($externalMappings[$activeProvider])) {
@@ -377,8 +394,10 @@ class ProductController extends Controller
     protected function resolveExternalFulfillmentContext(Vendor $vendor): array
     {
         $config = ExternalFulfillmentConfig::loadFreshForVendor($vendor);
+        // We no longer rely on a single global provider for networks because multiple might be active.
+        // We return an empty array for providerNetworks so the validation accepts any valid string.
         $activeProvider = $config->provider ?? 'datafyhub';
-        $providerNetworks = config("external_fulfillment.providers.{$activeProvider}.networks", []);
+        $providerNetworks = [];
 
         return [$activeProvider, $providerNetworks];
     }
