@@ -17,37 +17,54 @@ class ExternalServicesController extends Controller
         $vendor = $this->resolveVendor();
 
         $config = ExternalFulfillmentConfig::loadFreshForVendor($vendor);
-        $provider = $config->provider ?? 'datafyhub';
 
         if (! $config->isServiceDiscoveryReady()) {
             return response()->json([
-                'provider' => $provider,
+                'provider' => 'multiple',
                 'services' => [],
-                'message' => 'External fulfillment settings are incomplete for ' . $provider . '.',
+                'message' => 'No external fulfillment providers are configured or ready.',
             ]);
         }
 
-        try {
-            $client = ExternalFulfillmentClientFactory::make($config);
-            $services = $client->getServices();
+        $allServices = [];
+        $errors = [];
 
-            return response()->json([
-                'provider' => $provider,
-                'services' => is_array($services) ? $services : [],
-            ]);
-        } catch (\Throwable $e) {
-            Log::warning('External services discovery failed', [
-                'vendor_id' => $vendor->id,
-                'provider' => $provider,
-                'error' => mb_substr($e->getMessage(), 0, 500),
-            ]);
-
-            return response()->json([
-                'provider' => $provider,
-                'services' => [],
-                'message' => 'Unable to fetch provider services right now.',
-            ], 200);
+        foreach (['datafyhub', 'xpresportal', 'gigshub'] as $p) {
+            if ($config->isProviderServiceDiscoveryReady($p)) {
+                try {
+                    $client = ExternalFulfillmentClientFactory::make($config, $p);
+                    $services = $client->getServices();
+                    if (is_array($services)) {
+                        foreach ($services as &$svc) {
+                            $originalId = $svc['id'] ?? $svc['service_id'] ?? $svc['code'] ?? $svc['key'] ?? null;
+                            if ($originalId !== null) {
+                                $svc['id'] = $p . '::' . $originalId;
+                            }
+                            $svc['name'] = '[' . strtoupper($p) . '] ' . ($svc['name'] ?? 'Unknown');
+                        }
+                        $allServices = array_merge($allServices, $services);
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning('External services discovery failed for provider', [
+                        'vendor_id' => $vendor->id,
+                        'provider' => $p,
+                        'error' => mb_substr($e->getMessage(), 0, 500),
+                    ]);
+                    $errors[] = $p;
+                }
+            }
         }
+
+        $message = null;
+        if (!empty($errors)) {
+            $message = 'Failed to load services for: ' . implode(', ', $errors) . '.';
+        }
+
+        return response()->json([
+            'provider' => 'multiple',
+            'services' => $allServices,
+            'message' => $message,
+        ]);
     }
 
     private function resolveVendor(): Vendor

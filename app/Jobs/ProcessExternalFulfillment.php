@@ -70,8 +70,16 @@ class ProcessExternalFulfillment implements ShouldQueue
             }
 
             $idempotencyKey = (string) ($order->external_fulfillment_idempotency_key ?: ('order-' . $order->id));
-            $providerUsed = $config->provider ?? 'datafyhub';
-            $providerNetwork = $this->resolveProviderNetwork($config, $order);
+            
+            [$providerUsed, $providerNetwork] = $this->resolveProviderAndNetwork($config, $order);
+
+            if (! $config->isProviderReady($providerUsed)) {
+                Log::warning('External fulfillment resolved provider is not ready', [
+                    'order_id' => $order->id,
+                    'provider' => $providerUsed,
+                ]);
+                return;
+            }
 
             $order->setAttribute('external_provider', $providerUsed);
             $order->setAttribute('external_provider_network', $providerNetwork);
@@ -85,7 +93,7 @@ class ProcessExternalFulfillment implements ShouldQueue
                 'external_fulfillment_provider_used' => $providerUsed,
             ]);
 
-            $client = ExternalFulfillmentClientFactory::make($config);
+            $client = ExternalFulfillmentClientFactory::make($config, $providerUsed);
             $result = $client->sendOrder($order, $idempotencyKey);
 
             $status = strtolower((string) ($result['status'] ?? ''));
@@ -153,9 +161,8 @@ class ProcessExternalFulfillment implements ShouldQueue
         }
     }
 
-    private function resolveProviderNetwork(ExternalFulfillmentConfig $config, Order $order): ?string
+    private function resolveProviderAndNetwork(ExternalFulfillmentConfig $config, Order $order): array
     {
-        $provider = $config->provider ?? 'datafyhub';
         $product = null;
         $metadata = [];
 
@@ -164,21 +171,40 @@ class ProcessExternalFulfillment implements ShouldQueue
             $metadata = is_array($product?->decoded_description) ? $product->decoded_description : [];
         }
 
-        $networkFromMappings = data_get($metadata, "external_mappings.{$provider}.network");
-        if (is_string($networkFromMappings) && $networkFromMappings !== '') {
-            return $networkFromMappings;
+        // 1. Check specific provider mappings first
+        foreach (['datafyhub', 'xpresportal', 'gigshub'] as $p) {
+            if ($config->isProviderReady($p)) {
+                $networkFromMappings = data_get($metadata, "external_mappings.{$p}.network");
+                if (is_string($networkFromMappings) && $networkFromMappings !== '') {
+                    return [$p, $networkFromMappings];
+                }
+            }
         }
 
-        $genericNetwork = data_get($metadata, 'external_network');
-        if (is_string($genericNetwork) && $genericNetwork !== '') {
-            return $genericNetwork;
+        // 2. Fallback to generic or legacy mappings using the first ready provider
+        $fallbackProvider = $config->provider;
+        if (! $fallbackProvider || ! $config->isProviderReady($fallbackProvider)) {
+            $fallbackProvider = null;
+            foreach (['datafyhub', 'xpresportal', 'gigshub'] as $p) {
+                if ($config->isProviderReady($p)) {
+                    $fallbackProvider = $p;
+                    break;
+                }
+            }
         }
 
-        $legacyDatafyhub = data_get($metadata, 'datafyhub_network');
-        if (is_string($legacyDatafyhub) && $legacyDatafyhub !== '') {
-            return $legacyDatafyhub;
+        if ($fallbackProvider) {
+            $genericNetwork = data_get($metadata, 'external_network');
+            if (is_string($genericNetwork) && $genericNetwork !== '') {
+                return [$fallbackProvider, $genericNetwork];
+            }
+
+            $legacyDatafyhub = data_get($metadata, 'datafyhub_network');
+            if (is_string($legacyDatafyhub) && $legacyDatafyhub !== '') {
+                return [$fallbackProvider, $legacyDatafyhub];
+            }
         }
 
-        return null;
+        return [$fallbackProvider ?? 'datafyhub', null];
     }
 }
