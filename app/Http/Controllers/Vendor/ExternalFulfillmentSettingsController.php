@@ -56,9 +56,11 @@ class ExternalFulfillmentSettingsController extends Controller
 
         $validated = $request->validate([
             'external_fulfillment_enabled' => 'nullable|boolean',
+            'external_fulfillment_datafyhub_enabled' => 'nullable|boolean',
+            'external_fulfillment_xpresportal_enabled' => 'nullable|boolean',
+            'external_fulfillment_gigshub_enabled' => 'nullable|boolean',
             'external_fulfillment_token' => 'nullable|string|max:255',
             'external_fulfillment_timeout_seconds' => 'nullable|integer|min:1|max:120',
-            'external_fulfillment_provider' => 'nullable|string|in:datafyhub,xpresportal,gigshub',
             'external_fulfillment_xpres_base_url' => 'nullable|string|max:255',
             'external_fulfillment_xpres_api_key' => 'nullable|string|max:255',
             'external_fulfillment_xpres_api_secret' => 'nullable|string|max:255',
@@ -75,45 +77,61 @@ class ExternalFulfillmentSettingsController extends Controller
         }
 
         $enabled = (bool) $request->boolean('external_fulfillment_enabled');
-        $provider = (string) ($request->input('external_fulfillment_provider') ?? 'datafyhub');
+        $datafyhubEnabled = (bool) $request->boolean('external_fulfillment_datafyhub_enabled');
+        $xpresportalEnabled = (bool) $request->boolean('external_fulfillment_xpresportal_enabled');
+        $gigshubEnabled = (bool) $request->boolean('external_fulfillment_gigshub_enabled');
 
-        if ($enabled && $provider === 'datafyhub') {
+        if ($enabled && $datafyhubEnabled) {
             $existingToken = trim((string) VendorSetting::getForVendor($vendor->id, 'external_fulfillment_token', ''));
             if (! $request->filled('external_fulfillment_token') && $existingToken === '') {
                 return back()
-                    ->withErrors(['external_fulfillment_token' => 'API token is required when enabling external fulfillment.'])
+                    ->withErrors(['external_fulfillment_token' => 'API token is required when enabling Datafyhub.'])
                     ->withInput();
             }
         }
 
-        if ($enabled && $provider === 'xpresportal') {
+        if ($enabled && $xpresportalEnabled) {
             if (! $request->filled('external_fulfillment_xpres_api_key')) {
-                return back()
-                    ->withErrors(['external_fulfillment_xpres_api_key' => 'XpresPortal API Key is required. Each vendor must use their own credentials.'])
-                    ->withInput();
+                $existingApiKey = VendorSetting::getForVendor($vendor->id, 'external_fulfillment.xpres.api_key');
+                if (empty($existingApiKey)) {
+                    return back()
+                        ->withErrors(['external_fulfillment_xpres_api_key' => 'XpresPortal API Key is required. Each vendor must use their own credentials.'])
+                        ->withInput();
+                }
             }
             if (! $request->filled('external_fulfillment_xpres_base_url')) {
-                return back()
-                    ->withErrors(['external_fulfillment_xpres_base_url' => 'XpresPortal Base URL is required.'])
-                    ->withInput();
+                $existingBaseUrl = VendorSetting::getForVendor($vendor->id, 'external_fulfillment.xpres.base_url');
+                if (empty($existingBaseUrl)) {
+                    return back()
+                        ->withErrors(['external_fulfillment_xpres_base_url' => 'XpresPortal Base URL is required.'])
+                        ->withInput();
+                }
             }
         }
 
-        if ($enabled && $provider === 'gigshub') {
+        if ($enabled && $gigshubEnabled) {
             if (! $request->filled('external_fulfillment_gigshub_base_url')) {
-                return back()
-                    ->withErrors(['external_fulfillment_gigshub_base_url' => 'GigsHub Base URL is required.'])
-                    ->withInput();
+                $existingBaseUrl = VendorSetting::getForVendor($vendor->id, 'external_fulfillment.gigshub.base_url');
+                if (empty($existingBaseUrl)) {
+                    return back()
+                        ->withErrors(['external_fulfillment_gigshub_base_url' => 'GigsHub Base URL is required.'])
+                        ->withInput();
+                }
             }
             if (! $request->filled('external_fulfillment_gigshub_api_key')) {
-                return back()
-                    ->withErrors(['external_fulfillment_gigshub_api_key' => 'GigsHub API Key is required.'])
-                    ->withInput();
+                $existingApiKey = VendorSetting::getForVendor($vendor->id, 'external_fulfillment.gigshub.api_key');
+                if (empty($existingApiKey)) {
+                    return back()
+                        ->withErrors(['external_fulfillment_gigshub_api_key' => 'GigsHub API Key is required.'])
+                        ->withInput();
+                }
             }
         }
 
         VendorSetting::setForVendor($vendor->id, 'external_fulfillment_enabled', $enabled ? '1' : '0', 'external_fulfillment');
-        VendorSetting::setForVendor($vendor->id, 'external_fulfillment_provider', $provider, 'external_fulfillment');
+        VendorSetting::setForVendor($vendor->id, 'external_fulfillment_datafyhub_enabled', $datafyhubEnabled ? '1' : '0', 'external_fulfillment');
+        VendorSetting::setForVendor($vendor->id, 'external_fulfillment_xpresportal_enabled', $xpresportalEnabled ? '1' : '0', 'external_fulfillment');
+        VendorSetting::setForVendor($vendor->id, 'external_fulfillment_gigshub_enabled', $gigshubEnabled ? '1' : '0', 'external_fulfillment');
         VendorSetting::setForVendor(
             $vendor->id,
             'external_fulfillment_timeout_seconds',

@@ -35,19 +35,35 @@
                     </label>
                 </div>
 
-                <div>
-                    <label for="external_fulfillment_provider" class="block text-sm font-medium text-gray-700 mb-2">
-                        Provider
-                    </label>
-                    <select name="external_fulfillment_provider" id="external_fulfillment_provider"
-                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue">
-                        @foreach($providers as $key => $label)
-                            <option value="{{ $key }}" {{ (($settings['external_fulfillment_provider'] ?? 'datafyhub') === $key) ? 'selected' : '' }}>{{ $label }}</option>
-                        @endforeach
-                    </select>
-                    @error('external_fulfillment_provider')
-                        <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                    @enderror
+                <div class="space-y-3">
+                    <p class="block text-sm font-medium text-gray-700">Enabled Providers</p>
+                    
+                    <div class="flex items-center">
+                        <input type="checkbox" name="external_fulfillment_datafyhub_enabled" id="external_fulfillment_datafyhub_enabled" value="1"
+                            class="h-4 w-4 text-brand-deep-blue border-gray-300 rounded provider-toggle"
+                            {{ (($settings['external_fulfillment_datafyhub_enabled'] ?? '0') === '1') ? 'checked' : '' }}>
+                        <label for="external_fulfillment_datafyhub_enabled" class="ml-2 text-sm font-medium text-gray-700">
+                            Datafyhub
+                        </label>
+                    </div>
+
+                    <div class="flex items-center">
+                        <input type="checkbox" name="external_fulfillment_xpresportal_enabled" id="external_fulfillment_xpresportal_enabled" value="1"
+                            class="h-4 w-4 text-brand-deep-blue border-gray-300 rounded provider-toggle"
+                            {{ (($settings['external_fulfillment_xpresportal_enabled'] ?? '0') === '1') ? 'checked' : '' }}>
+                        <label for="external_fulfillment_xpresportal_enabled" class="ml-2 text-sm font-medium text-gray-700">
+                            XpresPortal
+                        </label>
+                    </div>
+
+                    <div class="flex items-center">
+                        <input type="checkbox" name="external_fulfillment_gigshub_enabled" id="external_fulfillment_gigshub_enabled" value="1"
+                            class="h-4 w-4 text-brand-deep-blue border-gray-300 rounded provider-toggle"
+                            {{ (($settings['external_fulfillment_gigshub_enabled'] ?? '0') === '1') ? 'checked' : '' }}>
+                        <label for="external_fulfillment_gigshub_enabled" class="ml-2 text-sm font-medium text-gray-700">
+                            GigsHub
+                        </label>
+                    </div>
                 </div>
 
                 <div id="datafyhub_token_block">
@@ -223,7 +239,9 @@
 @push('scripts')
 <script>
 (() => {
-    const providerSelect = document.getElementById('external_fulfillment_provider');
+    const datafyCheckbox = document.getElementById('external_fulfillment_datafyhub_enabled');
+    const xpresCheckbox = document.getElementById('external_fulfillment_xpresportal_enabled');
+    const gigshubCheckbox = document.getElementById('external_fulfillment_gigshub_enabled');
     const datafyBlock = document.getElementById('datafyhub_token_block');
     const xpresBlock = document.getElementById('xpres_credentials_block');
     const gigshubBlock = document.getElementById('gigshub_credentials_block');
@@ -231,25 +249,24 @@
     const result = document.getElementById('test_xpres_connection_result');
 
     const syncProviderFields = () => {
-        const provider = providerSelect ? providerSelect.value : 'datafyhub';
-
-        if (datafyBlock) {
-            datafyBlock.style.display = provider === 'datafyhub' ? '' : 'none';
+        if (datafyBlock && datafyCheckbox) {
+            datafyBlock.style.display = datafyCheckbox.checked ? '' : 'none';
         }
 
-        if (xpresBlock) {
-            xpresBlock.style.display = provider === 'xpresportal' ? '' : 'none';
+        if (xpresBlock && xpresCheckbox) {
+            xpresBlock.style.display = xpresCheckbox.checked ? '' : 'none';
         }
 
-        if (gigshubBlock) {
-            gigshubBlock.style.display = provider === 'gigshub' ? '' : 'none';
+        if (gigshubBlock && gigshubCheckbox) {
+            gigshubBlock.style.display = gigshubCheckbox.checked ? '' : 'none';
         }
     };
 
-    if (providerSelect) {
-        providerSelect.addEventListener('change', syncProviderFields);
-        syncProviderFields();
-    }
+    if (datafyCheckbox) datafyCheckbox.addEventListener('change', syncProviderFields);
+    if (xpresCheckbox) xpresCheckbox.addEventListener('change', syncProviderFields);
+    if (gigshubCheckbox) gigshubCheckbox.addEventListener('change', syncProviderFields);
+    
+    syncProviderFields();
 
     if (!testButton || !result) {
         return;
