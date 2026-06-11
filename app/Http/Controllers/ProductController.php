@@ -95,9 +95,14 @@ class ProductController extends Controller
         $vendor = $this->resolveVendor();
         [$activeExternalFulfillmentProvider, $providerNetworks] = $this->resolveExternalFulfillmentContext($vendor);
 
+        // Detect which provider the product is actually mapped to by looking for
+        // whichever provider key has a service_id in the product's own metadata.
+        // This takes priority over the vendor-level legacy provider field.
         if (isset($metadata['external_mappings']) && is_array($metadata['external_mappings'])) {
             foreach (['datafyhub', 'xpresportal', 'gigshub', 'skdataplug'] as $p) {
                 if (isset($metadata['external_mappings'][$p]['service_id'])) {
+                    // Prefix so the JS dropdown and buildStructuredDescription() both know
+                    // which provider owns this service ID (e.g. "skdataplug::SOME_ID").
                     $metadata['external_mappings'][$p]['service_id'] = $p . '::' . $metadata['external_mappings'][$p]['service_id'];
                     $activeExternalFulfillmentProvider = $p;
                     break;
@@ -349,6 +354,13 @@ class ProductController extends Controller
             }
 
             if (! empty($providerMapping)) {
+                // Since the UI maps one provider service per product, remove stale
+                // mappings from other providers when setting a new active one.
+                foreach (['datafyhub', 'xpresportal', 'gigshub', 'skdataplug'] as $p) {
+                    if ($p !== $activeProvider) {
+                        unset($externalMappings[$p]);
+                    }
+                }
                 $externalMappings[$activeProvider] = $providerMapping;
             } else {
                 unset($externalMappings[$activeProvider]);
@@ -394,9 +406,22 @@ class ProductController extends Controller
     protected function resolveExternalFulfillmentContext(Vendor $vendor): array
     {
         $config = ExternalFulfillmentConfig::loadFreshForVendor($vendor);
-        // We no longer rely on a single global provider for networks because multiple might be active.
-        // We return an empty array for providerNetworks so the validation accepts any valid string.
-        $activeProvider = $config->provider ?? 'datafyhub';
+
+        // Prefer the first *ready* provider over the legacy $config->provider field,
+        // which only reflects a now-deprecated single-provider setting and can point
+        // to a provider that is no longer enabled (e.g. gigshub when skdataplug is active).
+        $activeProvider = null;
+        foreach (['datafyhub', 'xpresportal', 'gigshub', 'skdataplug'] as $p) {
+            if ($config->isProviderReady($p)) {
+                $activeProvider = $p;
+                break;
+            }
+        }
+        // Fall back to the legacy field, then datafyhub as a last resort.
+        $activeProvider = $activeProvider ?? $config->provider ?? 'datafyhub';
+
+        // Return an empty providerNetworks array so validation accepts any valid string
+        // (multiple providers may be active with different network lists).
         $providerNetworks = [];
 
         return [$activeProvider, $providerNetworks];
