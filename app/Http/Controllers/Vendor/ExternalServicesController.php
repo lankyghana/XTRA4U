@@ -29,7 +29,7 @@ class ExternalServicesController extends Controller
         $allServices = [];
         $errors = [];
 
-        foreach (['datafyhub', 'xpresportal', 'gigshub'] as $p) {
+        foreach (array_keys($config->providers) as $p) {
             if ($config->isProviderServiceDiscoveryReady($p)) {
                 try {
                     $client = ExternalFulfillmentClientFactory::make($config, $p);

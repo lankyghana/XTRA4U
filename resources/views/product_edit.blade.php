@@ -64,7 +64,7 @@
             </div>
 
             <div>
-                <label for="external_network" class="block text-sm font-semibold text-gray-700">External Fulfillment Network ({{ $activeExternalFulfillmentProviderLabel }})</label>
+                <label for="external_network" class="block text-sm font-semibold text-gray-700">External Fulfillment Network</label>
                 <select name="external_network" id="external_network" class="mt-1 block w-full border-gray-200 rounded-lg shadow-sm focus:border-purple-400 focus:ring-purple-400">
                     <option value="" {{ $externalNetwork === '' ? 'selected' : '' }}>Auto (recommended)</option>
                     @foreach($providerNetworks as $network)
@@ -76,7 +76,7 @@
 
             <div>
                 <div class="flex items-center justify-between gap-3">
-                    <label for="external_service_id" class="block text-sm font-semibold text-gray-700">Provider Service ({{ $activeExternalFulfillmentProviderLabel }})</label>
+                    <label for="external_service_id" class="block text-sm font-semibold text-gray-700">Provider Service</label>
                     <button
                         type="button"
                         id="external_services_refresh"

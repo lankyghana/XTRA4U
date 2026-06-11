@@ -170,7 +170,7 @@ final class ExternalFulfillmentConfig
 
     public function isReady(): bool
     {
-        foreach (['datafyhub', 'xpresportal', 'gigshub', 'skdataplug'] as $p) {
+        foreach (array_keys($this->providers) as $p) {
             if ($this->isProviderReady($p)) {
                 return true;
             }
@@ -205,7 +205,7 @@ final class ExternalFulfillmentConfig
 
     public function isServiceDiscoveryReady(): bool
     {
-        foreach (['datafyhub', 'xpresportal', 'gigshub', 'skdataplug'] as $p) {
+        foreach (array_keys($this->providers) as $p) {
             if ($this->isProviderServiceDiscoveryReady($p)) {
                 return true;
             }
