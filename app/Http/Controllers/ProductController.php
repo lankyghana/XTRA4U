@@ -96,7 +96,7 @@ class ProductController extends Controller
         [$activeExternalFulfillmentProvider, $providerNetworks] = $this->resolveExternalFulfillmentContext($vendor);
 
         if (isset($metadata['external_mappings']) && is_array($metadata['external_mappings'])) {
-            foreach (['datafyhub', 'xpresportal', 'gigshub'] as $p) {
+            foreach (['datafyhub', 'xpresportal', 'gigshub', 'skdataplug'] as $p) {
                 if (isset($metadata['external_mappings'][$p]['service_id'])) {
                     $metadata['external_mappings'][$p]['service_id'] = $p . '::' . $metadata['external_mappings'][$p]['service_id'];
                     $activeExternalFulfillmentProvider = $p;
@@ -295,7 +295,7 @@ class ProductController extends Controller
 
         if (strpos($externalServiceId, '::') !== false) {
             $parts = explode('::', $externalServiceId, 2);
-            if (in_array($parts[0], ['datafyhub', 'xpresportal', 'gigshub'])) {
+            if (in_array($parts[0], ['datafyhub', 'xpresportal', 'gigshub', 'skdataplug'])) {
                 $activeProvider = $parts[0];
                 $externalServiceId = $parts[1];
             }
