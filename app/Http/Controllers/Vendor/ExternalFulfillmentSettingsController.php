@@ -37,6 +37,10 @@ class ExternalFulfillmentSettingsController extends Controller
             $settings['external_fulfillment_gigshub_api_key_masked'] = '••••••••';
         }
 
+        if (! empty($settings['external_fulfillment_skdataplug_token'])) {
+            $settings['external_fulfillment_skdataplug_token_masked'] = '••••••••';
+        }
+
         return view('vendor.settings.external-fulfillment', [
             'vendor' => $vendor,
             'settings' => $settings,
@@ -44,6 +48,7 @@ class ExternalFulfillmentSettingsController extends Controller
                 'datafyhub' => 'Datafyhub',
                 'xpresportal' => 'XpresPortal',
                 'gigshub' => 'GigsHub',
+                'skdataplug' => 'SKDataPlug',
             ],
         ]);
     }
@@ -59,7 +64,9 @@ class ExternalFulfillmentSettingsController extends Controller
             'external_fulfillment_datafyhub_enabled' => 'nullable|boolean',
             'external_fulfillment_xpresportal_enabled' => 'nullable|boolean',
             'external_fulfillment_gigshub_enabled' => 'nullable|boolean',
+            'external_fulfillment_skdataplug_enabled' => 'nullable|boolean',
             'external_fulfillment_token' => 'nullable|string|max:255',
+            'external_fulfillment_skdataplug_token' => 'nullable|string|max:255',
             'external_fulfillment_timeout_seconds' => 'nullable|integer|min:1|max:120',
             'external_fulfillment_xpres_base_url' => 'nullable|string|max:255',
             'external_fulfillment_xpres_api_key' => 'nullable|string|max:255',
@@ -80,6 +87,7 @@ class ExternalFulfillmentSettingsController extends Controller
         $datafyhubEnabled = (bool) $request->boolean('external_fulfillment_datafyhub_enabled');
         $xpresportalEnabled = (bool) $request->boolean('external_fulfillment_xpresportal_enabled');
         $gigshubEnabled = (bool) $request->boolean('external_fulfillment_gigshub_enabled');
+        $skdataplugEnabled = (bool) $request->boolean('external_fulfillment_skdataplug_enabled');
 
         if ($enabled && $datafyhubEnabled) {
             $existingToken = trim((string) VendorSetting::getForVendor($vendor->id, 'external_fulfillment_token', ''));
@@ -128,10 +136,20 @@ class ExternalFulfillmentSettingsController extends Controller
             }
         }
 
+        if ($enabled && $skdataplugEnabled) {
+            $existingToken = trim((string) VendorSetting::getForVendor($vendor->id, 'external_fulfillment_skdataplug_token', ''));
+            if (! $request->filled('external_fulfillment_skdataplug_token') && $existingToken === '') {
+                return back()
+                    ->withErrors(['external_fulfillment_skdataplug_token' => 'API token is required when enabling SKDataPlug.'])
+                    ->withInput();
+            }
+        }
+
         VendorSetting::setForVendor($vendor->id, 'external_fulfillment_enabled', $enabled ? '1' : '0', 'external_fulfillment');
         VendorSetting::setForVendor($vendor->id, 'external_fulfillment_datafyhub_enabled', $datafyhubEnabled ? '1' : '0', 'external_fulfillment');
         VendorSetting::setForVendor($vendor->id, 'external_fulfillment_xpresportal_enabled', $xpresportalEnabled ? '1' : '0', 'external_fulfillment');
         VendorSetting::setForVendor($vendor->id, 'external_fulfillment_gigshub_enabled', $gigshubEnabled ? '1' : '0', 'external_fulfillment');
+        VendorSetting::setForVendor($vendor->id, 'external_fulfillment_skdataplug_enabled', $skdataplugEnabled ? '1' : '0', 'external_fulfillment');
         VendorSetting::setForVendor(
             $vendor->id,
             'external_fulfillment_timeout_seconds',
@@ -144,6 +162,15 @@ class ExternalFulfillmentSettingsController extends Controller
                 $vendor->id,
                 'external_fulfillment_token',
                 $request->input('external_fulfillment_token'),
+                'external_fulfillment'
+            );
+        }
+
+        if ($request->filled('external_fulfillment_skdataplug_token')) {
+            VendorSetting::setForVendor(
+                $vendor->id,
+                'external_fulfillment_skdataplug_token',
+                $request->input('external_fulfillment_skdataplug_token'),
                 'external_fulfillment'
             );
         }

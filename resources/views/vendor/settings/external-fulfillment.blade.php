@@ -64,6 +64,15 @@
                             GigsHub
                         </label>
                     </div>
+
+                    <div class="flex items-center">
+                        <input type="checkbox" name="external_fulfillment_skdataplug_enabled" id="external_fulfillment_skdataplug_enabled" value="1"
+                            class="h-4 w-4 text-brand-deep-blue border-gray-300 rounded provider-toggle"
+                            {{ (($settings['external_fulfillment_skdataplug_enabled'] ?? '0') === '1') ? 'checked' : '' }}>
+                        <label for="external_fulfillment_skdataplug_enabled" class="ml-2 text-sm font-medium text-gray-700">
+                            SKDataPlug
+                        </label>
+                    </div>
                 </div>
 
                 <div id="datafyhub_token_block">
@@ -212,6 +221,32 @@
                     </div>
                 </div>
 
+                <div id="skdataplug_credentials_block" class="space-y-4">
+                    <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                        <p class="text-sm font-semibold text-gray-800">SKDataPlug Credentials</p>
+                        <p class="mt-1 text-xs text-gray-500">
+                            Configure your SKDataPlug API credentials for order fulfillment.
+                        </p>
+                    </div>
+
+                    <div>
+                        <label for="external_fulfillment_skdataplug_token" class="block text-sm font-medium text-gray-700 mb-2">
+                            SKDataPlug API Token
+                        </label>
+                        <input
+                            type="password"
+                            name="external_fulfillment_skdataplug_token"
+                            id="external_fulfillment_skdataplug_token"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                            placeholder="{{ $settings['external_fulfillment_skdataplug_token_masked'] ?? '' }}"
+                        >
+                        @error('external_fulfillment_skdataplug_token')
+                            <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                        @enderror
+                        <p class="mt-1 text-xs text-gray-500">Leave blank to keep your existing API token.</p>
+                    </div>
+                </div>
+
                 <div>
                     <label for="external_fulfillment_timeout_seconds" class="block text-sm font-medium text-gray-700 mb-2">
                         Timeout (seconds)
@@ -242,9 +277,11 @@
     const datafyCheckbox = document.getElementById('external_fulfillment_datafyhub_enabled');
     const xpresCheckbox = document.getElementById('external_fulfillment_xpresportal_enabled');
     const gigshubCheckbox = document.getElementById('external_fulfillment_gigshub_enabled');
+    const skdataplugCheckbox = document.getElementById('external_fulfillment_skdataplug_enabled');
     const datafyBlock = document.getElementById('datafyhub_token_block');
     const xpresBlock = document.getElementById('xpres_credentials_block');
     const gigshubBlock = document.getElementById('gigshub_credentials_block');
+    const skdataplugBlock = document.getElementById('skdataplug_credentials_block');
     const testButton = document.getElementById('test_xpres_connection');
     const result = document.getElementById('test_xpres_connection_result');
 
@@ -260,11 +297,16 @@
         if (gigshubBlock && gigshubCheckbox) {
             gigshubBlock.style.display = gigshubCheckbox.checked ? '' : 'none';
         }
+
+        if (skdataplugBlock && skdataplugCheckbox) {
+            skdataplugBlock.style.display = skdataplugCheckbox.checked ? '' : 'none';
+        }
     };
 
     if (datafyCheckbox) datafyCheckbox.addEventListener('change', syncProviderFields);
     if (xpresCheckbox) xpresCheckbox.addEventListener('change', syncProviderFields);
     if (gigshubCheckbox) gigshubCheckbox.addEventListener('change', syncProviderFields);
+    if (skdataplugCheckbox) skdataplugCheckbox.addEventListener('change', syncProviderFields);
     
     syncProviderFields();
 
