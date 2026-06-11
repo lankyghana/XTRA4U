@@ -52,6 +52,12 @@ final class ExternalFulfillmentConfig
                 'api_key' => (string) config('services.gigshub.api_key', ''),
                 'timeout_seconds' => self::coerceTimeout((int) config('services.gigshub.timeout', 30)),
             ],
+            'skdataplug' => [
+                'enabled' => self::toBool($settings['external_fulfillment_skdataplug_enabled'] ?? $settings['external_fulfillment_enabled'] ?? null),
+                'base_url' => trim((string) config('services.skdataplug.base_url', 'https://skdataplug.com')),
+                'token' => (string) ($settings['external_fulfillment_skdataplug_token'] ?? config('services.skdataplug.token', '')),
+                'timeout_seconds' => self::coerceTimeout((int) config('services.skdataplug.timeout', 30)),
+            ],
         ];
 
         return new self($provider, $providers);
@@ -94,9 +100,10 @@ final class ExternalFulfillmentConfig
         $globalEnabled = self::toBool($settings['external_fulfillment_enabled'] ?? null);
         $legacyProvider = self::normalizeProvider((string) ($settings['external_fulfillment_provider'] ?? 'datafyhub'));
         
-        $datafyhubEnabled = isset($settings['external_fulfillment_datafyhub_enabled']) ? self::toBool($settings['external_fulfillment_datafyhub_enabled']) : ($globalEnabled && $legacyProvider === 'datafyhub');
+        $datafyhubEnabled   = isset($settings['external_fulfillment_datafyhub_enabled'])   ? self::toBool($settings['external_fulfillment_datafyhub_enabled'])   : ($globalEnabled && $legacyProvider === 'datafyhub');
         $xpresportalEnabled = isset($settings['external_fulfillment_xpresportal_enabled']) ? self::toBool($settings['external_fulfillment_xpresportal_enabled']) : ($globalEnabled && $legacyProvider === 'xpresportal');
-        $gigshubEnabled = isset($settings['external_fulfillment_gigshub_enabled']) ? self::toBool($settings['external_fulfillment_gigshub_enabled']) : ($globalEnabled && $legacyProvider === 'gigshub');
+        $gigshubEnabled     = isset($settings['external_fulfillment_gigshub_enabled'])     ? self::toBool($settings['external_fulfillment_gigshub_enabled'])     : ($globalEnabled && $legacyProvider === 'gigshub');
+        $skdataplugEnabled  = isset($settings['external_fulfillment_skdataplug_enabled'])  ? self::toBool($settings['external_fulfillment_skdataplug_enabled'])  : ($globalEnabled && $legacyProvider === 'skdataplug');
 
         $provider = $legacyProvider;
         $timeout = self::coerceTimeout((int) ($settings['external_fulfillment_timeout_seconds'] ?? 10));
@@ -150,6 +157,12 @@ final class ExternalFulfillmentConfig
                 'api_key' => $vendorGigshubApiKey ?? $systemGigshubApiKey,
                 'timeout_seconds' => self::coerceTimeout((int) config('services.gigshub.timeout', 30)),
             ],
+            'skdataplug' => [
+                'enabled' => $globalEnabled && $skdataplugEnabled,
+                'base_url' => trim((string) config('services.skdataplug.base_url', 'https://skdataplug.com')),
+                'token' => (string) ($settings['external_fulfillment_skdataplug_token'] ?? config('services.skdataplug.token', '')),
+                'timeout_seconds' => self::coerceTimeout((int) config('services.skdataplug.timeout', 30)),
+            ],
         ];
 
         return new self($provider, $providers);
@@ -157,7 +170,7 @@ final class ExternalFulfillmentConfig
 
     public function isReady(): bool
     {
-        foreach (['datafyhub', 'xpresportal', 'gigshub'] as $p) {
+        foreach (['datafyhub', 'xpresportal', 'gigshub', 'skdataplug'] as $p) {
             if ($this->isProviderReady($p)) {
                 return true;
             }
@@ -174,23 +187,25 @@ final class ExternalFulfillmentConfig
         }
 
         if ($provider === 'xpresportal') {
-            $hasVendorBaseUrl = $config['base_url'] !== '';
-            $hasVendorApiKey = $config['api_key'] !== '';
-            return $hasVendorBaseUrl && $hasVendorApiKey;
+            return ($config['base_url'] ?? '') !== '' && ($config['api_key'] ?? '') !== '';
         }
 
         if ($provider === 'gigshub') {
-            return $config['base_url'] !== '' && $config['api_key'] !== '';
+            return ($config['base_url'] ?? '') !== '' && ($config['api_key'] ?? '') !== '';
         }
 
-        return $config['base_url'] !== ''
-            && $config['token'] !== ''
-            && $config['endpoint'] !== '';
+        if ($provider === 'skdataplug') {
+            return ($config['base_url'] ?? '') !== '' && ($config['token'] ?? '') !== '';
+        }
+
+        return ($config['base_url'] ?? '') !== ''
+            && ($config['token'] ?? '') !== ''
+            && ($config['endpoint'] ?? '') !== '';
     }
 
     public function isServiceDiscoveryReady(): bool
     {
-        foreach (['datafyhub', 'xpresportal', 'gigshub'] as $p) {
+        foreach (['datafyhub', 'xpresportal', 'gigshub', 'skdataplug'] as $p) {
             if ($this->isProviderServiceDiscoveryReady($p)) {
                 return true;
             }
@@ -206,16 +221,20 @@ final class ExternalFulfillmentConfig
         }
 
         if ($provider === 'xpresportal') {
-            return $config['base_url'] !== '' && $config['api_key'] !== '';
+            return ($config['base_url'] ?? '') !== '' && ($config['api_key'] ?? '') !== '';
         }
 
         if ($provider === 'gigshub') {
-            return $config['base_url'] !== '' && $config['api_key'] !== '';
+            return ($config['base_url'] ?? '') !== '' && ($config['api_key'] ?? '') !== '';
         }
 
-        return $config['base_url'] !== ''
-            && $config['token'] !== ''
-            && $config['endpoint'] !== '';
+        if ($provider === 'skdataplug') {
+            return ($config['base_url'] ?? '') !== '' && ($config['token'] ?? '') !== '';
+        }
+
+        return ($config['base_url'] ?? '') !== ''
+            && ($config['token'] ?? '') !== ''
+            && ($config['endpoint'] ?? '') !== '';
     }
 
     public function url(): string
@@ -256,7 +275,7 @@ final class ExternalFulfillmentConfig
     {
         $normalized = strtolower(trim($provider));
 
-        return in_array($normalized, ['datafyhub', 'xpresportal', 'gigshub'], true)
+        return in_array($normalized, ['datafyhub', 'xpresportal', 'gigshub', 'skdataplug'], true)
             ? $normalized
             : 'datafyhub';
     }

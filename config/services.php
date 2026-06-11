@@ -97,4 +97,11 @@ return [
         'timeout' => env('GIGSHUB_TIMEOUT', 30),
     ],
 
+    'skdataplug' => [
+        // SKDataPlug Data Bundle API (https://skdataplug.com)
+        'base_url' => env('SKDATAPLUG_BASE_URL', 'https://skdataplug.com'),
+        'token'    => env('SKDATAPLUG_TOKEN', ''),
+        'timeout'  => env('SKDATAPLUG_TIMEOUT', 30),
+    ],
+
 ];

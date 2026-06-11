@@ -157,6 +157,9 @@ Route::match(['GET', 'POST'], '/result-checkers/payment/callback/{order}', [Resu
 Route::post('/result-checkers/payment/webhook', [ResultCheckerPaymentCallbackController::class, 'webhook'])->name('result-checkers.payment.webhook');
 Route::post('/webhooks/gigshub', [\App\Http\Controllers\Webhooks\GigshubWebhookController::class, 'handle'])->name('api.webhooks.gigshub');
 Route::post('/webhooks/gigshub/balance-low', [\App\Http\Controllers\Webhooks\GigshubLowBalanceWebhookController::class, 'handle'])->name('webhooks.gigshub.balance-low');
+Route::post('/webhooks/skdataplug', [\App\Http\Controllers\Webhooks\SkdataplugWebhookController::class, 'handle'])
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
+    ->name('api.webhooks.skdataplug');
 
 // Result Checker Status pages
 // SECURITY: Add rate limiting to prevent enumeration/brute force attacks

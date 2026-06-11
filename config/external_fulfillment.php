@@ -11,5 +11,8 @@ return [
         'gigshub' => [
             'networks' => ['mtn', 'telecel', 'at'],
         ],
+        'skdataplug' => [
+            'networks' => ['MTN', 'TELECEL', 'AIRTELTIGO'],
+        ],
     ],
 ];
