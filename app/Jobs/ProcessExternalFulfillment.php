@@ -172,7 +172,7 @@ class ProcessExternalFulfillment implements ShouldQueue
         }
 
         // 1. Check specific provider mappings first
-        foreach (['datafyhub', 'xpresportal', 'gigshub'] as $p) {
+        foreach (['datafyhub', 'xpresportal', 'gigshub', 'skdataplug'] as $p) {
             if ($config->isProviderReady($p)) {
                 $networkFromMappings = data_get($metadata, "external_mappings.{$p}.network");
                 if (is_string($networkFromMappings) && $networkFromMappings !== '') {
@@ -185,7 +185,7 @@ class ProcessExternalFulfillment implements ShouldQueue
         $fallbackProvider = $config->provider;
         if (! $fallbackProvider || ! $config->isProviderReady($fallbackProvider)) {
             $fallbackProvider = null;
-            foreach (['datafyhub', 'xpresportal', 'gigshub'] as $p) {
+            foreach (['datafyhub', 'xpresportal', 'gigshub', 'skdataplug'] as $p) {
                 if ($config->isProviderReady($p)) {
                     $fallbackProvider = $p;
                     break;
