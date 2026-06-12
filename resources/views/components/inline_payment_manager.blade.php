@@ -46,7 +46,7 @@
 
     let pollTimer = null;
 
-    function startPolling(reference, onUpdate, timeoutMs = 3 * 60 * 1000) {
+    function startPolling(reference, onUpdate, poll_url = null, timeoutMs = 3 * 60 * 1000) {
         if (pollTimer) return;
         const interval = 3000;
         const maxCount = Math.ceil(timeoutMs / interval);
@@ -55,12 +55,13 @@
         pollTimer = setInterval(async () => {
             count++;
             try {
-                const res = await fetch(API_STATUS_PATH + encodeURIComponent(reference), { headers: { 'Accept': 'application/json' } });
+                const url = poll_url ? poll_url : (API_STATUS_PATH + encodeURIComponent(reference));
+                const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
                 const body = await res.json();
                 const status = (body && body.status) ? body.status : 'pending';
                 if (typeof onUpdate === 'function') onUpdate(status);
 
-                if (status === 'paid' || status === 'failed') {
+                if (status === 'paid' || status === 'completed' || status === 'failed') {
                     clearInterval(pollTimer); pollTimer = null;
                 }
             } catch (e) {
@@ -81,7 +82,7 @@
 
     const InlinePaymentManager = {
         open(opts = {}, onComplete) {
-            const { reference, authorization_url = null, gateway_name = null, flow_type = 'checkout', callback_url = null } = opts || {};
+            const { reference, authorization_url = null, gateway_name = null, flow_type = 'checkout', callback_url = null, no_redirect = false } = opts || {};
             if (!reference) {
                 console.warn('InlinePaymentManager.open called without reference');
                 return;
@@ -99,41 +100,49 @@
 
             // onUpdate will handle status transitions
             function onUpdate(status) {
-                if (status === 'paid') {
+                if (status === 'paid' || status === 'completed') {
                     stopPolling();
                     InlinePaymentManager.close();
                     restoreSubmits();
-                    if (typeof onComplete === 'function') onComplete('paid');
+                    
+                    let handled = false;
+                    if (typeof onComplete === 'function') {
+                        handled = onComplete('paid');
+                    }
 
-                    // For wallet top-ups, invoke callback to credit wallet before redirecting
-                    if (flow_type === 'wallet_topup') {
-                        const cbUrl = callback_url || `/vendor/wallet/topup/callback/${encodeURIComponent(reference)}`;
-                        fetch(cbUrl, { headers: { 'Accept': 'application/json' } })
-                            .then(() => {
-                                // Callback processed, redirect to wallet dashboard
-                                window.location.href = '/vendor/wallet?tab=topups';
-                            })
-                            .catch(err => {
-                                console.error('Wallet callback error:', err);
-                                // Even on error, redirect to wallet to show balance
-                                window.location.href = '/vendor/wallet?tab=topups';
-                            });
-                    } else {
-                        // For checkout flow, redirect to checkout success
-                        window.location.href = '/checkout/success';
+                    if (!no_redirect) {
+                        // For wallet top-ups, invoke callback to credit wallet before redirecting
+                        if (flow_type === 'wallet_topup') {
+                            const cbUrl = callback_url || `/vendor/wallet/topup/callback/${encodeURIComponent(reference)}`;
+                            fetch(cbUrl, { headers: { 'Accept': 'application/json' } })
+                                .then(() => {
+                                    window.location.href = '/vendor/wallet?tab=topups';
+                                })
+                                .catch(err => {
+                                    console.error('Wallet callback error:', err);
+                                    window.location.href = '/vendor/wallet?tab=topups';
+                                });
+                        } else {
+                            // For checkout flow, redirect to checkout success
+                            window.location.href = '/checkout/success';
+                        }
                     }
                 } else if (status === 'failed') {
                     stopPolling();
                     InlinePaymentManager.close();
                     restoreSubmits();
                     if (typeof onComplete === 'function') onComplete('failed');
-                    alert('Payment failed. Please try another method.');
+                    if (!no_redirect) {
+                        alert('Payment failed. Please try another method.');
+                    }
                 } else if (status === 'timeout') {
                     stopPolling();
                     InlinePaymentManager.close();
                     restoreSubmits();
                     if (typeof onComplete === 'function') onComplete('timeout');
-                    alert('Payment confirmation timed out. Please check your payment provider or try again.');
+                    if (!no_redirect) {
+                        alert('Payment confirmation timed out. Please check your payment provider or try again.');
+                    }
                 }
             }
 
@@ -143,20 +152,20 @@
                     // fallback: open in new tab and continue polling
                     InlinePaymentManager.close();
                     window.open(authorization_url, '_blank');
-                    startPolling(reference, onUpdate);
+                    startPolling(reference, onUpdate, poll_url);
                 }, 4000);
 
                 iframe.onload = function () {
                     clearTimeout(embedTimeout);
                     if (loader) loader.style.display = 'block';
-                    startPolling(reference, onUpdate);
+                    startPolling(reference, onUpdate, poll_url);
                 };
 
                 iframe.src = authorization_url;
             } else {
                 // No auth URL to embed — just start polling and show loader
                 if (loader) loader.style.display = 'block';
-                startPolling(reference, onUpdate);
+                startPolling(reference, onUpdate, poll_url);
             }
         },
 

@@ -456,9 +456,11 @@
                                                 reference: data.reference,
                                                 authorization_url: data.authorization_url ?? null,
                                                 gateway_name: data.gateway_name ?? null,
-                                                flow_type: data.payment_type === 'wallet_topup' ? 'wallet_topup' : 'checkout'
+                                                flow_type: data.payment_type === 'wallet_topup' ? 'wallet_topup' : 'checkout',
+                                                poll_url: '{{ route('vendor.wallet.topup.status', ['reference' => 'REF']) }}'.replace('REF', encodeURIComponent(data.reference)),
+                                                no_redirect: true
                                             }, async (status) => {
-                                                if (status === 'paid') {
+                                                if (status === 'paid' || status === 'completed') {
                                                     const summary = await refreshWalletSummary(false);
                                                     amountInput.value = '';
                                                     if (gatewayHidden) gatewayHidden.value = '';
@@ -470,7 +472,6 @@
                                             });
                                             if (data.reference) {
                                                 showMessage('Payment initiated. Waiting for confirmation...', 'success');
-                                                pollTopupStatus(data.reference, amount);
                                             }
                                             setLoading(false);
                                             inProgress = false;

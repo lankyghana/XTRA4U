@@ -11,12 +11,18 @@ class PaymentStatusController extends Controller
     {
         $result = $paymentService->checkPaymentStatus($reference);
 
-        // Normalize and sanitize the status response so the frontend cannot
-        // obtain raw gateway data or sensitive fields.
+        // If the gateway returns an error (e.g. transaction not found yet), we shouldn't
+        // immediately fail the polling unless we're sure it's an actual failed payment.
         if (!isset($result['success']) || !$result['success']) {
+            $msg = strtolower($result['message'] ?? '');
+            $status = 'pending'; // Default to pending so UI keeps polling
+            if (str_contains($msg, 'failed') || str_contains($msg, 'error') || str_contains($msg, 'cancelled')) {
+                $status = 'failed';
+            }
+            
             return response()->json([
                 'success' => false,
-                'status' => 'failed',
+                'status' => $status,
                 'message' => $result['message'] ?? 'Unable to retrieve payment status',
             ], 200);
         }
