@@ -244,4 +244,12 @@ class PaystackPaymentService implements CollectsPayments, HandlesGenericPayments
     {
         return $this->config?->environment ?? 'sandbox';
     }
+
+    /**
+     * Get the configured Paystack secret key (used for webhook signature validation).
+     */
+    public function getSecretKey(): string
+    {
+        return $this->secretKey;
+    }
 }
