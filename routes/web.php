@@ -160,6 +160,8 @@ Route::post('/webhooks/gigshub/balance-low', [\App\Http\Controllers\Webhooks\Gig
 Route::post('/webhooks/skdataplug', [\App\Http\Controllers\Webhooks\SkdataplugWebhookController::class, 'handle'])
     ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
     ->name('api.webhooks.skdataplug');
+Route::post('/webhooks/paystack', [\App\Http\Controllers\Webhooks\PaystackWebhookController::class, 'handle'])
+    ->name('webhooks.paystack');
 
 // Result Checker Status pages
 // SECURITY: Add rate limiting to prevent enumeration/brute force attacks
