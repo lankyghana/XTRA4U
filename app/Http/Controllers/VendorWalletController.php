@@ -106,11 +106,18 @@ class VendorWalletController extends Controller
             $reference = $gatewayReference;
         }
 
+        // Auto-detect flow_type: gateways like BulkClix/Moolre set it explicitly to 'inline'.
+        // Paystack (redirect) returns an authorization_url but never sets flow_type, so we
+        // infer 'redirect' from the presence of an authorization_url. Only fall back to
+        // 'inline' when neither is available (pure polling / prompt-based flows).
+        $authorizationUrl = $result['authorization_url'] ?? null;
+        $flowType = $result['flow_type'] ?? ($authorizationUrl ? 'redirect' : 'inline');
+
         return response()->json([
             'success' => true,
             'reference' => $reference,
-            'authorization_url' => $result['authorization_url'] ?? null,
-            'flow_type' => $result['flow_type'] ?? 'inline',
+            'authorization_url' => $authorizationUrl,
+            'flow_type' => $flowType,
             'gateway_name' => $result['gateway_name'] ?? null,
             'payment_type' => 'wallet_topup',
         ]);

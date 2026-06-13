@@ -82,7 +82,7 @@
 
     const InlinePaymentManager = {
         open(opts = {}, onComplete) {
-            const { reference, authorization_url = null, gateway_name = null, flow_type = 'checkout', callback_url = null, no_redirect = false } = opts || {};
+            const { reference, authorization_url = null, gateway_name = null, flow_type = 'checkout', callback_url = null, no_redirect = false, poll_url = null } = opts || {};
             if (!reference) {
                 console.warn('InlinePaymentManager.open called without reference');
                 return;

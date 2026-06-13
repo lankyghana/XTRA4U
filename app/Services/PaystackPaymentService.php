@@ -118,6 +118,7 @@ class PaystackPaymentService implements CollectsPayments, HandlesGenericPayments
                     'message'           => $data['message'] ?? 'Payment initialized.',
                     'reference'         => $payload['reference'],
                     'authorization_url' => $data['data']['authorization_url'] ?? null,
+                    'flow_type'         => 'redirect', // Paystack is always a redirect gateway
                 ];
             }
 
