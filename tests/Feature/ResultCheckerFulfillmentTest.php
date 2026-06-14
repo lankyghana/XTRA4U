@@ -10,6 +10,7 @@ use App\Models\Admin;
 use App\Jobs\RetryResultCheckerOrder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
+use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
 class ResultCheckerFulfillmentTest extends TestCase
@@ -24,11 +25,11 @@ class ResultCheckerFulfillmentTest extends TestCase
     {
         parent::setUp();
         $this->vendor = Vendor::factory()->create();
-        $this->service = NetworkService::factory()->create(['is_result_checker' => true]);
+        $this->service = NetworkService::factory()->create(['service_type' => 'results_checker']);
         $this->admin = Admin::factory()->create();
     }
 
-    /** @test */
+    #[Test]
     public function allocated_pins_appear_on_admin_order_page()
     {
         $order = ResultCheckerOrder::factory()->create([
@@ -42,14 +43,14 @@ class ResultCheckerFulfillmentTest extends TestCase
             'status' => 'sold',
         ]);
 
-        $response = $this->actingAs($this->admin, 'admin')->get(route('admin.orders.show', $order));
+        $response = $this->actingAs($this->admin, 'admin')->get(route('admin.result-checkers.orders.show', $order));
 
         $response->assertOk();
-        $response->assertSee($pin->pin);
-        $response->assertSee($pin->serial);
+        $response->assertSee(substr($pin->pin, -4));
+        $response->assertSee(substr($pin->serial, -4));
     }
 
-    /** @test */
+    #[Test]
     public function retry_job_does_not_duplicate_allocations()
     {
         $order = ResultCheckerOrder::factory()->create([
@@ -76,7 +77,7 @@ class ResultCheckerFulfillmentTest extends TestCase
         $this->assertEquals(1, $order->refresh()->pins()->count());
     }
 
-    /** @test */
+    #[Test]
     public function pending_orders_allocate_after_stock_upload()
     {
         $order = ResultCheckerOrder::factory()->create([
@@ -99,7 +100,7 @@ class ResultCheckerFulfillmentTest extends TestCase
         $this->assertCount(1, $order->pins);
     }
 
-    /** @test */
+    #[Test]
     public function sms_formatting_contains_real_line_breaks()
     {
         $order = ResultCheckerOrder::factory()->create([
@@ -121,7 +122,7 @@ class ResultCheckerFulfillmentTest extends TestCase
         $this->assertStringContainsString("PIN: 123\nSERIAL: ABC\nPIN: 456\nSERIAL: DEF", $message);
     }
 
-    /** @test */
+    #[Test]
     public function order_pins_relationship_works_correctly()
     {
         $order = ResultCheckerOrder::factory()->create([
