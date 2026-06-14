@@ -4,6 +4,7 @@ namespace App\Console;
 
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
+use App\Models\WalletTopup;
 
 class Kernel extends ConsoleKernel
 {
@@ -26,8 +27,30 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule)
     {
         // Cleanup old wallet topups (consumed & abandoned initiated records)
-        // Runs hourly to keep tables bounded and reconciliation clean
-        $schedule->command('wallet:cleanup-topups --days=1')->hourly();
+        // Runs hourly to keep tables bounded and reconciliation clean.
+        // Uses ->call() instead of ->command() to avoid proc_open (disabled on shared hosting).
+        $schedule->call(function () {
+            $days = 1;
+            $cutoff = now()->subDays($days)->toDateTimeString();
+
+            // Mark fully-consumed completed topups as archived
+            WalletTopup::where('status', 'completed')
+                ->whereColumn('amount', '<=', 'consumed')
+                ->where('updated_at', '<', $cutoff)
+                ->chunkById(200, function ($rows) {
+                    $ids = $rows->pluck('id')->all();
+                    WalletTopup::whereIn('id', $ids)->update(['status' => 'archived']);
+                });
+
+            // Mark abandoned initiated topups (>24 hours old) as expired
+            $initiatedCutoff = now()->subDay()->toDateTimeString();
+            WalletTopup::where('status', 'initiated')
+                ->where('created_at', '<', $initiatedCutoff)
+                ->chunkById(200, function ($rows) {
+                    $ids = $rows->pluck('id')->all();
+                    WalletTopup::whereIn('id', $ids)->update(['status' => 'expired']);
+                });
+        })->hourly()->name('wallet:cleanup-topups');
     }
 
     /**
