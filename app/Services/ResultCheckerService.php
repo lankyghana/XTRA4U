@@ -20,7 +20,7 @@ class ResultCheckerService
      */
     public function handlePaymentCallback(ResultCheckerOrder $order, string $paymentReference, string $gateway = null): void
     {
-        DB::transaction(function () use ($order, $paymentReference, $gateway) {
+        $processed = DB::transaction(function () use ($order, $paymentReference, $gateway) {
             // Idempotent: if already paid, skip
             $order->refresh();
             if ($order->status === 'completed' || $order->paid_at) {
@@ -28,7 +28,7 @@ class ResultCheckerService
                     'order_id' => $order->id,
                     'reference' => $paymentReference,
                 ]);
-                return;
+                return false;
             }
 
             // Mark order as paid
@@ -51,10 +51,14 @@ class ResultCheckerService
                     'service_id' => $order->service_id,
                 ]);
             }
+            
+            return true;
         });
 
-        // Fire event outside transaction (safe side effects)
-        event(new ResultCheckerOrderPaid($order));
+        if ($processed) {
+            // Fire event outside transaction (safe side effects)
+            event(new ResultCheckerOrderPaid($order));
+        }
     }
 
     /**
@@ -131,7 +135,7 @@ class ResultCheckerService
         }
 
         if ($this->allocatePinsForOrder($order)) {
-            $this->sendDeliveryNotification($order->refresh());
+            event(new ResultCheckerOrderPaid($order->refresh()));
         }
     }
 
