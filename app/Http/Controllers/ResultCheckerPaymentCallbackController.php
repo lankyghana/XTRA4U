@@ -72,13 +72,6 @@ class ResultCheckerPaymentCallbackController extends Controller
             ->first();
 
         if (!$order) {
-            $orderId = (int) $request->input('order_id');
-            if ($orderId > 0) {
-                $order = ResultCheckerOrder::find($orderId);
-            }
-        }
-
-        if (!$order) {
             return response()->json([
                 'success' => false,
                 'message' => 'Result checker order not found',

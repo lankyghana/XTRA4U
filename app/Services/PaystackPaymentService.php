@@ -192,10 +192,16 @@ class PaystackPaymentService implements CollectsPayments, HandlesGenericPayments
                 ->get($this->paymentUrl . '/transaction/verify/' . $reference);
             $data = $response->json();
             if ($response->successful() && ($data['status'] ?? false)) {
+                $payloadData = $data['data'] ?? [];
+                // Normalize amount from subunits (pesewas) to major units (GHS)
+                if (isset($payloadData['amount'])) {
+                    $payloadData['amount'] = $payloadData['amount'] / 100;
+                }
+
                 return [
                     'success' => true,
                     'message' => $data['message'] ?? 'Payment verified.',
-                    'data' => $data['data'] ?? [],
+                    'data' => $payloadData,
                 ];
             }
             return [
