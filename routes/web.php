@@ -28,7 +28,7 @@ use App\Http\Controllers\ResultCheckerCheckoutController;
 use App\Http\Controllers\ResultCheckerPaymentCallbackController;
 use App\Http\Controllers\ResultCheckerStatusController;
 use Illuminate\Support\Facades\Artisan;
-use App\Http\Controllers\AdminResultCheckerPinController;
+use App\Http\Controllers\AdminResultCheckerPinsController;
 use App\Http\Controllers\AdminResultCheckerPricingTierController;
 
 // Admin login routes - moved to consolidated section below
@@ -154,7 +154,9 @@ Route::post('/store/{vendor:vendor_code}/result-checkers/checkout', [ResultCheck
     ->middleware('throttle:20,1') // 20 checkout initiations per minute
     ->name('result-checkers.checkout');
 Route::match(['GET', 'POST'], '/result-checkers/payment/callback/{order}', [ResultCheckerPaymentCallbackController::class, 'handle'])->name('result-checkers.payment.callback');
-Route::post('/result-checkers/payment/webhook', [ResultCheckerPaymentCallbackController::class, 'webhook'])->name('result-checkers.payment.webhook');
+Route::post('/result-checkers/payment/webhook', [ResultCheckerPaymentCallbackController::class, 'webhook'])
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
+    ->name('result-checkers.payment.webhook');
 Route::post('/webhooks/gigshub', [\App\Http\Controllers\Webhooks\GigshubWebhookController::class, 'handle'])->name('api.webhooks.gigshub');
 Route::post('/webhooks/gigshub/balance-low', [\App\Http\Controllers\Webhooks\GigshubLowBalanceWebhookController::class, 'handle'])->name('webhooks.gigshub.balance-low');
 Route::post('/webhooks/skdataplug', [\App\Http\Controllers\Webhooks\SkdataplugWebhookController::class, 'handle'])
@@ -432,7 +434,5 @@ Route::put('/vendor/product/{id}', [ProductController::class, 'update'])->name('
 Route::middleware(['web', 'admin.only'])->prefix('admin')->name('admin.')->group(function () {
     Route::post('result-checker-pricing-tiers', [AdminResultCheckerPricingTierController::class, 'store'])->name('result-checker-pricing-tiers.store');
     Route::delete('result-checker-pricing-tiers/{tier}', [AdminResultCheckerPricingTierController::class, 'destroy'])->name('result-checker-pricing-tiers.destroy');
-    Route::get('results-checkers/pins', [AdminResultCheckerPinController::class, 'index'])->name('result-checkers.pins.index');
-    Route::post('results-checkers/pins', [AdminResultCheckerPinController::class, 'store'])->name('result-checkers.pins.store');
-    Route::patch('results-checkers/base-price', [AdminResultCheckerPinController::class, 'updateBasePrice'])->name('result-checkers.base-price.update');
+    Route::patch('results-checkers/base-price', [AdminResultCheckerPinsController::class, 'updateBasePrice'])->name('result-checkers.base-price.update');
 });

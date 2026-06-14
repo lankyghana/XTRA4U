@@ -32,12 +32,36 @@ class AdminResultCheckerPinsController extends Controller
 
         $pins = $pinsQuery->paginate(50)->withQueryString();
 
+        $pricingTiers = [];
+        $service = null;
+        if ($serviceId) {
+            $service = $services->find($serviceId);
+            if ($service) {
+                $pricingTiers = $service->pricingTiers()->orderBy('min_quantity')->get();
+            }
+        }
+
         return view('admin.result_checkers.pins', [
             'pins' => $pins,
             'services' => $services,
             'selectedService' => $serviceId,
             'selectedStatus' => $status,
+            'pricingTiers' => $pricingTiers,
         ]);
+    }
+
+    public function updateBasePrice(Request $request)
+    {
+        $request->validate([
+            'network_service_id' => 'required|exists:network_services,id',
+            'base_price' => 'required|numeric|min:0',
+        ]);
+
+        $service = NetworkService::find($request->input('network_service_id'));
+        $service->base_price = $request->input('base_price');
+        $service->save();
+
+        return back()->with('success', 'Base price updated successfully.');
     }
 
     public function store(Request $request)
