@@ -1,8 +1,11 @@
 <?php
 
+use App\Models\Vendor;
+use App\Models\VendorWithdrawal;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schedule;
 
@@ -52,14 +55,104 @@ Artisan::command('xtra4u:ensure-admin {email} {--password=} {--force}', function
     return self::SUCCESS;
 })->purpose('Create/reset a local admin user for the admin portal');
 
-// Schedule cleanup of abandoned payments every 6 hours
-Schedule::command('payments:cleanup --hours=24')->everySixHours();
+// Schedule cleanup of abandoned payments every 6 hours.
+// Uses Artisan::call() (in-process) to avoid proc_open on shared hosting.
+Schedule::call(function () {
+    Artisan::call('payments:cleanup', ['--hours' => 24]);
+})->everySixHours()->name('payments:cleanup');
 
-// Retry any withdrawals that are stuck in processing (safe + idempotent)
-Schedule::command('withdrawals:retry-stuck --minutes=10 --limit=200')->everyFiveMinutes();
+// Retry any withdrawals that are stuck in processing (safe + idempotent).
+Schedule::call(function () {
+    $minutes = 10;
+    $limit = 200;
+    $cutoff = now()->subMinutes($minutes);
 
-// Auto-cancel withdrawals that remain processing too long (refunds wallet once)
-Schedule::command('withdrawals:cancel-stale --minutes=5 --limit=200')->everyMinute();
+    VendorWithdrawal::whereIn('status', [VendorWithdrawal::STATUS_PROCESSING, 'pending'])
+        ->whereNull('payout_reference')
+        ->whereNull('payout_transaction_id')
+        ->where(function ($q) use ($cutoff) {
+            $q->where(function ($q2) use ($cutoff) {
+                $q2->whereNotNull('payout_attempted_at')
+                    ->where('payout_attempted_at', '<=', $cutoff);
+            })->orWhere(function ($q2) use ($cutoff) {
+                $q2->whereNull('payout_attempted_at')
+                    ->where('created_at', '<=', $cutoff);
+            });
+        })
+        ->orderBy('id')
+        ->limit($limit)
+        ->chunkById(50, function ($rows) {
+            $ids = $rows->pluck('id')->all();
+            VendorWithdrawal::whereIn('id', $ids)->update(['status' => 'pending']);
+        });
+})->everyFiveMinutes()->name('withdrawals:retry-stuck');
+
+// Auto-cancel withdrawals that remain processing too long (refunds wallet once).
+Schedule::call(function () {
+    $minutes = 5;
+    $limit = 200;
+    $cutoff = now()->subMinutes($minutes);
+
+    $withdrawals = VendorWithdrawal::whereIn('status', [VendorWithdrawal::STATUS_PROCESSING, 'pending'])
+        ->whereNull('payout_reference')
+        ->whereNull('payout_transaction_id')
+        ->where(function ($q) use ($cutoff) {
+            $q->where(function ($q2) use ($cutoff) {
+                $q2->whereNotNull('payout_attempted_at')
+                    ->where('payout_attempted_at', '<=', $cutoff);
+            })->orWhere(function ($q2) use ($cutoff) {
+                $q2->whereNull('payout_attempted_at')
+                    ->where('created_at', '<=', $cutoff);
+            });
+        })
+        ->orderBy('id')
+        ->limit($limit)
+        ->get(['id', 'vendor_id', 'amount', 'payout_attempted_at', 'created_at']);
+
+    foreach ($withdrawals as $withdrawal) {
+        DB::transaction(function () use ($withdrawal, $cutoff, $minutes) {
+            $locked = VendorWithdrawal::whereKey($withdrawal->id)->lockForUpdate()->first();
+
+            if (! $locked) {
+                return;
+            }
+
+            if (! in_array($locked->status, [VendorWithdrawal::STATUS_PROCESSING, 'pending'], true)) {
+                return;
+            }
+
+            if ($locked->payout_reference !== null || $locked->payout_transaction_id !== null) {
+                return;
+            }
+
+            $age = $locked->payout_attempted_at ?? $locked->created_at;
+            if (! $age || $age->gt($cutoff)) {
+                return;
+            }
+
+            $locked->update([
+                'status' => VendorWithdrawal::STATUS_FAILED,
+                'payout_status' => 'failed',
+                'error_message' => 'Auto-cancelled after ' . $minutes . ' minutes in processing',
+            ]);
+
+            if ($locked->refunded_at === null) {
+                $vendor = Vendor::whereKey($locked->vendor_id)->lockForUpdate()->first();
+                if ($vendor) {
+                    $vendor->increment('wallet_balance', $locked->amount);
+                }
+                $locked->update(['refunded_at' => now()]);
+
+                Log::warning('Vendor withdrawal auto-cancelled due to processing timeout', [
+                    'withdrawal_id' => $locked->id,
+                    'vendor_id' => $locked->vendor_id,
+                    'amount' => $locked->amount,
+                    'minutes' => $minutes,
+                ]);
+            }
+        });
+    }
+})->everyMinute()->name('withdrawals:cancel-stale');
 
 // Manual queue runner (admin-triggered flag + scheduler bridge).
 // This avoids shell execution from HTTP and works on shared hosting.
