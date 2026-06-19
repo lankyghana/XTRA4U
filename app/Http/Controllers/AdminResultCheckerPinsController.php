@@ -44,7 +44,7 @@ class AdminResultCheckerPinsController extends Controller
         return view('admin.result_checkers.pins', [
             'pins' => $pins,
             'services' => $services,
-            'selectedService' => $serviceId,
+            'selectedService' => $service,
             'selectedStatus' => $status,
             'pricingTiers' => $pricingTiers,
         ]);
