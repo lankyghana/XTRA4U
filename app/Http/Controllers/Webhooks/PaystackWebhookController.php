@@ -78,9 +78,8 @@ class PaystackWebhookController extends Controller
             return response()->json(['success' => true, 'message' => 'Not successful']);
         }
 
-        // Paystack returns amount in pesewas/kobo
-        $verifiedAmount = PaystackPaymentService::normalizeAmount((float) data_get($verification, 'data.amount', 0));
-
+        // The verifyPayment() method already normalizes the amount to major units (GHS)
+        $verifiedAmount = (float) data_get($verification, 'data.amount', 0);
         // 5. Route the payment to the correct fulfillment logic
         
         // Check Orders
@@ -147,13 +146,14 @@ class PaystackWebhookController extends Controller
             }
 
             $vendorId = (int) $topupRecord->vendor_id;
-            // Use the authoritative verified amount, fallback to the initiated record
-            $amount = $verifiedAmount > 0 ? $verifiedAmount : (float) $topupRecord->amount;
+            $initiatedAmount = (float) $topupRecord->amount;
 
-            if ($vendorId > 0 && $amount > 0) {
+            // Ensure the amount paid on the gateway is at least the initiated amount (accounting for fees)
+            // Always credit the wallet with the originally requested amount.
+            if ($vendorId > 0 && $initiatedAmount > 0 && round($verifiedAmount, 2) >= round($initiatedAmount, 2)) {
                 $credited = false;
-                DB::transaction(function () use ($vendorId, $amount, $reference, &$credited, $verification, $walletService) {
-                    $credited = $walletService->creditVendor($vendorId, $amount, ['reference' => $reference]);
+                DB::transaction(function () use ($vendorId, $initiatedAmount, $reference, &$credited, $verification, $walletService) {
+                    $credited = $walletService->creditVendor($vendorId, $initiatedAmount, ['reference' => $reference]);
                     if ($credited) {
                         WalletTopup::where('reference', $reference)->update([
                             'status' => 'completed',
