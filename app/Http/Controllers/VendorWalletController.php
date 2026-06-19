@@ -217,7 +217,7 @@ class VendorWalletController extends Controller
         $initiatedAmount = (float) $topupRecord->amount;
         // compare rounded to 2 decimals to avoid floating point noise
 
-        if (round($initiatedAmount, 2) !== round($amount, 2)) {
+        if (round($amount, 2) < round($initiatedAmount, 2)) {
             Log::error('Wallet topup amount mismatch', ['reference' => $reference, 'initiated' => $initiatedAmount, 'reported' => $amount, 'status' => $status]);
             if ($request->wantsJson() || $request->ajax()) {
                 return response()->json(['success' => false, 'message' => 'Amount mismatch.']);
@@ -226,9 +226,10 @@ class VendorWalletController extends Controller
         }
 
         // Credit vendor wallet and ledger in a transaction and mark topup completed.
+        // Always credit the originally requested amount, ignoring additional gateway fees.
         $credited = false;
-        DB::transaction(function () use ($vendorId, $amount, $reference, &$credited) {
-            $credited = $this->walletService->creditVendor($vendorId, $amount, ['reference' => $reference]);
+        DB::transaction(function () use ($vendorId, $initiatedAmount, $reference, &$credited) {
+            $credited = $this->walletService->creditVendor($vendorId, $initiatedAmount, ['reference' => $reference]);
             if ($credited) {
                 // update DB topup record if present
                 $topupRecord = WalletTopup::where('reference', $reference)->first();
@@ -463,12 +464,13 @@ class VendorWalletController extends Controller
             // If we have a record and it's not completed, attempt to credit
             if ($topupRecord && $topupRecord->status !== 'completed') {
                 $vendorId = (int) $topupRecord->vendor_id;
-                $amount = (float) ($data['amount'] ?? ($topupRecord->amount ?? 0));
+                $reportedAmount = (float) ($data['amount'] ?? 0);
+                $initiatedAmount = (float) $topupRecord->amount;
 
-                if ($vendorId > 0 && $amount > 0) {
+                if ($vendorId > 0 && $initiatedAmount > 0 && round($reportedAmount, 2) >= round($initiatedAmount, 2)) {
                     $credited = false;
-                    DB::transaction(function () use ($vendorId, $amount, $reference, &$credited, $result) {
-                        $credited = $this->walletService->creditVendor($vendorId, $amount, ['reference' => $reference]);
+                    DB::transaction(function () use ($vendorId, $initiatedAmount, $reference, &$credited, $result) {
+                        $credited = $this->walletService->creditVendor($vendorId, $initiatedAmount, ['reference' => $reference]);
                         if ($credited) {
                             $tr = WalletTopup::where('reference', $reference)->first();
                             if ($tr) {
@@ -478,6 +480,7 @@ class VendorWalletController extends Controller
                                 ]);
                             }
                             Cache::forget("wallet_topup:{$reference}");
+                            Cache::forget("vendor:{$vendorId}:topups_available");
                         }
                     });
                     if ($credited) {
