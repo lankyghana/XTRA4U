@@ -240,6 +240,8 @@ class VendorWalletController extends Controller
                 }
                 // remove cached mapping
                 Cache::forget("wallet_topup:{$reference}");
+                // Invalidate the balance cache so the next call to balance() returns fresh data
+                Cache::forget("vendor:{$vendorId}:topups_available");
             }
         });
 
