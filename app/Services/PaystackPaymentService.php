@@ -5,6 +5,8 @@ use App\Contracts\Gateways\CollectsPayments;
 use App\Contracts\Gateways\HandlesGenericPayments;
 use App\Models\Order;
 use App\Models\PaymentGatewayConfig;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -38,9 +40,13 @@ class PaystackPaymentService implements CollectsPayments, HandlesGenericPayments
      */
     protected function getHttpClient()
     {
+        // Timeout reduced to 15s (from 30s): Paystack's API is fast when reachable;
+        // a 30s hang only happens when something is genuinely wrong.
+        // Retries are limited to ConnectionException only — retrying on Paystack 4xx
+        // responses (e.g. "transaction not found") wastes time and changes nothing.
         $client = Http::withToken($this->secretKey)
-            ->timeout(30)
-            ->retry(2, 100);
+            ->timeout(15)
+            ->retry(2, 200, fn ($e) => $e instanceof ConnectionException);
 
         // Only disable SSL verification in local development
         if (app()->environment('local', 'development', 'testing')) {
@@ -187,6 +193,17 @@ class PaystackPaymentService implements CollectsPayments, HandlesGenericPayments
      */
     public function verifyPayment(string $reference): array
     {
+        // Fast-path: if the Paystack webhook already verified this reference and
+        // cached the result, return it instantly without a round-trip to Paystack.
+        // The webhook fires *before* the user is redirected back, so in the normal
+        // happy path this cache entry will already exist.
+        $cacheKey = 'paystack_verify:' . $reference;
+        $cached = Cache::get($cacheKey);
+        if (is_array($cached) && ($cached['success'] ?? false)) {
+            Log::debug('Paystack verifyPayment: serving from cache', ['reference' => $reference]);
+            return $cached;
+        }
+
         try {
             $response = $this->getHttpClient()
                 ->get($this->paymentUrl . '/transaction/verify/' . $reference);
@@ -198,11 +215,17 @@ class PaystackPaymentService implements CollectsPayments, HandlesGenericPayments
                     $payloadData['amount'] = $payloadData['amount'] / 100;
                 }
 
-                return [
+                $result = [
                     'success' => true,
                     'message' => $data['message'] ?? 'Payment verified.',
                     'data' => $payloadData,
                 ];
+
+                // Cache the successful result so subsequent calls (e.g. repeated
+                // callback page loads) skip the API entirely.
+                Cache::put($cacheKey, $result, now()->addMinutes(15));
+
+                return $result;
             }
             return [
                 'success' => false,

@@ -32,6 +32,18 @@ class PaymentCallbackController extends Controller
 			return response()->json(['success' => false, 'message' => 'Order not found for reference'], 404);
 		}
 
+		// Fast-path: the Paystack webhook fires before the redirect and marks the
+		// order as paid in the DB. If we see payment_status = 'paid'/'completed' here
+		// we can skip the Paystack API call entirely — the source of truth (our DB)
+		// already confirms the payment succeeded.
+		if (in_array($order->payment_status, ['paid', 'completed'], true)) {
+			Log::info('Payment callback: order already paid, skipping re-verification', [
+				'reference' => $reference,
+				'order_id'  => $order->id,
+			]);
+			return redirect()->route('checkout.success', ['order' => $order->id]);
+		}
+
 		$verification = $this->paymentService->checkPaymentStatus($reference);
 		if (! ($verification['success'] ?? false)) {
 			Log::warning('Payment verification failed', ['reference' => $reference, 'response' => $verification]);

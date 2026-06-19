@@ -66,6 +66,12 @@ class PaystackWebhookController extends Controller
             return response()->json(['success' => true, 'message' => 'Verification failed']);
         }
 
+        // Cache the successful verification so the redirect callback can serve it
+        // instantly without another round-trip to Paystack. The webhook fires before
+        // Paystack redirects the user, so this cache entry will typically be ready
+        // by the time PaymentCallbackController::handle() runs.
+        Cache::put('paystack_verify:' . $reference, $verification, now()->addMinutes(15));
+
         $status = strtolower((string) data_get($verification, 'data.status', 'unknown'));
         if (!in_array($status, ['success', 'successful', 'paid', 'completed'], true)) {
             // Not a successful payment according to the API
