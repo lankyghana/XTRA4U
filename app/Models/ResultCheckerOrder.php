@@ -20,6 +20,7 @@ class ResultCheckerOrder extends Model
         'quantity',
         'unit_price',
         'total_price',
+        'vendor_profit',
         'delivered_pins_json',
         'status',
         'payment_reference',
@@ -32,7 +33,8 @@ class ResultCheckerOrder extends Model
     protected $casts = [
         'unit_price' => 'decimal:2',
         'total_price' => 'decimal:2',
-        'delivered_pins_json' => 'array',
+        'vendor_profit' => 'decimal:2',
+        'delivered_pins_json' => 'encrypted:array',
         'paid_at' => 'datetime',
         'fulfilled_at' => 'datetime',
         'sms_sent_at' => 'datetime',
@@ -60,7 +62,7 @@ class ResultCheckerOrder extends Model
 
     public function isPaid(): bool
     {
-        return $this->paid_at !== null;
+        return $this->paid_at !== null && $this->status !== 'failed';
     }
 
     public function isFulfilled(): bool
