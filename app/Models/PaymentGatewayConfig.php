@@ -89,7 +89,7 @@ class PaymentGatewayConfig extends Model
                 'supports_collection' => true,
                 'supports_generic' => true,
                 'supports_payout' => true,
-                'supports_sms' => false,
+                'supports_sms' => true,
                 'supports_webhook' => true,
             ],
         ];
@@ -293,7 +293,7 @@ class PaymentGatewayConfig extends Model
 
             self::GATEWAY_MOOLRE => [
                 'name' => 'Moolre',
-                'types' => [self::TYPE_PAYMENT_COLLECTION, self::TYPE_PAYOUT],
+                'types' => [self::TYPE_PAYMENT_COLLECTION, self::TYPE_PAYOUT, self::TYPE_SMS],
                 // Use inline/embed flow where the payment UI can be embedded
                 // in an iframe/modal so customers don't leave our site.
                 'collection_flow' => 'inline',
@@ -318,16 +318,24 @@ class PaymentGatewayConfig extends Model
                         'currency' => 'Currency',
                         'base_url' => 'Base URL',
                     ],
+                    self::TYPE_SMS => [
+                        'api_user'  => 'API Username',
+                        'vas_key'   => 'VAS Key (SMS)',
+                        'sender_id' => 'Sender ID (max 11 chars)',
+                        'base_url'  => 'Base URL',
+                    ],
                 ],
                 'default_config' => [
                     'base_url' => 'https://api.moolre.com',
                     'currency' => 'GHS',
+                    'sender_id' => 'XTRA4U',
                 ],
                 'supported_features' => [
                     'mobile_money' => true,
                     'mtn_momo' => true,
                     'telecel_momo' => true,
                     'airteltigo_momo' => true,
+                    'sms' => true,
                     'webhook' => true,
                 ],
             ],
@@ -391,6 +399,14 @@ class PaymentGatewayConfig extends Model
             if ($this->gateway_name === self::GATEWAY_MOOLRE
                 && $this->gateway_type === self::TYPE_PAYMENT_COLLECTION
                 && in_array($field, ['webhook_secret', 'public_key', 'api_key'], true)
+            ) {
+                continue;
+            }
+
+            // For Moolre SMS, base_url has a default so treat it as optional if empty.
+            if ($this->gateway_name === self::GATEWAY_MOOLRE
+                && $this->gateway_type === self::TYPE_SMS
+                && $field === 'base_url'
             ) {
                 continue;
             }

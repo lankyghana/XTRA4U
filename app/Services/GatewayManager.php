@@ -329,9 +329,10 @@ class GatewayManager
             return null;
         }
 
-        // Only BulkClix is wired to the SmsService contract in this codebase.
+        // Only BulkClix and Moolre are wired to the SmsService contract in this codebase.
         return match ($config->gateway_name) {
             PaymentGatewayConfig::GATEWAY_BULKCLIX => new SmsService($config),
+            PaymentGatewayConfig::GATEWAY_MOOLRE   => new SmsService($config),
             default => null,
         };
     }

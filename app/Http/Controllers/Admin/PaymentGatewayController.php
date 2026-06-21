@@ -422,7 +422,15 @@ class PaymentGatewayController extends Controller
                     if (isset($configData['base_url']) && $configData['base_url'] !== '') {
                         $envContent = $this->setEnvValue($envContent, 'MOOLRE_BASE_URL', $configData['base_url']);
                     }
+                    // SMS-specific credentials
+                    if (isset($configData['vas_key']) && $configData['vas_key'] !== '') {
+                        $envContent = $this->setEnvValue($envContent, 'MOOLRE_VAS_KEY', $configData['vas_key']);
+                    }
+                    if (isset($configData['sender_id']) && $configData['sender_id'] !== '') {
+                        $envContent = $this->setEnvValue($envContent, 'MOOLRE_SENDER_ID', $configData['sender_id']);
+                    }
                     break;
+
 
                 case 'flutterwave':
                     if (isset($configData['public_key'])) {
