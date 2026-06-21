@@ -21,11 +21,13 @@
             return {
                 // State properties
                 vendorId: opts.vendorId || null,
+                vendorPhone: opts.vendorPhone || '',
                 categories: opts.categories || [],
                 services: opts.services || [],
                 selectedCategory: null,
                 selectedService: null,
                 selectedPackage: null,
+                quantity: 1,
                 showAllPackages: true,
                 step: 1,
                 submitting: false,
@@ -47,7 +49,9 @@
                 paymentFailureMessage: '',
                 loadingServices: false,
                 loadingPackages: false,
+                loadingPackages: false,
                 orderRoute: opts.orderRoute || '',
+                resultCheckerOrderRoute: opts.resultCheckerOrderRoute || '',
 
                 // Getters
                 get filteredServices() {
@@ -210,6 +214,7 @@
                     }
                     
                     this.selectedPackage = pkg;
+                    this.quantity = 1;
                     this.showAllPackages = false;
                     this.step = 4;
 
@@ -288,20 +293,42 @@
                         this.orderMessage = 'Initiating payment… Please wait for the MoMo prompt.';
                     }
 
-                    const payload = {
-                        vendor_id: this.vendorId,
-                        category_id: this.selectedCategory?.value,
-                        service_id: this.selectedService?.key,
-                        service_name: this.selectedService?.name || null,
-                        package_id: this.selectedPackage?.id,
-                        package_name: this.selectedPackage?.name || this.selectedPackage?.title || null,
-                        service_purchased: this.selectedPackage?.name || this.selectedPackage?.title || this.selectedService?.name || null,
-                        amount: this.selectedPackage?.price,
-                        recipient_phone: this.recipientPhone,
-                        is_reseller_product: this.selectedPackage?.is_reseller_product ? 1 : 0,
-                        reseller_product_id: this.selectedPackage?.reseller_product_id || null,
-                        original_product_id: this.selectedPackage?.original_product_id || this.selectedPackage?.id,
-                    };
+                    const isResultChecker = !!this.selectedPackage?.is_results_checker;
+                    let targetRoute = this.orderRoute;
+                    let payload = {};
+
+                    if (isResultChecker) {
+                        if (this.quantity > 2) {
+                            this.orderMessage = 'For bulk orders (more than 2), please contact the vendor at ' + (this.vendorPhone || 'their phone number') + '.';
+                            this.submitting = false;
+                            this.paymentInitiating = false;
+                            this.paymentPolling = false;
+                            return;
+                        }
+
+                        targetRoute = this.resultCheckerOrderRoute;
+                        payload = {
+                            service_id: this.selectedPackage.service_id,
+                            quantity: this.quantity,
+                            customer_phone: this.recipientPhone,
+                            customer_name: ''
+                        };
+                    } else {
+                        payload = {
+                            vendor_id: this.vendorId,
+                            category_id: this.selectedCategory?.value,
+                            service_id: this.selectedService?.key,
+                            service_name: this.selectedService?.name || null,
+                            package_id: this.selectedPackage?.id,
+                            package_name: this.selectedPackage?.name || this.selectedPackage?.title || null,
+                            service_purchased: this.selectedPackage?.name || this.selectedPackage?.title || this.selectedService?.name || null,
+                            amount: this.selectedPackage?.price,
+                            recipient_phone: this.recipientPhone,
+                            is_reseller_product: this.selectedPackage?.is_reseller_product ? 1 : 0,
+                            reseller_product_id: this.selectedPackage?.reseller_product_id || null,
+                            original_product_id: this.selectedPackage?.original_product_id || this.selectedPackage?.id,
+                        };
+                    }
 
                     if (this.requiresInlineMomo) {
                         payload.payer_phone = this.payerPhone;
@@ -309,7 +336,7 @@
                     }
 
                     try {
-                        const res = await fetch(this.orderRoute, {
+                        const res = await fetch(targetRoute, {
                             method: 'POST',
                             credentials: 'same-origin',
                             headers: {

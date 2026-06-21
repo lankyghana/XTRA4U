@@ -350,6 +350,9 @@ Route::middleware('prune.purchase.tokens')->group(function () {
 Route::post('/webhooks/moolre/payment', [\App\Http\Controllers\Webhooks\MoolreWebhookController::class, 'handle'])
     ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
     ->name('webhooks.moolre.payment');
+Route::post('/api/ussd', [\App\Http\Controllers\Api\UssdController::class, 'handle'])
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
+    ->name('api.ussd');
 // Client-side polling endpoint for inline embed/iframe payment flows
 Route::get('/payment/status/{reference}', [\App\Http\Controllers\PaymentStatusController::class, 'status'])
     ->name('payment.status');
@@ -422,6 +425,8 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
             ->name('orders.retry');
         Route::post('orders/{order}/mark-failed', [\App\Http\Controllers\AdminResultCheckerOrdersController::class, 'markFailed'])
             ->name('orders.mark-failed');
+        Route::patch('orders/{order}/status', [\App\Http\Controllers\AdminResultCheckerOrdersController::class, 'updateStatus'])
+            ->name('orders.update-status');
     });
 
     // Manual Queue Run Trigger (scheduler-bridge)
