@@ -17,7 +17,10 @@
         initialPaymentFailed: {{ session('payment_failed') ? 'true' : 'false' }},
         initialPaymentFailureMessage: {!! json_encode(session('payment_message') ?? null) !!},
         orderRoute: '{{ route('checkout.process') }}',
-        verifyRoute: '{{ route('checkout.verify') }}'
+        verifyRoute: '{{ route('checkout.verify') }}',
+        vendorCode: '{{ $vendor->vendor_code ?? '' }}',
+        vendorPhone: '{{ $vendor->phone_number ?? '' }}',
+        resultCheckerOrderRoute: '{{ route('result-checkers.checkout', ['vendor' => $vendor->vendor_code ?? '']) }}'
     };
 </script>
 <div class="w-full max-w-full md:max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-24 md:pb-0"
@@ -300,7 +303,7 @@
                     <div>Package:</div><div class="font-medium" x-text="selectedPackage?.size || selectedPackage?.name || selectedPackage?.title"></div>
                 </div>
                 <div class="flex justify-between text-lg text-purple-700 font-bold mt-4">
-                    <div>Price:</div><div x-text="formatCurrency(selectedPackage?.price)"></div>
+                    <div>Price:</div><div x-text="formatCurrency(selectedPackage?.price * (selectedPackage?.is_results_checker ? quantity : 1))"></div>
                 </div>
             </div>
 
@@ -315,6 +318,13 @@
                 <input type="hidden" name="is_reseller_product" :value="selectedPackage?.is_reseller_product ? 1 : 0">
                 <input type="hidden" name="reseller_product_id" :value="selectedPackage?.reseller_product_id">
                 <input type="hidden" name="original_product_id" :value="selectedPackage?.original_product_id">
+
+                {{-- Quantity (Only for Result Checkers) --}}
+                <div class="mb-3" x-show="selectedPackage?.is_results_checker" x-cloak>
+                    <label for="quantity" class="block text-sm text-gray-600 mb-1">Quantity</label>
+                    <input type="number" id="quantity" name="quantity" x-model.number="quantity" min="1"
+                        class="w-full border border-gray-200 rounded-lg p-3 focus:ring-2 focus:ring-purple-300">
+                </div>
 
                 {{-- minimal checkout fields (recipient phone) --}}
                 <div class="mb-3">

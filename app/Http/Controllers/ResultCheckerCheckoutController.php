@@ -28,6 +28,8 @@ class ResultCheckerCheckoutController extends Controller
             'quantity' => ['required', 'integer', 'min:1', 'max:100'],
             'customer_phone' => ['required', 'string', 'max:20'],
             'customer_name' => ['nullable', 'string', 'max:100'],
+            'payer_phone' => ['nullable', 'string', 'max:20'],
+            'payer_network' => ['nullable', 'string', 'max:20'],
         ]);
 
         try {
@@ -57,6 +59,7 @@ class ResultCheckerCheckoutController extends Controller
 
                 // Calculate pricing
                 $basePrice = $service->getPriceForQuantity((int) $validated['quantity']);
+                $vendorProfit = $vendorSetting->profit_amount * $validated['quantity'];
                 $unitPrice = $basePrice + $vendorSetting->profit_amount;
                 $totalPrice = $unitPrice * $validated['quantity'];
 
@@ -69,6 +72,7 @@ class ResultCheckerCheckoutController extends Controller
                     'quantity' => $validated['quantity'],
                     'unit_price' => $unitPrice,
                     'total_price' => $totalPrice,
+                    'vendor_profit' => $vendorProfit,
                     'status' => 'pending_payment',
                 ]);
 
@@ -80,14 +84,24 @@ class ResultCheckerCheckoutController extends Controller
                 ]);
 
                 // Generate a unique email for the transaction (we don't have user email)
-                $email = $validated['customer_phone'] . '@xtra4u.local';
+                // Using .com instead of .local because gateways like Paystack reject .local domains.
+                $email = $validated['customer_phone'] . '@xtra4u.com';
 
-                // Initiate payment via gateway
-                $paymentResult = $this->gatewayManager->collect(
-                    $order,
-                    $email,
-                    $totalPrice
-                );
+                // Create a unique reference for the order
+                $reference = 'XTRA4U-RC-' . strtoupper(uniqid()) . '-' . $order->id;
+
+                // Initiate payment via gateway (use genericPayment since collect expects an Order model)
+                $paymentResult = $this->gatewayManager->genericPayment([
+                    'email' => $email,
+                    'amount' => $totalPrice,
+                    'callback_url' => route('result-checkers.payment.callback', ['order' => $order->id]),
+                    'reference' => $reference,
+                    'metadata' => [
+                        'phone_number' => $order->customer_phone,
+                        'payer_phone' => $validated['payer_phone'] ?? null,
+                        'payer_network' => $validated['payer_network'] ?? null,
+                    ],
+                ]);
 
                 // Store the payment reference on the order
                 if ($paymentResult['reference'] ?? null) {
@@ -108,10 +122,13 @@ class ResultCheckerCheckoutController extends Controller
                 }
 
                 // Payment initiation succeeded
+                // Payment initiation succeeded
                 return response()->json([
                     'success' => true,
                     'message' => 'Checkout initiated',
                     'order_id' => $order->id,
+                    'reference' => $paymentResult['reference'] ?? null,
+                    'redirect' => $paymentResult['authorization_url'] ?? null,
                     'payment_data' => [
                         'authorization_url' => $paymentResult['authorization_url'] ?? null,
                         'inline_form' => $paymentResult['inline_form'] ?? null,

@@ -78,23 +78,35 @@ class StorefrontController extends Controller
 
 		$services = $this->buildServicePayload($products, $defaultCategory);
 		
-		// Add Result Checker NetworkServices to the services collection
-		$resultCheckers = NetworkService::where('service_type', 'results_checker')
+		// Add Result Checker NetworkServices to the services collection.
+		// Only show checkers where the vendor has an active setting (i.e. has configured a profit margin).
+		// The displayed price is the vendor's selling price = base_price + profit_amount.
+		$vendorCheckerSettings = \App\Models\VendorResultCheckerSetting::where('vendor_id', $vendor->id)
 			->where('is_active', true)
+			->with('service')
 			->get();
-		
-		foreach ($resultCheckers as $checker) {
+
+		foreach ($vendorCheckerSettings as $setting) {
+			$checker = $setting->service;
+
+			// Skip if the underlying service has been deleted or deactivated by admin
+			if (!$checker || !$checker->is_active) {
+				continue;
+			}
+
+			$sellingPrice = (float) ($checker->base_price ?? 0) + (float) ($setting->profit_amount ?? 0);
+
 			$resultCheckerService = [
 				'key' => 'results_checker_' . $checker->id,
 				'name' => $checker->name,
 				'category' => $checker->category,
-				'logo' => $checker->image_path ?? '/images/default-provider.png',
+				'logo' => $checker->image_url ?? '/images/default-provider.png',
 				'is_results_checker' => true,
 				'packages' => [
 					[
 						'id' => 'result_checker_' . $checker->id,
 						'name' => $checker->name,
-						'price' => (float) ($checker->base_price ?? 0),
+						'price' => $sellingPrice,
 						'size' => null,
 						'validity' => null,
 						'tag' => null,

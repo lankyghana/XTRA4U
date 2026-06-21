@@ -188,7 +188,7 @@ function resultCheckerStatusChecker() {
             this.order = null;
 
             try {
-                const response = await fetch('{{ route("result-checkers.check") }}', {
+                const response = await fetch('{{ route("result-checkers.status.check") }}', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
