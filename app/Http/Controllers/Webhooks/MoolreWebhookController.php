@@ -74,6 +74,7 @@ class MoolreWebhookController extends Controller
 
         $order = Order::where('payment_reference', $externalRef)->first();
         $registration = null;
+        $resultCheckerOrder = null;
 
         if (!$order) {
             // Support generic payments (e.g., AFA registrations) which use externalref/payment_reference too.
@@ -83,13 +84,24 @@ class MoolreWebhookController extends Controller
                 ->first();
 
             if (!$registration) {
-                Log::warning('Moolre webhook: order/afa registration not found', ['externalref' => $externalRef]);
-                // Return 200 to avoid endless retries.
-                return response()->json(['success' => true, 'message' => 'OK']);
+                $resultCheckerOrder = \App\Models\ResultCheckerOrder::query()
+                    ->where('payment_reference', $externalRef)
+                    ->first();
+
+                if (!$resultCheckerOrder) {
+                    Log::warning('Moolre webhook: order/afa registration/result checker not found', ['externalref' => $externalRef]);
+                    // Return 200 to avoid endless retries.
+                    return response()->json(['success' => true, 'message' => 'OK']);
+                }
             }
 
             // Idempotency: ignore already-completed AFA registrations.
-            if ($registration->payment_status === AfaRegistration::PAYMENT_COMPLETED) {
+            if ($registration && $registration->payment_status === AfaRegistration::PAYMENT_COMPLETED) {
+                return response()->json(['success' => true, 'message' => 'Already processed']);
+            }
+
+            // Idempotency: ignore already-completed Result Checker orders.
+            if ($resultCheckerOrder && in_array($resultCheckerOrder->status, ['completed', 'failed'], true)) {
                 return response()->json(['success' => true, 'message' => 'Already processed']);
             }
         } else {
@@ -126,9 +138,20 @@ class MoolreWebhookController extends Controller
                 return response()->json(['success' => true, 'message' => 'Processed']);
             }
 
-            // AFA registration completion
-            $afaPaymentService->completeRegistration($registration);
-            return response()->json(['success' => true, 'message' => 'Processed']);
+            if ($registration) {
+                // AFA registration completion
+                $afaPaymentService->completeRegistration($registration);
+                return response()->json(['success' => true, 'message' => 'Processed']);
+            }
+
+            if ($resultCheckerOrder) {
+                app(\App\Services\ResultCheckerService::class)->handlePaymentCallback(
+                    $resultCheckerOrder,
+                    $externalRef,
+                    PaymentGatewayConfig::GATEWAY_MOOLRE
+                );
+                return response()->json(['success' => true, 'message' => 'Processed']);
+            }
         }
 
         if ($status === 'failed') {
@@ -145,12 +168,19 @@ class MoolreWebhookController extends Controller
                 return response()->json(['success' => true, 'message' => 'Failure recorded']);
             }
 
-            $registration->update([
-                'payment_status' => AfaRegistration::PAYMENT_FAILED,
-                'status' => AfaRegistration::STATUS_CANCELLED,
-            ]);
+            if ($registration) {
+                $registration->update([
+                    'payment_status' => AfaRegistration::PAYMENT_FAILED,
+                    'status' => AfaRegistration::STATUS_CANCELLED,
+                ]);
 
-            return response()->json(['success' => true, 'message' => 'Failure recorded']);
+                return response()->json(['success' => true, 'message' => 'Failure recorded']);
+            }
+
+            if ($resultCheckerOrder) {
+                $resultCheckerOrder->update(['status' => 'failed']);
+                return response()->json(['success' => true, 'message' => 'Failure recorded']);
+            }
         }
 
         // Pending/unknown: do nothing; later webhook or polling will resolve.
