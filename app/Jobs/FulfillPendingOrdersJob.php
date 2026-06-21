@@ -28,7 +28,7 @@ class FulfillPendingOrdersJob implements ShouldQueue
             $query->where('service_id', $this->serviceId);
         }
 
-        $orders = $query->get();
+        $orders = $query->cursor();
 
         foreach ($orders as $order) {
             $resultCheckerService->handlePaymentSuccess($order);

@@ -13,36 +13,53 @@ class SmsService
     protected string $baseUrl;
     protected ?PaymentGatewayConfig $config;
 
+    /** Which SMS provider is active: 'bulkclix' | 'moolre' */
+    protected string $gateway;
+
+    // Moolre-specific credentials
+    protected ?string $apiUser;
+    protected ?string $vasKey;
+
     public function __construct(?PaymentGatewayConfig $config = null)
     {
         $this->config = $config ?? PaymentGatewayConfig::getDefault(PaymentGatewayConfig::TYPE_SMS);
-        
-        if ($this->config && $this->config->gateway_name === PaymentGatewayConfig::GATEWAY_BULKCLIX) {
-            $this->apiKey = $this->config->getConfig('api_key');
-            $this->senderId = $this->config->getConfig('sender_id', 'XTRA4U');
-            $this->baseUrl = $this->config->getConfig('base_url', 'https://bulkclix.com/api/v1');
+
+        if ($this->config && $this->config->gateway_name === PaymentGatewayConfig::GATEWAY_MOOLRE) {
+            // ── Moolre SMS ──────────────────────────────────────────────────
+            $this->gateway  = 'moolre';
+            $this->apiUser  = $this->config->getConfig('api_user');
+            $this->vasKey   = $this->config->getConfig('vas_key');
+            $this->senderId = (string) $this->config->getConfig('sender_id', 'XTRA4U');
+            $this->baseUrl  = rtrim((string) $this->config->getConfig('base_url', 'https://api.moolre.com'), '/');
+            $this->apiKey   = null; // not used for Moolre SMS
+        } elseif ($this->config && $this->config->gateway_name === PaymentGatewayConfig::GATEWAY_BULKCLIX) {
+            // ── BulkClix SMS ─────────────────────────────────────────────────
+            $this->gateway  = 'bulkclix';
+            $this->apiKey   = $this->config->getConfig('api_key');
+            $this->senderId = (string) $this->config->getConfig('sender_id', 'XTRA4U');
+            $this->baseUrl  = (string) $this->config->getConfig('base_url', 'https://bulkclix.com/api/v1');
+            $this->apiUser  = null;
+            $this->vasKey   = null;
         } else {
-            // Fallback to .env if no database config
-            $this->apiKey = config('services.bulkclix.api_key');
+            // ── Fallback to .env (BulkClix legacy) ──────────────────────────
+            $this->gateway  = 'bulkclix';
+            $this->apiKey   = config('services.bulkclix.api_key');
             $this->senderId = config('services.bulkclix.sender_id', 'XTRA4U');
-            $this->baseUrl = config('services.bulkclix.base_url', 'https://bulkclix.com/api/v1');
+            $this->baseUrl  = config('services.bulkclix.base_url', 'https://bulkclix.com/api/v1');
+            $this->apiUser  = null;
+            $this->vasKey   = null;
         }
     }
 
     /**
-     * Get HTTP client with proper SSL configuration
-     * - Production: Full SSL verification enabled
-     * - Local/Development: SSL verification disabled (Windows CA cert issues)
+     * Get HTTP client with proper SSL configuration.
+     * Production: full SSL verification enabled.
+     * Local/development: SSL verification disabled (Windows CA cert issues).
      */
-    protected function getHttpClient()
+    protected function getHttpClient(array $headers)
     {
-        $client = Http::withHeaders([
-            'Authorization' => 'Bearer ' . $this->apiKey,
-            'Content-Type' => 'application/json',
-            'Accept' => 'application/json',
-        ])->timeout(30)->retry(2, 100);
+        $client = Http::withHeaders($headers)->timeout(30)->retry(2, 100);
 
-        // Only disable SSL verification in local development
         if (app()->environment('local', 'development', 'testing')) {
             $client = $client->withOptions(['verify' => false]);
         }
@@ -51,9 +68,18 @@ class SmsService
     }
 
     /**
-     * Send an SMS message via BulkClix API
+     * Send an SMS message via the configured provider.
      */
     public function send(string $to, string $message): bool
+    {
+        return $this->gateway === 'moolre'
+            ? $this->sendViaMoolre($to, $message)
+            : $this->sendViaBulkClix($to, $message);
+    }
+
+    // ─── BulkClix ────────────────────────────────────────────────────────────
+
+    protected function sendViaBulkClix(string $to, string $message): bool
     {
         if (empty($this->apiKey)) {
             Log::warning('BulkClix SMS: API key not configured');
@@ -61,34 +87,35 @@ class SmsService
         }
 
         try {
-            // Format phone number (remove leading 0, add country code if needed)
-            $formattedPhone = $this->formatPhoneNumber($to);
+            $formattedPhone = $this->formatPhoneForBulkClix($to);
 
-            $response = $this->getHttpClient()
-                ->post($this->baseUrl . '/sms/send', [
-                    'sender_id' => $this->senderId,
-                    'recipient' => $formattedPhone,
-                    'message' => $message,
-                ]);
+            $response = $this->getHttpClient([
+                'Authorization' => 'Bearer ' . $this->apiKey,
+                'Content-Type'  => 'application/json',
+                'Accept'        => 'application/json',
+            ])->post($this->baseUrl . '/sms/send', [
+                'sender_id' => $this->senderId,
+                'recipient' => $formattedPhone,
+                'message'   => $message,
+            ]);
 
             if ($response->successful()) {
                 Log::info('BulkClix SMS sent successfully', [
-                    'to' => $formattedPhone,
+                    'to'              => $formattedPhone,
                     'message_preview' => substr($message, 0, 50) . '...',
                 ]);
                 return true;
             }
 
             Log::error('BulkClix SMS failed', [
-                'to' => $formattedPhone,
-                'status' => $response->status(),
+                'to'       => $formattedPhone,
+                'status'   => $response->status(),
                 'response' => $response->json(),
             ]);
-
             return false;
         } catch (\Exception $e) {
             Log::error('BulkClix SMS exception', [
-                'to' => $to,
+                'to'    => $to,
                 'error' => $e->getMessage(),
             ]);
             return false;
@@ -96,19 +123,16 @@ class SmsService
     }
 
     /**
-     * Format phone number to international format
+     * Format phone number to international format for BulkClix (233XXXXXXXXX).
      */
-    protected function formatPhoneNumber(string $phone): string
+    protected function formatPhoneForBulkClix(string $phone): string
     {
-        // Remove all non-numeric characters
         $phone = preg_replace('/[^0-9]/', '', $phone);
 
-        // If starts with 0, replace with 233 (Ghana country code)
         if (str_starts_with($phone, '0')) {
             $phone = '233' . substr($phone, 1);
         }
 
-        // If doesn't start with country code, add Ghana code
         if (!str_starts_with($phone, '233') && strlen($phone) === 9) {
             $phone = '233' . $phone;
         }
@@ -116,8 +140,86 @@ class SmsService
         return $phone;
     }
 
+    // ─── Moolre ──────────────────────────────────────────────────────────────
+
+    protected function sendViaMoolre(string $to, string $message): bool
+    {
+        if (empty($this->vasKey) || empty($this->apiUser)) {
+            Log::warning('Moolre SMS: VAS Key or API User not configured');
+            return false;
+        }
+
+        try {
+            $formattedPhone = $this->formatPhoneForMoolre($to);
+            $ref            = 'XTRA4U-SMS-' . uniqid();
+
+            $response = $this->getHttpClient([
+                'X-API-USER'   => $this->apiUser,
+                'X-API-VASKEY' => $this->vasKey,
+                'Content-Type' => 'application/json',
+                'Accept'       => 'application/json',
+            ])->post($this->baseUrl . '/open/sms/send', [
+                'type'     => 1,
+                'senderid' => $this->senderId,
+                'messages' => [
+                    [
+                        'recipient' => $formattedPhone,
+                        'message'   => $message,
+                        'ref'       => $ref,
+                    ],
+                ],
+            ]);
+
+            $data      = $response->json();
+            $apiStatus = (int) ($data['status'] ?? 0);
+
+            if ($response->successful() && $apiStatus === 1) {
+                Log::info('Moolre SMS sent successfully', [
+                    'to'              => $formattedPhone,
+                    'ref'             => $ref,
+                    'message_preview' => substr($message, 0, 50) . '...',
+                ]);
+                return true;
+            }
+
+            Log::error('Moolre SMS failed', [
+                'to'       => $formattedPhone,
+                'status'   => $response->status(),
+                'code'     => $data['code'] ?? null,
+                'response' => $data,
+            ]);
+            return false;
+        } catch (\Exception $e) {
+            Log::error('Moolre SMS exception', [
+                'to'    => $to,
+                'error' => $e->getMessage(),
+            ]);
+            return false;
+        }
+    }
+
     /**
-     * Send order placement SMS to mobile money number
+     * Format phone number to international format for Moolre (233XXXXXXXXX).
+     */
+    protected function formatPhoneForMoolre(string $phone): string
+    {
+        $phone = preg_replace('/[^0-9]/', '', $phone);
+
+        if (str_starts_with($phone, '0')) {
+            $phone = '233' . substr($phone, 1);
+        }
+
+        if (!str_starts_with($phone, '233') && strlen($phone) === 9) {
+            $phone = '233' . $phone;
+        }
+
+        return $phone;
+    }
+
+    // ─── Shared helpers ───────────────────────────────────────────────────────
+
+    /**
+     * Send order placement SMS to mobile money number.
      */
     public function sendOrderPlacedSms(string $mobileMoneyNumber, string $orderId, string $recipientPhone, string $serviceName): bool
     {
@@ -132,7 +234,7 @@ class SmsService
     }
 
     /**
-     * Send order completion SMS to recipient phone number
+     * Send order completion SMS to recipient phone number.
      */
     public function sendOrderCompletedSms(string $recipientPhone, string $serviceName, string $orderId): bool
     {
@@ -146,18 +248,30 @@ class SmsService
     }
 
     /**
-     * Check if SMS service is properly configured
+     * Check if SMS service is properly configured.
      */
     public function isConfigured(): bool
     {
+        if ($this->gateway === 'moolre') {
+            return !empty($this->vasKey) && !empty($this->apiUser) && !empty($this->baseUrl);
+        }
+
         return !empty($this->apiKey) && !empty($this->baseUrl);
     }
 
     /**
-     * Get the current environment (sandbox/live)
+     * Get the current environment (sandbox/live).
      */
     public function getEnvironment(): string
     {
         return $this->config?->environment ?? 'sandbox';
+    }
+
+    /**
+     * Get the active gateway name.
+     */
+    public function getGateway(): string
+    {
+        return $this->gateway;
     }
 }
