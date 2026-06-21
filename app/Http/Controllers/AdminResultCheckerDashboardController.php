@@ -17,8 +17,14 @@ class AdminResultCheckerDashboardController extends Controller
             ])
             ->get();
 
+        $recentOrders = \App\Models\ResultCheckerOrder::with(['service', 'vendor'])
+            ->latest()
+            ->take(10)
+            ->get();
+
         return view('admin.result_checkers.dashboard', [
             'services' => $services,
+            'recentOrders' => $recentOrders,
         ]);
     }
 }

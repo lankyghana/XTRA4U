@@ -49,14 +49,17 @@ class VendorDashboardController extends Controller
 		$transactionAllTimeStats = $this->transactionService->getVendorTransactionStatsByFilter($vendorId, 'all_time');
 		$transactionAllTimeEarnings = (float) $transactionAllTimeStats['earnings'];
 		$afaAllTimeStats = $this->getAfaFilteredStats($vendorId, 'all_time');
-		$allTimeEarnings = $transactionAllTimeEarnings + $afaAllTimeStats['earnings'];
+		$rcAllTimeStats = $this->getResultCheckerFilteredStats($vendorId, 'all_time');
+		$allTimeEarnings = $transactionAllTimeEarnings + $afaAllTimeStats['earnings'] + $rcAllTimeStats['earnings'];
 		
 		// Default to "today" filter for display
 		$filter = request('filter', 'today');
 		$filteredStats = $this->transactionService->getVendorTransactionStatsByFilter($vendorId, $filter);
 		$afaFilteredStats = $this->getAfaFilteredStats($vendorId, $filter);
-		$totalSales = $filteredStats['sales'] + $afaFilteredStats['sales'];
-		$totalEarnings = $filteredStats['earnings'] + $afaFilteredStats['earnings'];
+		$rcFilteredStats = $this->getResultCheckerFilteredStats($vendorId, $filter);
+		
+		$totalSales = $filteredStats['sales'] + $afaFilteredStats['sales'] + $rcFilteredStats['sales'];
+		$totalEarnings = $filteredStats['earnings'] + $afaFilteredStats['earnings'] + $rcFilteredStats['earnings'];
 		$commissions = $filteredStats['commissions'];
 		
 		// Vendors must only see successfully-paid orders.
@@ -139,10 +142,11 @@ class VendorDashboardController extends Controller
 		$filter = request('filter', 'today');
 		$stats = $this->transactionService->getVendorTransactionStatsByFilter($vendorId, $filter);
 		$afaStats = $this->getAfaFilteredStats($vendorId, $filter);
+		$rcStats = $this->getResultCheckerFilteredStats($vendorId, $filter);
 		
 		return response()->json([
-			'sales' => number_format($stats['sales'] + $afaStats['sales'], 2),
-			'earnings' => number_format($stats['earnings'] + $afaStats['earnings'], 2),
+			'sales' => number_format($stats['sales'] + $afaStats['sales'] + $rcStats['sales'], 2),
+			'earnings' => number_format($stats['earnings'] + $afaStats['earnings'] + $rcStats['earnings'], 2),
 			'filter' => $filter,
 		]);
 	}
@@ -214,6 +218,38 @@ class VendorDashboardController extends Controller
 		$resellerBaseSales = (float) $resellerQuery->sum('vendor_price');
 		$resellerSales = max($resellerTotalSales - $resellerBaseSales, 0);
 		$sales = $providerSales + $resellerSales;
+
+		return [
+			'sales' => $sales,
+			'earnings' => $earnings,
+		];
+	}
+
+	private function getResultCheckerFilteredStats(int $vendorId, string $filter): array
+	{
+		[$from, $to] = $this->resolveDateRange($filter);
+
+		// Only count 'completed' orders since profits are only credited upon completion
+		$query = ResultCheckerOrder::query()
+			->where('vendor_id', $vendorId)
+			->where('status', 'completed');
+
+		if ($from && $to) {
+			$query->whereBetween('fulfilled_at', [$from, $to]);
+		}
+
+		$sales = (float) $query->sum('total_price');
+		
+		// Earnings: use vendor_profit if available, else calculate dynamically
+		// to mirror ResultCheckerService allocation logic for legacy orders.
+		$earningsQuery = clone $query;
+		$earnings = (float) $earningsQuery->sum(\Illuminate\Support\Facades\DB::raw('
+			COALESCE(vendor_profit, CASE 
+				WHEN (total_price - (quantity * (SELECT base_price FROM network_services WHERE network_services.id = result_checker_orders.service_id))) > 0 
+				THEN (total_price - (quantity * (SELECT base_price FROM network_services WHERE network_services.id = result_checker_orders.service_id))) 
+				ELSE 0 
+			END)
+		'));
 
 		return [
 			'sales' => $sales,

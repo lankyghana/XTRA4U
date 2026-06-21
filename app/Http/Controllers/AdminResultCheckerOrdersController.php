@@ -5,10 +5,31 @@ namespace App\Http\Controllers;
 use App\Jobs\RetryResultCheckerOrder;
 use App\Models\NetworkService;
 use App\Models\ResultCheckerOrder;
+use App\Services\ResultCheckerService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class AdminResultCheckerOrdersController extends Controller
 {
+    public function __construct(
+        protected ResultCheckerService $resultCheckerService,
+    ) {}
+
+    /**
+     * Legal status transitions an admin may make manually.
+     * Keyed by current status → array of statuses reachable from it.
+     * 'completed' is intentionally absent as a target because the system
+     * must allocate PINs before marking an order complete.
+     */
+    private const ALLOWED_TRANSITIONS = [
+        'pending_payment' => ['failed'],
+        'pending_stock'   => ['failed'],
+        'processing'      => ['pending_stock', 'failed'],
+        'completed'       => [],           // terminal — no manual override
+        'failed'          => ['pending_payment', 'pending_stock'],
+    ];
+
     public function index(Request $request)
     {
         $services = NetworkService::resultsChecker()
@@ -42,11 +63,11 @@ class AdminResultCheckerOrdersController extends Controller
         $orders = $ordersQuery->paginate(50)->withQueryString();
 
         return view('admin.result_checkers.orders', [
-            'orders' => $orders,
-            'services' => $services,
+            'orders'          => $orders,
+            'services'        => $services,
             'selectedService' => $request->input('service_id'),
-            'selectedStatus' => $request->input('status'),
-            'searchTerm' => $request->input('q'),
+            'selectedStatus'  => $request->input('status'),
+            'searchTerm'      => $request->input('q'),
         ]);
     }
 
@@ -68,12 +89,110 @@ class AdminResultCheckerOrdersController extends Controller
 
     public function markFailed(ResultCheckerOrder $order)
     {
+        // Completed orders are terminal — the customer already has the PINs.
         if ($order->status === 'completed') {
             return back()->with('error', 'Completed orders cannot be marked as failed.');
         }
 
-        $order->update(['status' => 'failed']);
+        // If an SMS was already dispatched the PINs are in the customer's hands,
+        // so we must not release them back into stock.
+        if ($order->sms_sent_at) {
+            return back()->with(
+                'error',
+                'Cannot fail this order — the delivery SMS was already sent to the customer. The PINs cannot be returned to stock.'
+            );
+        }
 
-        return back()->with('success', 'Order marked as failed.');
+        try {
+            DB::transaction(function () use ($order) {
+                $released = $this->resultCheckerService->releasePinsForOrder($order);
+
+                $order->update(['status' => 'failed']);
+
+                Log::info('AdminResultCheckerOrdersController: Order marked failed', [
+                    'order_id'      => $order->id,
+                    'pins_released' => $released,
+                ]);
+            });
+        } catch (\Exception $e) {
+            Log::error('AdminResultCheckerOrdersController: Failed to mark order as failed', [
+                'order_id' => $order->id,
+                'error'    => $e->getMessage(),
+            ]);
+
+            return back()->with('error', 'An error occurred while failing the order. Please try again.');
+        }
+
+        $released = $order->fresh()->pins()->doesntExist() ? 'Pins (if any) released back to stock. ' : '';
+        return back()->with('success', 'Order #' . $order->id . ' marked as failed. ' . $released);
+    }
+
+    /**
+     * Manually override an order's status.
+     *
+     * Rules enforced:
+     *  - Only transitions listed in ALLOWED_TRANSITIONS are accepted.
+     *  - The 'completed' status can NEVER be set manually; use the Retry
+     *    button to trigger PIN allocation which sets 'completed' automatically.
+     *  - Re-opening a failed order back to 'pending_stock' or 'pending_payment'
+     *    is allowed so a retry can be queued afterwards.
+     */
+    public function updateStatus(Request $request, ResultCheckerOrder $order)
+    {
+        $validated = $request->validate([
+            'status' => 'required|in:pending_payment,pending_stock,processing,completed,failed',
+        ]);
+
+        $newStatus = $validated['status'];
+
+        // Block 'completed' from being set manually under any circumstance.
+        // PIN allocation (via Retry / FulfillPendingOrdersJob) is the only
+        // authorised path to 'completed', ensuring delivered_pins_json is always set.
+        if ($newStatus === 'completed') {
+            return back()->with(
+                'error',
+                'Orders cannot be manually marked as completed. Use the "Retry Fulfillment" button to allocate PINs; the order will be marked completed automatically.'
+            );
+        }
+
+        // Enforce the transition matrix.
+        $error = $this->validateTransition($order->status, $newStatus);
+        if ($error) {
+            return back()->with('error', $error);
+        }
+
+        $order->update(['status' => $newStatus]);
+
+        return back()->with('success', 'Order status updated to "' . str_replace('_', ' ', $newStatus) . '".');
+    }
+
+    /**
+     * Validate a requested status transition against the allowed matrix.
+     *
+     * @return string|null  Error message, or null if the transition is valid.
+     */
+    private function validateTransition(string $from, string $to): ?string
+    {
+        if ($from === $to) {
+            return 'Order is already in "' . str_replace('_', ' ', $from) . '" status.';
+        }
+
+        $allowed = self::ALLOWED_TRANSITIONS[$from] ?? [];
+
+        if (!in_array($to, $allowed, true)) {
+            $allowedList = empty($allowed)
+                ? 'none (terminal status)'
+                : implode(', ', array_map(fn ($s) => '"' . str_replace('_', ' ', $s) . '"', $allowed));
+
+            return sprintf(
+                'Cannot transition from "%s" to "%s". Allowed transitions: %s.',
+                str_replace('_', ' ', $from),
+                str_replace('_', ' ', $to),
+                $allowedList
+            );
+        }
+
+        return null;
     }
 }
+
