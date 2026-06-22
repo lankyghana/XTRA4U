@@ -231,22 +231,24 @@ class VendorDashboardController extends Controller
 
 		// Only count 'completed' orders since profits are only credited upon completion
 		$query = ResultCheckerOrder::query()
-			->where('vendor_id', $vendorId)
-			->where('status', 'completed');
+			->where('result_checker_orders.vendor_id', $vendorId)
+			->where('result_checker_orders.status', 'completed');
 
 		if ($from && $to) {
-			$query->whereBetween('fulfilled_at', [$from, $to]);
+			$query->whereBetween('result_checker_orders.fulfilled_at', [$from, $to]);
 		}
 
-		$sales = (float) $query->sum('total_price');
+		$sales = (float) $query->sum('result_checker_orders.total_price');
 		
 		// Earnings: use vendor_profit if available, else calculate dynamically
 		// to mirror ResultCheckerService allocation logic for legacy orders.
 		$earningsQuery = clone $query;
-		$earnings = (float) $earningsQuery->sum(\Illuminate\Support\Facades\DB::raw('
-			COALESCE(vendor_profit, CASE 
-				WHEN (total_price - (quantity * (SELECT base_price FROM network_services WHERE network_services.id = result_checker_orders.service_id))) > 0 
-				THEN (total_price - (quantity * (SELECT base_price FROM network_services WHERE network_services.id = result_checker_orders.service_id))) 
+		$earnings = (float) $earningsQuery
+			->join('network_services', 'result_checker_orders.service_id', '=', 'network_services.id')
+			->sum(\Illuminate\Support\Facades\DB::raw('
+			COALESCE(result_checker_orders.vendor_profit, CASE 
+				WHEN (result_checker_orders.total_price - (result_checker_orders.quantity * network_services.base_price)) > 0 
+				THEN (result_checker_orders.total_price - (result_checker_orders.quantity * network_services.base_price)) 
 				ELSE 0 
 			END)
 		'));
