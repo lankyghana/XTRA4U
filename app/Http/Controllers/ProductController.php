@@ -173,7 +173,7 @@ class ProductController extends Controller
                 $activeExternalFulfillmentProvider,
                 $metadata,
             ),
-            'is_active' => $request->boolean('is_active', $product->is_active),
+            'is_active' => $request->boolean('is_active'),
         ]);
 
         // Sync base_price for all resellers when owner changes price
