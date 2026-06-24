@@ -8,15 +8,19 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('result_checker_pins', function (Blueprint $table) {
-            $table->unsignedBigInteger('checker_type_id')->nullable()->change();
+        Schema::table('result_checker_orders', function (Blueprint $table) {
+            if (!Schema::hasColumn('result_checker_orders', 'service_id')) {
+                $table->unsignedBigInteger('service_id')->nullable()->after('vendor_id');
+            }
         });
     }
 
     public function down(): void
     {
-        Schema::table('result_checker_pins', function (Blueprint $table) {
-            $table->unsignedBigInteger('checker_type_id')->nullable(false)->change();
+        Schema::table('result_checker_orders', function (Blueprint $table) {
+            if (Schema::hasColumn('result_checker_orders', 'service_id')) {
+                $table->dropColumn('service_id');
+            }
         });
     }
 };
