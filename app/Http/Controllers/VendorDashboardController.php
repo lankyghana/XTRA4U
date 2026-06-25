@@ -240,8 +240,8 @@ class VendorDashboardController extends Controller
 
 		$sales = (float) $query->sum('result_checker_orders.total_price');
 		
-		// Earnings: use vendor_profit if available, else calculate dynamically
-		// to mirror ResultCheckerService allocation logic for legacy orders.
+		// Earnings: SQL equivalent of ResultCheckerOrder::resolveVendorProfit().
+		// Keep the COALESCE/CASE formula in sync with that method if pricing logic changes.
 		$earningsQuery = clone $query;
 		$earnings = (float) $earningsQuery
 			->join('network_services', 'result_checker_orders.service_id', '=', 'network_services.id')
