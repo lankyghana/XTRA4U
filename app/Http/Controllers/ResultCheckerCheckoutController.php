@@ -8,7 +8,6 @@ use App\Models\VendorResultCheckerSetting;
 use App\Models\ResultCheckerOrder;
 use App\Services\GatewayManager;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class ResultCheckerCheckoutController extends Controller
@@ -32,122 +31,116 @@ class ResultCheckerCheckoutController extends Controller
             'payer_network' => ['nullable', 'string', 'max:20'],
         ]);
 
+        // Validate service and vendor eligibility (read-only — no transaction needed).
+        $service = NetworkService::findOrFail($validated['service_id']);
+
+        if ($service->service_type !== 'results_checker' || !$service->is_active) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This result checker is not available',
+            ], 404);
+        }
+
+        $vendorSetting = VendorResultCheckerSetting::where('vendor_id', $vendor->id)
+            ->where('service_id', $service->id)
+            ->first();
+
+        if (!$vendorSetting || !$vendorSetting->is_active) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This vendor does not offer this result checker',
+            ], 403);
+        }
+
+        // Calculate pricing.
+        $basePrice    = $service->getPriceForQuantity((int) $validated['quantity']);
+        $vendorProfit = $vendorSetting->profit_amount * $validated['quantity'];
+        $unitPrice    = $basePrice + $vendorSetting->profit_amount;
+        $totalPrice   = $unitPrice * $validated['quantity'];
+
+        // Persist the order before calling the gateway. Committing here means a
+        // gateway timeout or exception cannot roll back the row — the callback
+        // will always find a record to fulfil against (ghost-payment prevention).
+        $order = ResultCheckerOrder::create([
+            'vendor_id'      => $vendor->id,
+            'service_id'     => $service->id,
+            'customer_phone' => $validated['customer_phone'],
+            'customer_name'  => $validated['customer_name'],
+            'quantity'       => $validated['quantity'],
+            'unit_price'     => $unitPrice,
+            'total_price'    => $totalPrice,
+            'vendor_profit'  => $vendorProfit,
+            'status'         => 'pending_payment',
+        ]);
+
+        Log::info('ResultCheckerCheckoutController: Order created', [
+            'order_id'   => $order->id,
+            'vendor_id'  => $vendor->id,
+            'service_id' => $service->id,
+            'amount'     => $totalPrice,
+        ]);
+
+        // Initiate payment OUTSIDE any transaction. A slow or failing gateway no
+        // longer holds a DB connection open, and the order row is never rolled back.
         try {
-            return DB::transaction(function () use ($vendor, $validated) {
-                // Load service
-                $service = NetworkService::findOrFail($validated['service_id']);
+            // Using .com instead of .local — gateways like Paystack reject .local domains.
+            $email     = $validated['customer_phone'] . '@xtra4u.com';
+            $reference = 'XTRA4U-RC-' . strtoupper(uniqid('', true)) . '-' . $order->id;
 
-                // Verify service is a result checker
-                if ($service->service_type !== 'results_checker' || !$service->is_active) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'This result checker is not available',
-                    ], 404);
-                }
-
-                // Verify vendor has enabled this checker type
-                $vendorSetting = VendorResultCheckerSetting::where('vendor_id', $vendor->id)
-                    ->where('service_id', $service->id)
-                    ->first();
-
-                if (!$vendorSetting || !$vendorSetting->is_active) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'This vendor does not offer this result checker',
-                    ], 403);
-                }
-
-                // Calculate pricing
-                $basePrice = $service->getPriceForQuantity((int) $validated['quantity']);
-                $vendorProfit = $vendorSetting->profit_amount * $validated['quantity'];
-                $unitPrice = $basePrice + $vendorSetting->profit_amount;
-                $totalPrice = $unitPrice * $validated['quantity'];
-
-                // Create order with pending_payment status
-                $order = ResultCheckerOrder::create([
-                    'vendor_id' => $vendor->id,
-                    'service_id' => $service->id,
-                    'customer_phone' => $validated['customer_phone'],
-                    'customer_name' => $validated['customer_name'],
-                    'quantity' => $validated['quantity'],
-                    'unit_price' => $unitPrice,
-                    'total_price' => $totalPrice,
-                    'vendor_profit' => $vendorProfit,
-                    'status' => 'pending_payment',
-                ]);
-
-                Log::info('ResultCheckerCheckoutController: Order created', [
-                    'order_id' => $order->id,
-                    'vendor_id' => $vendor->id,
-                    'service_id' => $service->id,
-                    'amount' => $totalPrice,
-                ]);
-
-                // Generate a unique email for the transaction (we don't have user email)
-                // Using .com instead of .local because gateways like Paystack reject .local domains.
-                $email = $validated['customer_phone'] . '@xtra4u.com';
-
-                // Create a unique reference for the order
-                $reference = 'XTRA4U-RC-' . strtoupper(uniqid()) . '-' . $order->id;
-
-                // Initiate payment via gateway (use genericPayment since collect expects an Order model)
-                $paymentResult = $this->gatewayManager->genericPayment([
-                    'email' => $email,
-                    'amount' => $totalPrice,
-                    'callback_url' => route('result-checkers.payment.callback', ['order' => $order->id]),
-                    'reference' => $reference,
-                    'metadata' => [
-                        'phone_number' => $order->customer_phone,
-                        'payer_phone' => $validated['payer_phone'] ?? null,
-                        'payer_network' => $validated['payer_network'] ?? null,
-                    ],
-                ]);
-
-                // Store the payment reference on the order
-                if ($paymentResult['reference'] ?? null) {
-                    $order->update([
-                        'payment_reference' => $paymentResult['reference'],
-                        'payment_gateway' => $paymentResult['gateway_name'] ?? null,
-                    ]);
-                }
-
-                // Determine response based on collection flow
-                if (!($paymentResult['success'] ?? false)) {
-                    // Payment initiation failed
-                    $order->update(['status' => 'failed']);
-                    return response()->json([
-                        'success' => false,
-                        'message' => $paymentResult['message'] ?? 'Payment gateway error',
-                    ], 400);
-                }
-
-                // Payment initiation succeeded
-                // Payment initiation succeeded
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Checkout initiated',
-                    'order_id' => $order->id,
-                    'reference' => $paymentResult['reference'] ?? null,
-                    'redirect' => $paymentResult['authorization_url'] ?? null,
-                    'payment_data' => [
-                        'authorization_url' => $paymentResult['authorization_url'] ?? null,
-                        'inline_form' => $paymentResult['inline_form'] ?? null,
-                        'gateway' => $paymentResult['gateway_name'] ?? null,
-                        'collection_flow' => $paymentResult['collection_flow'] ?? 'redirect',
-                    ],
-                ]);
-            });
-        } catch (\Exception $e) {
-            Log::error('ResultCheckerCheckoutController: Error during checkout', [
-                'error' => $e->getMessage(),
-                'vendor_id' => $vendor->id,
-                'trace' => $e->getTraceAsString(),
+            $paymentResult = $this->gatewayManager->genericPayment([
+                'email'        => $email,
+                'amount'       => $totalPrice,
+                'callback_url' => route('result-checkers.payment.callback', ['order' => $order->id]),
+                'reference'    => $reference,
+                'metadata'     => [
+                    'phone_number'  => $order->customer_phone,
+                    'payer_phone'   => $validated['payer_phone'] ?? null,
+                    'payer_network' => $validated['payer_network'] ?? null,
+                ],
             ]);
+        } catch (\Exception $e) {
+            Log::error('ResultCheckerCheckoutController: Payment gateway exception', [
+                'order_id'  => $order->id,
+                'vendor_id' => $vendor->id,
+                'error'     => $e->getMessage(),
+            ]);
+            $order->update(['status' => 'failed']);
 
             return response()->json([
                 'success' => false,
                 'message' => 'An error occurred during checkout',
             ], 500);
         }
+
+        // Store the payment reference returned by the gateway.
+        if ($paymentResult['reference'] ?? null) {
+            $order->update([
+                'payment_reference' => $paymentResult['reference'],
+                'payment_gateway'   => $paymentResult['gateway_name'] ?? null,
+            ]);
+        }
+
+        if (!($paymentResult['success'] ?? false)) {
+            $order->update(['status' => 'failed']);
+
+            return response()->json([
+                'success' => false,
+                'message' => $paymentResult['message'] ?? 'Payment gateway error',
+            ], 400);
+        }
+
+        return response()->json([
+            'success'      => true,
+            'message'      => 'Checkout initiated',
+            'order_id'     => $order->id,
+            'reference'    => $paymentResult['reference'] ?? null,
+            'redirect'     => $paymentResult['authorization_url'] ?? null,
+            'payment_data' => [
+                'authorization_url' => $paymentResult['authorization_url'] ?? null,
+                'inline_form'       => $paymentResult['inline_form'] ?? null,
+                'gateway'           => $paymentResult['gateway_name'] ?? null,
+                'collection_flow'   => $paymentResult['collection_flow'] ?? 'redirect',
+            ],
+        ]);
     }
 }
