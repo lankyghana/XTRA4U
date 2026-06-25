@@ -7,7 +7,6 @@ use App\Models\NetworkService;
 use App\Models\ResultCheckerOrder;
 use App\Services\ResultCheckerService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class AdminResultCheckerOrdersController extends Controller
@@ -82,6 +81,10 @@ class AdminResultCheckerOrdersController extends Controller
 
     public function retry(ResultCheckerOrder $order)
     {
+        if (! $order->paid_at) {
+            return back()->with('error', 'Cannot retry an unpaid order — payment has not been received. Re-initiate checkout to collect payment.');
+        }
+
         dispatch(new RetryResultCheckerOrder($order->id));
 
         return back()->with('success', 'Retry job queued for this order.');
@@ -89,31 +92,8 @@ class AdminResultCheckerOrdersController extends Controller
 
     public function markFailed(ResultCheckerOrder $order)
     {
-        // Completed orders are terminal — the customer already has the PINs.
-        if ($order->status === 'completed') {
-            return back()->with('error', 'Completed orders cannot be marked as failed.');
-        }
-
-        // If an SMS was already dispatched the PINs are in the customer's hands,
-        // so we must not release them back into stock.
-        if ($order->sms_sent_at) {
-            return back()->with(
-                'error',
-                'Cannot fail this order — the delivery SMS was already sent to the customer. The PINs cannot be returned to stock.'
-            );
-        }
-
         try {
-            DB::transaction(function () use ($order) {
-                $released = $this->resultCheckerService->releasePinsForOrder($order);
-
-                $order->update(['status' => 'failed']);
-
-                Log::info('AdminResultCheckerOrdersController: Order marked failed', [
-                    'order_id'      => $order->id,
-                    'pins_released' => $released,
-                ]);
-            });
+            $result = $this->resultCheckerService->adminMarkFailed($order);
         } catch (\Exception $e) {
             Log::error('AdminResultCheckerOrdersController: Failed to mark order as failed', [
                 'order_id' => $order->id,
@@ -123,8 +103,15 @@ class AdminResultCheckerOrdersController extends Controller
             return back()->with('error', 'An error occurred while failing the order. Please try again.');
         }
 
-        $released = $order->fresh()->pins()->doesntExist() ? 'Pins (if any) released back to stock. ' : '';
-        return back()->with('success', 'Order #' . $order->id . ' marked as failed. ' . $released);
+        if (! $result['ok']) {
+            return back()->with('error', $result['error']);
+        }
+
+        $suffix = $result['pins_released'] > 0
+            ? ' ' . $result['pins_released'] . ' pin(s) released back to stock.'
+            : '';
+
+        return back()->with('success', 'Order #' . $order->id . ' marked as failed.' . $suffix);
     }
 
     /**

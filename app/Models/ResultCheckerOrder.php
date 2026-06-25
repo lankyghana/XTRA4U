@@ -55,6 +55,25 @@ class ResultCheckerOrder extends Model
         return $this->hasMany(ResultCheckerPin::class, 'result_checker_order_id');
     }
 
+    /**
+     * Vendor profit for this order.
+     *
+     * Uses the stored vendor_profit when present (all new orders).
+     * Falls back to total_price − (quantity × base_price) for legacy orders
+     * created before the vendor_profit column existed.
+     *
+     * The SQL in VendorDashboardController::getResultCheckerFilteredStats mirrors
+     * this logic — keep both in sync if the pricing model changes.
+     */
+    public function resolveVendorProfit(): float
+    {
+        if ($this->vendor_profit !== null) {
+            return (float) $this->vendor_profit;
+        }
+
+        return max(0, (float) $this->total_price - ($this->quantity * (float) ($this->service->base_price ?? 0)));
+    }
+
     public function isPending(): bool
     {
         return in_array($this->status, ['pending_payment', 'pending_stock']);

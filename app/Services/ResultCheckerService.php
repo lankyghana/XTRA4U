@@ -101,6 +101,44 @@ class ResultCheckerService
         return DB::transaction(fn () => $this->doReleasePins($order));
     }
 
+    /**
+     * Atomically mark an order as failed and release any allocated PINs back to stock.
+     *
+     * Acquires a row lock on the order before re-checking guards, preventing the TOCTOU
+     * race where a concurrent payment webhook flips status or sms_sent_at between the
+     * caller's guard check and the transaction commit.
+     *
+     * Returns ['ok' => true, 'pins_released' => int] on success,
+     * or ['ok' => false, 'error' => string] when a guard blocks the action.
+     */
+    public function adminMarkFailed(ResultCheckerOrder $order): array
+    {
+        return DB::transaction(function () use ($order) {
+            $locked = ResultCheckerOrder::lockForUpdate()->findOrFail($order->id);
+
+            if ($locked->status === 'completed') {
+                return ['ok' => false, 'error' => 'Completed orders cannot be marked as failed.'];
+            }
+
+            if ($locked->sms_sent_at) {
+                return [
+                    'ok'    => false,
+                    'error' => 'Cannot fail this order — the delivery SMS was already sent to the customer. The PINs cannot be returned to stock.',
+                ];
+            }
+
+            $released = $this->doReleasePins($locked);
+            $locked->update(['status' => 'failed']);
+
+            Log::info('ResultCheckerService: Order marked failed by admin', [
+                'order_id'      => $locked->id,
+                'pins_released' => $released,
+            ]);
+
+            return ['ok' => true, 'pins_released' => $released];
+        });
+    }
+
     // -------------------------------------------------------------------------
     // Private helpers — no transaction wrapper; callers must hold one already
     // -------------------------------------------------------------------------
@@ -115,7 +153,9 @@ class ResultCheckerService
      */
     private function doAllocatePins(ResultCheckerOrder $order): bool
     {
-        $order->refresh();
+        // Lock the order row before reading status so a concurrent worker cannot
+        // pass this idempotency check simultaneously and double-allocate pins.
+        $order = ResultCheckerOrder::lockForUpdate()->find($order->id);
         if ($order->status === 'completed' || $order->pins()->exists()) {
             return true;
         }
@@ -158,9 +198,9 @@ class ResultCheckerService
             'fulfilled_at'        => now(),
         ]);
 
-        // Credit vendor wallet
-        // Fall back for older orders that may not have vendor_profit stored
-        $profit = $order->vendor_profit ?? max(0, $order->total_price - ($order->quantity * ($order->service->base_price ?? 0)));
+        // Credit vendor wallet — ResultCheckerOrder::resolveVendorProfit() handles
+        // the vendor_profit / legacy-fallback logic in one canonical place.
+        $profit = $order->resolveVendorProfit();
         if ($profit > 0) {
             $this->walletService->creditVendor($order->vendor_id, (float) $profit, [
                 'purpose'                  => 'order_earning',

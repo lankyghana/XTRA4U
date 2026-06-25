@@ -5,12 +5,13 @@ namespace App\Jobs;
 use App\Models\ResultCheckerOrder;
 use App\Services\ResultCheckerService;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
-class FulfillPendingOrdersJob implements ShouldQueue
+class FulfillPendingOrdersJob implements ShouldQueue, ShouldBeUnique
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -18,9 +19,15 @@ class FulfillPendingOrdersJob implements ShouldQueue
     {
     }
 
+    public function uniqueId(): string
+    {
+        return (string) ($this->serviceId ?? 'all');
+    }
+
     public function handle(ResultCheckerService $resultCheckerService): void
     {
         $query = ResultCheckerOrder::query()
+            ->with('service')
             ->where('status', 'pending_stock')
             ->orderBy('created_at');
 
