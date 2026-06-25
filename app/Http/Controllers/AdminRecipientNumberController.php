@@ -22,19 +22,49 @@ class AdminRecipientNumberController extends Controller
         return view('admin.recipient_numbers.index', [
             'logs' => $logs,
             'filters' => [
-                'date_from' => $request->query('date_from'),
-                'date_to' => $request->query('date_to'),
+                'date_from'    => $request->query('date_from'),
+                'date_to'      => $request->query('date_to'),
                 'service_type' => $request->query('service_type'),
-                'vendor_id' => $request->query('vendor_id'),
+                'vendor_id'    => $request->query('vendor_id'),
+                'phone'        => $request->query('phone'),
+                'distinct'     => $request->query('distinct'),
             ],
         ]);
     }
 
     public function export(Request $request): StreamedResponse
     {
-        $format = $request->query('format', 'csv');
-        $query = $this->baseQuery($request)
-            ->orderBy('id');
+        $format   = $request->query('format', 'csv');
+        $distinct = (bool) $request->query('distinct', false);
+
+        if ($distinct) {
+            $query = $this->distinctPhoneQuery($request);
+
+            return response()->streamDownload(function () use ($query, $format) {
+                $out = $format === 'csv' ? fopen('php://output', 'w') : null;
+                if ($out) {
+                    fputcsv($out, ['phone_number']);
+                }
+
+                $query->chunk(5000, function ($rows) use ($format, $out) {
+                    foreach ($rows as $row) {
+                        if ($format === 'csv') {
+                            fputcsv($out, [$row->phone_number]);
+                        } else {
+                            echo $row->phone_number . "\n";
+                        }
+                    }
+                });
+
+                if ($out) {
+                    fclose($out);
+                }
+            }, "recipient-numbers-distinct.{$format}", [
+                'Content-Type' => $format === 'csv' ? 'text/csv; charset=UTF-8' : 'text/plain; charset=UTF-8',
+            ]);
+        }
+
+        $query = $this->baseQuery($request)->orderBy('id');
 
         if ($format === 'txt') {
             return response()->streamDownload(function () use ($query) {
@@ -72,6 +102,22 @@ class AdminRecipientNumberController extends Controller
 
     public function copy(Request $request): StreamedResponse
     {
+        $distinct = (bool) $request->query('distinct', false);
+
+        if ($distinct) {
+            $query = $this->distinctPhoneQuery($request);
+
+            return response()->stream(function () use ($query) {
+                $query->chunk(5000, function ($rows) {
+                    foreach ($rows as $row) {
+                        echo $row->phone_number . "\n";
+                    }
+                });
+            }, 200, [
+                'Content-Type' => 'text/plain; charset=UTF-8',
+            ]);
+        }
+
         $query = $this->baseQuery($request)->orderBy('id');
 
         return response()->stream(function () use ($query) {
@@ -91,8 +137,25 @@ class AdminRecipientNumberController extends Controller
             ->select(['id', 'phone_number', 'vendor_id', 'order_id', 'service_type', 'used_at'])
             ->with(['vendor:id,name,vendor_code']);
 
+        return $this->applyFilters($query, $request);
+    }
+
+    private function distinctPhoneQuery(Request $request)
+    {
+        return $this->applyFilters(
+            RecipientNumberLog::query()->select('phone_number')->distinct(),
+            $request
+        )->orderBy('phone_number');
+    }
+
+    private function applyFilters($query, Request $request)
+    {
+        if ($request->filled('phone')) {
+            $query->where('phone_number', 'like', '%' . $request->query('phone') . '%');
+        }
+
         if ($request->filled('service_type')) {
-            $query->where('service_type', $request->query('service_type'));
+            $query->where('service_type', 'like', '%' . $request->query('service_type') . '%');
         }
 
         if ($request->filled('vendor_id')) {
