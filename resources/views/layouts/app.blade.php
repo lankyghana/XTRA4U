@@ -49,7 +49,6 @@
                 paymentFailureMessage: '',
                 loadingServices: false,
                 loadingPackages: false,
-                loadingPackages: false,
                 orderRoute: opts.orderRoute || '',
                 resultCheckerOrderRoute: opts.resultCheckerOrderRoute || '',
 
