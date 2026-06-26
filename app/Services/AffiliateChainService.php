@@ -145,8 +145,10 @@ class AffiliateChainService
 
     /**
      * Compute payout portions for a reseller product chain.
-     * - Root owner gets the root listing's base_price.
+     * - Root owner gets the root listing's base_price (minus any tier discount granted to the leaf reseller).
      * - Each reseller gets their listing's markup_price.
+     * - If the immediate seller (leaf reseller) has a tier discount, the discount reduces the owner's
+     *   effective base_amount and is credited to the leaf reseller's earning instead.
      * Platform commission is 2% of each portion.
      */
     public function computeResellerProductPayout(ResellerProduct $leaf, int $maxDepth = self::DEFAULT_MAX_DEPTH): array
@@ -167,8 +169,15 @@ class AffiliateChainService
             ];
         }
 
-        $baseAmount = (float) $rootListing->base_price;
+        $originalBaseAmount = (float) $rootListing->base_price;
         $ownerVendorId = (int) $rootListing->owner_vendor_id;
+
+        // Apply tier discount for the immediate (leaf) reseller.
+        // The discount reduces the base amount the owner receives, transferring value to the affiliate.
+        $leafVendor = Vendor::find($leaf->reseller_vendor_id);
+        $tierDiscountRate = $leafVendor ? $leafVendor->getEffectiveTierDiscountRate() : 0.0;
+        $tierDiscountAmount = $tierDiscountRate > 0 ? round($originalBaseAmount * $tierDiscountRate, 2) : 0.0;
+        $baseAmount = round($originalBaseAmount - $tierDiscountAmount, 2);
 
         // Reverse so it reads from root listing -> leaf listing
         $downlineListings = array_reverse($upline);
@@ -178,6 +187,7 @@ class AffiliateChainService
             'vendor_id' => $ownerVendorId,
             'role' => 'owner',
             'amount' => $baseAmount,
+            'tier_discount_applied' => $tierDiscountAmount > 0 ? $tierDiscountAmount : null,
         ];
 
         $lines = [];
@@ -199,21 +209,27 @@ class AffiliateChainService
             $markup = (float) $listing->markup_price;
             $resellerVendorId = (int) $listing->reseller_vendor_id;
 
+            // If this is the leaf reseller and they have a tier discount, add the discount saving to their markup.
+            $effectiveMarkup = $markup;
+            if ((int) $listing->id === (int) $leaf->id && $tierDiscountAmount > 0) {
+                $effectiveMarkup = round($markup + $tierDiscountAmount, 2);
+            }
+
             $snapshot[] = [
                 'vendor_id' => $resellerVendorId,
                 'role' => 'reseller',
-                'markup' => $markup,
+                'markup' => $effectiveMarkup,
                 'source_reseller_product_id' => $listing->source_reseller_product_id,
             ];
 
             // A reseller may have markup 0; keep line for completeness but it won't affect totals.
-            $commission = round($markup * 0.02, 2);
-            $earning = round($markup - $commission, 2);
+            $commission = round($effectiveMarkup * 0.02, 2);
+            $earning = round($effectiveMarkup - $commission, 2);
 
             $lines[] = [
                 'vendor_id' => $resellerVendorId,
                 'role' => 'reseller',
-                'amount' => $markup,
+                'amount' => $effectiveMarkup,
                 'commission' => $commission,
                 'earning' => $earning,
             ];
@@ -222,7 +238,7 @@ class AffiliateChainService
         }
 
         $immediateSellerVendorId = (int) $leaf->reseller_vendor_id;
-        $immediateSellerMarkup = (float) $leaf->markup_price;
+        $immediateSellerMarkup = (float) $leaf->markup_price + $tierDiscountAmount;
         $immediateSellerCommission = round($immediateSellerMarkup * 0.02, 2);
         $immediateSellerEarning = round($immediateSellerMarkup - $immediateSellerCommission, 2);
 
@@ -237,6 +253,8 @@ class AffiliateChainService
             'lines' => $lines,
             'snapshot' => $snapshot,
             'depth' => count($downlineListings),
+            'tier_discount_amount' => $tierDiscountAmount,
+            'tier_discount_rate' => $tierDiscountRate,
         ];
     }
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Mail\VendorApprovedMail;
 use App\Models\Vendor;
 use App\Models\WalletLedger;
+use App\Services\VendorTierQualificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -79,11 +80,14 @@ class AdminVendorController extends Controller
 		return redirect()->route('admin.vendors.index')->with('status', 'Vendor removed successfully.');
 	}
 
-	public function approve(Vendor $vendor): RedirectResponse
+	public function approve(Vendor $vendor, VendorTierQualificationService $tierService): RedirectResponse
 	{
 		$wasApproved = (bool) $vendor->is_approved;
 		if (! $wasApproved) {
 			$vendor->forceFill(['is_approved' => true])->save();
+
+			// Assign the Regular (base) tier to newly approved vendors.
+			$tierService->assignBaseTier($vendor);
 
 			if ($vendor->email) {
 				try {

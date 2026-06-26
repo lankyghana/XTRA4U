@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Vendor;
 use App\Models\Order;
 use App\Models\Transaction;
+use App\Models\VendorTier;
 use App\Models\VendorWithdrawal;
 use App\Models\AdminNotification;
 use App\Models\ResultCheckerOrder;
@@ -40,6 +41,10 @@ class AdminController extends Controller
             ->count();
         $resultCheckerPendingStock = ResultCheckerOrder::where('status', 'pending_stock')->count();
 
+        // Vendor Tier Stats
+        $pendingTierPromotions = Vendor::where('is_tier_eligible', true)->count();
+        $tierDistribution = VendorTier::withCount('vendors')->ordered()->get();
+
         return view('admin.dashboard', [
             'activeVendors' => $activeVendors,
             'pendingVendors' => $pendingVendors,
@@ -54,6 +59,8 @@ class AdminController extends Controller
             'resultCheckerRevenueToday' => $resultCheckerRevenueToday,
             'resultCheckerCompletedToday' => $resultCheckerCompletedToday,
             'resultCheckerPendingStock' => $resultCheckerPendingStock,
+            'pendingTierPromotions' => $pendingTierPromotions,
+            'tierDistribution' => $tierDistribution,
         ]);
     }
 

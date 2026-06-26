@@ -267,6 +267,55 @@
         </div>
     </div>
 
+    <!-- Vendor Tier Section -->
+    @if($pendingTierPromotions > 0)
+        <div class="mt-8">
+            <div class="rounded-xl border border-blue-200 bg-blue-50 px-5 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <p class="text-sm font-semibold text-blue-800">{{ $pendingTierPromotions }} vendor{{ $pendingTierPromotions === 1 ? '' : 's' }} eligible for tier promotion.</p>
+                    <p class="text-xs text-blue-700">Review and approve pending tier upgrades.</p>
+                </div>
+                <x-button href="{{ route('admin.vendor-tier-promotions.index') }}" variant="outline" size="sm" class="self-start sm:self-auto">
+                    Review Promotions
+                </x-button>
+            </div>
+        </div>
+    @endif
+
+    <div class="mt-8">
+        <x-card>
+            <div class="px-4 py-5 sm:p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900">Vendor Tier Distribution</h3>
+                    <x-button href="{{ route('admin.vendor-tiers.index') }}" variant="outline" size="sm">
+                        Manage Tiers
+                    </x-button>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    @forelse($tierDistribution as $tier)
+                        <div class="rounded-lg p-4 border
+                            {{ $tier->priority === 0 ? 'bg-gray-50 border-gray-200' : ($tier->priority === 1 ? 'bg-blue-50 border-blue-200' : ($tier->priority === 2 ? 'bg-yellow-50 border-yellow-200' : 'bg-purple-50 border-purple-200')) }}">
+                            <p class="text-sm font-semibold
+                                {{ $tier->priority === 0 ? 'text-gray-700' : ($tier->priority === 1 ? 'text-blue-800' : ($tier->priority === 2 ? 'text-yellow-800' : 'text-purple-800')) }}">
+                                {{ $tier->name }}
+                            </p>
+                            <p class="text-2xl font-bold mt-1
+                                {{ $tier->priority === 0 ? 'text-gray-900' : ($tier->priority === 1 ? 'text-blue-900' : ($tier->priority === 2 ? 'text-yellow-900' : 'text-purple-900')) }}">
+                                {{ $tier->vendors_count }}
+                            </p>
+                            <p class="text-xs mt-1
+                                {{ $tier->priority === 0 ? 'text-gray-500' : ($tier->priority === 1 ? 'text-blue-600' : ($tier->priority === 2 ? 'text-yellow-600' : 'text-purple-600')) }}">
+                                {{ $tier->discount_value > 0 ? $tier->discount_value . '% discount' : 'Base tier' }}
+                            </p>
+                        </div>
+                    @empty
+                        <div class="col-span-4 text-sm text-gray-400 text-center py-4">No tiers configured.</div>
+                    @endforelse
+                </div>
+            </div>
+        </x-card>
+    </div>
+
     <!-- Results Checker Section -->
     <div class="mt-8">
         <x-card>
