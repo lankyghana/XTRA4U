@@ -80,8 +80,8 @@
         [
             'key' => 'reports',
             'label' => 'Reports',
-            'href' => '#',
-            'matches' => [],
+            'href' => route('admin.reports.index'),
+            'matches' => ['admin.reports.*'],
         ],
         [
             'key' => 'payment-gateways',
