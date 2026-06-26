@@ -2,6 +2,7 @@
 
 use App\Models\Vendor;
 use App\Models\VendorWithdrawal;
+use App\Services\VendorTierQualificationService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
@@ -54,6 +55,15 @@ Artisan::command('xtra4u:ensure-admin {email} {--password=} {--force}', function
 
     return self::SUCCESS;
 })->purpose('Create/reset a local admin user for the admin portal');
+
+// Evaluate vendor tiers daily at 02:00 and mark eligible vendors for promotion.
+Schedule::call(function () {
+    try {
+        app(VendorTierQualificationService::class)->evaluateAll();
+    } catch (\Throwable $e) {
+        Log::error('Scheduled vendor tier evaluation failed', ['error' => $e->getMessage()]);
+    }
+})->dailyAt('02:00')->name('vendor-tiers:evaluate');
 
 // Schedule cleanup of abandoned payments every 6 hours.
 // Uses Artisan::call() (in-process) to avoid proc_open on shared hosting.
