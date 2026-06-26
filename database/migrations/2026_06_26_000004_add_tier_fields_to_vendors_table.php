@@ -10,15 +10,20 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('vendors', function (Blueprint $table) {
-            $table->foreignId('tier_id')->nullable()->constrained('vendor_tiers')->nullOnDelete()->after('is_afa_affiliate');
-            $table->foreignId('eligible_for_tier_id')->nullable()->constrained('vendor_tiers')->nullOnDelete()->after('tier_id');
+            // Plain integer columns with indexes instead of foreignId()->constrained()
+            // to avoid FK engine mismatch errors on the production MySQL server.
+            $table->unsignedBigInteger('tier_id')->nullable()->after('is_afa_affiliate');
+            $table->unsignedBigInteger('eligible_for_tier_id')->nullable()->after('tier_id');
             $table->boolean('is_tier_eligible')->default(false)->after('eligible_for_tier_id');
             $table->timestamp('tier_qualified_at')->nullable()->after('is_tier_eligible');
             $table->timestamp('tier_reviewed_at')->nullable()->after('tier_qualified_at');
-            $table->foreignId('tier_reviewed_by')->nullable()->constrained('admins')->nullOnDelete()->after('tier_reviewed_at');
+            $table->unsignedBigInteger('tier_reviewed_by')->nullable()->after('tier_reviewed_at');
+
+            $table->index('tier_id');
+            $table->index('eligible_for_tier_id');
         });
 
-        // Assign the Regular tier to all existing approved vendors
+        // Assign the Regular tier to all existing approved vendors.
         $regularTierId = DB::table('vendor_tiers')->where('slug', 'regular')->value('id');
         if ($regularTierId) {
             DB::table('vendors')
@@ -31,9 +36,8 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('vendors', function (Blueprint $table) {
-            $table->dropForeign(['tier_id']);
-            $table->dropForeign(['eligible_for_tier_id']);
-            $table->dropForeign(['tier_reviewed_by']);
+            $table->dropIndex(['tier_id']);
+            $table->dropIndex(['eligible_for_tier_id']);
             $table->dropColumn(['tier_id', 'eligible_for_tier_id', 'is_tier_eligible', 'tier_qualified_at', 'tier_reviewed_at', 'tier_reviewed_by']);
         });
     }
