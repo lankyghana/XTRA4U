@@ -13,3 +13,6 @@ deployment:
     # Permissions
     - /bin/chmod -R 755 $DEPLOYPATH/core
     - /bin/chmod -R 775 $DEPLOYPATH/core/storage $DEPLOYPATH/core/bootstrap/cache
+
+    # Run pending migrations
+    - cd $DEPLOYPATH/core && php artisan migrate --force
