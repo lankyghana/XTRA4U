@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
@@ -68,6 +69,12 @@ class Vendor extends Authenticatable
         'afa_markup',
         'afa_selling_price',
         'is_afa_affiliate',
+        'tier_id',
+        'eligible_for_tier_id',
+        'is_tier_eligible',
+        'tier_qualified_at',
+        'tier_reviewed_at',
+        'tier_reviewed_by',
     ];
 
     protected $casts = [
@@ -81,6 +88,9 @@ class Vendor extends Authenticatable
         'afa_base_price' => 'decimal:2',
         'afa_markup' => 'decimal:2',
         'afa_selling_price' => 'decimal:2',
+        'is_tier_eligible' => 'boolean',
+        'tier_qualified_at' => 'datetime',
+        'tier_reviewed_at' => 'datetime',
     ];
 
     /**
@@ -97,6 +107,44 @@ class Vendor extends Authenticatable
     public function afaRegistrations(): HasMany
     {
         return $this->hasMany(AfaRegistration::class);
+    }
+
+    public function tier(): BelongsTo
+    {
+        return $this->belongsTo(VendorTier::class, 'tier_id');
+    }
+
+    public function eligibleTier(): BelongsTo
+    {
+        return $this->belongsTo(VendorTier::class, 'eligible_for_tier_id');
+    }
+
+    public function tierHistories(): HasMany
+    {
+        return $this->hasMany(VendorTierHistory::class);
+    }
+
+    /**
+     * The discount rate this vendor's tier grants on base buying price (0.0 – 1.0).
+     * Returns 0.0 if no tier is assigned or if the tier has no discount.
+     */
+    public function getEffectiveTierDiscountRate(): float
+    {
+        return $this->tier ? $this->tier->getDiscountRate() : 0.0;
+    }
+
+    /**
+     * Apply the vendor's tier discount to a base amount.
+     * Returns the effective amount (reduced by discount).
+     */
+    public function applyTierDiscount(float $baseAmount): float
+    {
+        $rate = $this->getEffectiveTierDiscountRate();
+        if ($rate <= 0.0) {
+            return $baseAmount;
+        }
+
+        return round($baseAmount * (1 - $rate), 2);
     }
 
     protected $hidden = [
