@@ -384,6 +384,8 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
     Route::post('withdrawals/{withdrawal}/refresh', [AdminWithdrawalController::class, 'refresh'])->name('withdrawals.refresh');
     Route::post('withdrawals/{withdrawal}/cancel', [AdminWithdrawalController::class, 'cancel'])->name('withdrawals.cancel');
 
+    Route::get('reports', [\App\Http\Controllers\AdminReportsController::class, 'index'])->name('reports.index');
+
     // High-volume recipient number audit log
     Route::get('recipient-numbers', [\App\Http\Controllers\AdminRecipientNumberController::class, 'index'])->name('recipient-numbers.index');
     Route::get('recipient-numbers/export', [\App\Http\Controllers\AdminRecipientNumberController::class, 'export'])->name('recipient-numbers.export');
