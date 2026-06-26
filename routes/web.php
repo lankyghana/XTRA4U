@@ -433,6 +433,19 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
 
     // Manual Queue Run Trigger (scheduler-bridge)
     Route::post('queue/run', [\App\Http\Controllers\Admin\ManualQueueRunController::class, 'run'])->name('queue.run');
+
+    // Vendor Tier Management
+    Route::resource('vendor-tiers', \App\Http\Controllers\Admin\VendorTierController::class)
+        ->parameters(['vendor-tiers' => 'vendorTier']);
+    Route::post('vendor-tiers/reorder', [\App\Http\Controllers\Admin\VendorTierController::class, 'reorder'])->name('vendor-tiers.reorder');
+
+    // Vendor Tier Promotion Queue
+    Route::get('vendor-tier-promotions', [\App\Http\Controllers\Admin\VendorTierPromotionController::class, 'index'])->name('vendor-tier-promotions.index');
+    Route::post('vendor-tier-promotions/{vendor}/approve', [\App\Http\Controllers\Admin\VendorTierPromotionController::class, 'approve'])->name('vendor-tier-promotions.approve');
+    Route::post('vendor-tier-promotions/{vendor}/reject', [\App\Http\Controllers\Admin\VendorTierPromotionController::class, 'reject'])->name('vendor-tier-promotions.reject');
+
+    // Vendor Tier History / Audit Log
+    Route::get('vendor-tier-history', [\App\Http\Controllers\Admin\VendorTierHistoryController::class, 'index'])->name('vendor-tier-history.index');
 });
 Route::get('/vendor/product/create', [ProductController::class, 'create'])->name('product.create');
 Route::post('/vendor/product', [ProductController::class, 'store'])->name('product.store');
