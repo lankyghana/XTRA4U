@@ -170,10 +170,17 @@
 @endsection
 
 @push('scripts')
+@php
+    $existingRules = old('rules', $vendorTier->rules->map(fn ($r) => [
+        'rule_key' => $r->rule_key,
+        'operator' => $r->operator,
+        'value'    => (float) $r->value,
+    ])->values()->all());
+@endphp
 <script>
 function tierForm() {
     return {
-        rules: @json(old('rules', $vendorTier->rules->map(fn($r) => ['rule_key' => $r->rule_key, 'operator' => $r->operator, 'value' => (float)$r->value])->values()->all())),
+        rules: @json($existingRules),
         addRule() {
             this.rules.push({ rule_key: '', operator: '>=', value: '' });
         },
