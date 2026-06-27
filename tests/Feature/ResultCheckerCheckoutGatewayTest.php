@@ -136,6 +136,7 @@ class ResultCheckerCheckoutGatewayTest extends TestCase
     public function test_checkout_returns_404_for_non_result_checker_service(): void
     {
         $dataService = NetworkService::factory()->create([
+            'name'         => 'Data Bundle Service',
             'service_type' => 'data',
             'is_active'    => true,
         ]);
@@ -156,6 +157,7 @@ class ResultCheckerCheckoutGatewayTest extends TestCase
     public function test_checkout_returns_404_for_inactive_service(): void
     {
         $inactive = NetworkService::factory()->create([
+            'name'         => 'Inactive Checker Service',
             'service_type' => 'results_checker',
             'is_active'    => false,
         ]);
@@ -176,6 +178,7 @@ class ResultCheckerCheckoutGatewayTest extends TestCase
     public function test_checkout_returns_403_when_vendor_does_not_offer_service(): void
     {
         $otherService = NetworkService::factory()->create([
+            'name'         => 'Other Checker Service',
             'service_type' => 'results_checker',
             'is_active'    => true,
         ]);
