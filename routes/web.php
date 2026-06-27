@@ -409,6 +409,10 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
     Route::put('settings/email', [\App\Http\Controllers\Admin\EmailSettingsController::class, 'update'])->name('settings.email.update');
     Route::post('settings/email/test', [\App\Http\Controllers\Admin\EmailSettingsController::class, 'sendTestEmail'])->name('settings.email.test');
 
+    // USSD Settings
+    Route::get('settings/ussd', [\App\Http\Controllers\Admin\UssdSettingsController::class, 'index'])->name('settings.ussd');
+    Route::put('settings/ussd', [\App\Http\Controllers\Admin\UssdSettingsController::class, 'update'])->name('settings.ussd.update');
+
     // External Fulfillment Settings
 
     // Results Checker Admin Routes
