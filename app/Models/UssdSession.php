@@ -39,4 +39,17 @@ class UssdSession extends Model
         $this->data = $data;
         $this->save();
     }
+
+    /**
+     * Merge multiple key-value pairs into session data in a single DB write.
+     */
+    public function setDataMany(array $pairs): void
+    {
+        $data = $this->data ?? [];
+        foreach ($pairs as $key => $value) {
+            data_set($data, $key, $value);
+        }
+        $this->data = $data;
+        $this->save();
+    }
 }

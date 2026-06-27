@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Setting;
 use App\Models\UssdSession;
 use App\Models\UssdLog;
 use Illuminate\Support\Carbon;
@@ -31,22 +32,28 @@ class UssdSessionService
             return $session;
         }
 
-        // Determine the vendor ID from the USSD extension (initial text)
+        // Determine the vendor ID from the USSD extension (initial text).
+        // The extension segment is the vendor_code slug (e.g. "XTRA4U-001"), not a numeric ID.
         $vendorId = null;
         $inputArray = explode('*', $initialText);
         $firstInput = trim($inputArray[0]);
 
-        if (!empty($firstInput) && is_numeric($firstInput)) {
-            $vendor = \App\Models\Vendor::where('id', $firstInput)->where('is_approved', true)->first();
+        if (!empty($firstInput)) {
+            $vendor = \App\Models\Vendor::where('vendor_code', $firstInput)->where('is_approved', true)->first();
             if ($vendor) {
                 $vendorId = $vendor->id;
             }
         }
 
-        // Fallback to Admin vendor if no valid extension was provided
+        // Fallback: use the admin-configured default vendor, then the first approved vendor
         if (!$vendorId) {
-            $adminVendor = \App\Models\Vendor::where('is_approved', true)->first();
-            $vendorId = $adminVendor ? $adminVendor->id : 1;
+            $configuredId = Setting::get('ussd_default_vendor_id');
+            if ($configuredId) {
+                $vendorId = (int) $configuredId;
+            } else {
+                $fallback = \App\Models\Vendor::where('is_approved', true)->first();
+                $vendorId = $fallback ? $fallback->id : 1;
+            }
         }
 
         // Create a new session

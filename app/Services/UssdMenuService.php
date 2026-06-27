@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Setting;
 use App\Models\UssdSession;
 
 class UssdMenuService
@@ -40,26 +41,29 @@ class UssdMenuService
             // Phase 6: Results Checker Flow
             case 'RESULT_EXAM_TYPE':
             case 'RESULT_QUANTITY':
+            case 'RESULT_PHONE':
             case 'RESULT_CONFIRM':
                 return $this->handleResultsCheckerFlow($session, $text);
 
-            // Phase 7: AFA Registration Flow
-            case 'AFA_NAME':
-            case 'AFA_INDEX':
-            case 'AFA_PHONE':
-            case 'AFA_CONFIRM':
-                return $this->handleAfaRegistrationFlow($session, $text);
-
             default:
                 $session->update(['current_step' => 'MAIN_MENU']);
-                return "CON Welcome to XTRA4U\n1. Buy Data Bundle\n2. Results Checker\n3. AFA Registration\n\nSupport: 0531192005";
+                return $this->mainMenuText();
         }
+    }
+
+    private function mainMenuText(): string
+    {
+        $welcome = Setting::get('ussd_welcome_message', 'Welcome to XTRA4U');
+        $support = Setting::get('ussd_support_number', '');
+        $footer  = $support ? "\n\nSupport: {$support}" : '';
+
+        return "CON {$welcome}\n1. Buy Data Bundle\n2. Results Checker{$footer}";
     }
 
     private function handleMainMenu(UssdSession $session, string $text): string
     {
         if (empty($text)) {
-            return "CON Welcome to XTRA4U\n1. Buy Data Bundle\n2. Results Checker\n\nSupport: 0531192005";
+            return $this->mainMenuText();
         }
 
         if ($text === '1') {
@@ -82,7 +86,7 @@ class UssdMenuService
             return $menu;
         }
 
-        return "CON Invalid choice.\nWelcome to XTRA4U\n1. Buy Data Bundle\n2. Results Checker\n\nSupport: 0531192005";
+        return "CON Invalid choice.\n" . ltrim($this->mainMenuText(), 'CON ');
     }
 
     private function handleDataBundleFlow(UssdSession $session, string $text): string
@@ -96,8 +100,6 @@ class UssdMenuService
             }
             
             $selectedNetwork = $networks[$text];
-            $session->updateData('network_name', $selectedNetwork);
-            
             // Fetch products for this network
             $products = \App\Models\Product::where('is_active', true)->get()->filter(function($p) use ($selectedNetwork) {
                 $meta = $p->decoded_description;
@@ -105,12 +107,15 @@ class UssdMenuService
                 $cat = $meta['category'] ?? 'data'; // fallback to data if missing
                 return strcasecmp($net, $selectedNetwork) === 0 && strcasecmp($cat, 'data') === 0;
             })->sortBy('price')->take(7)->values(); // Take top 7 to fit USSD window size
-            
+
             if ($products->isEmpty()) {
                 return "CON No bundles available for {$selectedNetwork}.\n\n0. Back";
             }
-            
-            $session->updateData('available_bundles', $products->pluck('id')->toArray());
+
+            $session->setDataMany([
+                'network_name'     => $selectedNetwork,
+                'available_bundles' => $products->pluck('id')->toArray(),
+            ]);
             
             $menu = "CON Select {$selectedNetwork} Bundle:\n";
             foreach ($products as $index => $p) {
@@ -136,16 +141,18 @@ class UssdMenuService
                 return "CON Bundle not found.\n\n0. Back";
             }
             
-            $session->updateData('product_id', $product->id);
-            $session->updateData('product_name', $product->name);
-            $session->updateData('product_price', $product->price);
+            $session->setDataMany([
+                'product_id'    => $product->id,
+                'product_name'  => $product->name,
+                'product_price' => $product->price,
+            ]);
             
             $session->update(['current_step' => 'DATA_RECIPIENT']);
             return "CON You selected {$product->name}.\nEnter recipient phone number:\n\n0. Back";
         }
 
         if ($step === 'DATA_RECIPIENT') {
-            if (strlen($text) < 9) {
+            if (strlen($text) < 10) {
                 return "CON Invalid phone number.\nEnter recipient phone number:\n\n0. Back";
             }
             
@@ -195,10 +202,10 @@ class UssdMenuService
                     'payment_gateway' => $gatewayName,
                 ]);
 
-                $vendorEmail = $product->vendor->email ?? 'ussd@xtra4u.com';
+                $customerEmail = $session->phone_number . '@ussd.xtra4u.local';
                 $paymentService = app(\App\Services\PaymentService::class);
-                
-                $init = $paymentService->initiatePayment($order, $vendorEmail, (float) $product->price);
+
+                $init = $paymentService->initiatePayment($order, $customerEmail, (float) $product->price);
                 
                 if (!($init['success'] ?? false)) {
                     \Illuminate\Support\Facades\Log::error('USSD Payment Initiation Failed', ['order_id' => $order->id, 'response' => $init]);
@@ -234,8 +241,10 @@ class UssdMenuService
                 return "CON Selected exam type is unavailable.\n\n0. Back";
             }
 
-            $session->updateData('service_id', $service->id);
-            $session->updateData('service_name', $service->name);
+            $session->setDataMany([
+                'service_id'   => $service->id,
+                'service_name' => $service->name,
+            ]);
 
             $session->update(['current_step' => 'RESULT_QUANTITY']);
             return "CON Enter quantity to purchase (1-10):\n\n0. Back";
@@ -253,21 +262,20 @@ class UssdMenuService
         }
 
         if ($step === 'RESULT_PHONE') {
-            if (strlen($text) < 9) {
+            if (strlen($text) < 10) {
                 return "CON Invalid phone number.\nEnter recipient phone number:\n\n0. Back";
             }
-            
-            $session->updateData('recipient_phone', $text);
-            $session->update(['current_step' => 'RESULT_CONFIRM']);
-            
-            // Calculate price
+
             $serviceId = $session->getData('service_id');
             $service = \App\Models\NetworkService::find($serviceId);
             $qty = $session->getData('quantity');
-            
-            // Assume no vendor markup for USSD global sales, use base price
             $totalPrice = $service->getPriceForQuantity($qty) * $qty;
-            $session->updateData('total_price', $totalPrice);
+
+            $session->setDataMany([
+                'recipient_phone' => $text,
+                'total_price'     => $totalPrice,
+            ]);
+            $session->update(['current_step' => 'RESULT_CONFIRM']);
 
             $serviceName = $session->getData('service_name');
             return "CON Confirm Purchase:\nExam: {$serviceName}\nQty: {$qty}\nRecipient: {$text}\nTotal: GHS {$totalPrice}\n\n1. Confirm & Pay\n0. Back";

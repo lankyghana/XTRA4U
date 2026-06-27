@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Setting;
 use Illuminate\Http\Request;
 use App\Services\UssdSessionService;
 use App\Services\UssdMenuService;
@@ -30,6 +31,12 @@ class UssdController extends Controller
         $network = $request->input('network', '');
         $serviceCode = $request->input('serviceCode', '');
         $text = $request->input('text', '');
+
+        // Honour the admin-configurable kill switch
+        if (Setting::get('ussd_enabled', '1') !== '1') {
+            return response("END This service is temporarily unavailable. Please try again later.", 200)
+                    ->header('Content-Type', 'text/plain');
+        }
 
         // If sessionId or phoneNumber is missing, we cannot process the request
         if (empty($sessionId) || empty($phoneNumber)) {
