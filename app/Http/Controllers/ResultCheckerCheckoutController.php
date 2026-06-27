@@ -67,7 +67,7 @@ class ResultCheckerCheckoutController extends Controller
                 'vendor_id'      => $vendor->id,
                 'service_id'     => $service->id,
                 'customer_phone' => $validated['customer_phone'],
-                'customer_name'  => $validated['customer_name'],
+                'customer_name'  => $validated['customer_name'] ?? null,
                 'quantity'       => $validated['quantity'],
                 'unit_price'     => $unitPrice,
                 'total_price'    => $totalPrice,
@@ -92,7 +92,9 @@ class ResultCheckerCheckoutController extends Controller
                 'callback_url' => route('result-checkers.payment.callback', ['order' => $order->id]),
                 'reference'    => $reference,
                 'metadata'     => [
-                    'phone_number'  => $order->customer_phone,
+                    // For inline-MoMo gateways (BulkClix, Moolre), use the payer's phone for collection.
+                    // Fall back to customer_phone if no payer_phone was provided (redirect flow).
+                    'phone_number'  => $validated['payer_phone'] ?? $order->customer_phone,
                     'payer_phone'   => $validated['payer_phone'] ?? null,
                     'payer_network' => $validated['payer_network'] ?? null,
                 ],
@@ -103,6 +105,8 @@ class ResultCheckerCheckoutController extends Controller
                 'vendor_id' => $vendor->id,
                 'error'     => $e->getMessage(),
                 'class'     => get_class($e),
+                'file'      => $e->getFile() . ':' . $e->getLine(),
+                'trace'     => collect($e->getTrace())->take(5)->map(fn ($f) => ($f['file'] ?? '?') . ':' . ($f['line'] ?? '?') . ' ' . ($f['function'] ?? ''))->implode(' | '),
             ]);
             if ($order) {
                 $order->update(['status' => 'failed']);
