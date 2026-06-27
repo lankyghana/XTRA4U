@@ -89,8 +89,8 @@ class StorefrontController extends Controller
 		foreach ($vendorCheckerSettings as $setting) {
 			$checker = $setting->service;
 
-			// Skip if the underlying service has been deleted or deactivated by admin
-			if (!$checker || !$checker->is_active) {
+			// Skip if the underlying service has been deleted, deactivated, or not yet priced by admin.
+			if (!$checker || !$checker->is_active || !$checker->base_price || $checker->base_price <= 0) {
 				continue;
 			}
 
@@ -172,6 +172,11 @@ class StorefrontController extends Controller
 			// Inline/API gateways like BulkClix require a MoMo number (and network) before initiating payment.
 			'requiresInlineMomo' => PaymentGatewayConfig::defaultCollectionRequiresPayerPhone(),
 		]);
+	}
+
+	public function showResultCheckers(Vendor $vendor)
+	{
+		return $this->showVendorStore($vendor);
 	}
 
 	private function decodeDescription(?string $value): array

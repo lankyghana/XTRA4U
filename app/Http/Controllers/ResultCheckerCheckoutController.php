@@ -58,31 +58,30 @@ class ResultCheckerCheckoutController extends Controller
         $unitPrice    = $basePrice + $vendorSetting->profit_amount;
         $totalPrice   = $unitPrice * $validated['quantity'];
 
-        // Persist the order before calling the gateway. Committing here means a
-        // gateway timeout or exception cannot roll back the row — the callback
-        // will always find a record to fulfil against (ghost-payment prevention).
-        $order = ResultCheckerOrder::create([
-            'vendor_id'      => $vendor->id,
-            'service_id'     => $service->id,
-            'customer_phone' => $validated['customer_phone'],
-            'customer_name'  => $validated['customer_name'],
-            'quantity'       => $validated['quantity'],
-            'unit_price'     => $unitPrice,
-            'total_price'    => $totalPrice,
-            'vendor_profit'  => $vendorProfit,
-            'status'         => 'pending_payment',
-        ]);
-
-        Log::info('ResultCheckerCheckoutController: Order created', [
-            'order_id'   => $order->id,
-            'vendor_id'  => $vendor->id,
-            'service_id' => $service->id,
-            'amount'     => $totalPrice,
-        ]);
-
-        // Initiate payment OUTSIDE any transaction. A slow or failing gateway no
-        // longer holds a DB connection open, and the order row is never rolled back.
+        // Persist the order, then initiate payment. Both are inside the same try/catch
+        // so any DB or gateway error is caught and returned as a clean JSON response
+        // rather than bubbling up as an unhandled 500.
+        $order = null;
         try {
+            $order = ResultCheckerOrder::create([
+                'vendor_id'      => $vendor->id,
+                'service_id'     => $service->id,
+                'customer_phone' => $validated['customer_phone'],
+                'customer_name'  => $validated['customer_name'],
+                'quantity'       => $validated['quantity'],
+                'unit_price'     => $unitPrice,
+                'total_price'    => $totalPrice,
+                'vendor_profit'  => $vendorProfit,
+                'status'         => 'pending_payment',
+            ]);
+
+            Log::info('ResultCheckerCheckoutController: Order created', [
+                'order_id'   => $order->id,
+                'vendor_id'  => $vendor->id,
+                'service_id' => $service->id,
+                'amount'     => $totalPrice,
+            ]);
+
             // Using .com instead of .local — gateways like Paystack reject .local domains.
             $email     = $validated['customer_phone'] . '@xtra4u.com';
             $reference = 'XTRA4U-RC-' . strtoupper(uniqid('', true)) . '-' . $order->id;
@@ -98,13 +97,16 @@ class ResultCheckerCheckoutController extends Controller
                     'payer_network' => $validated['payer_network'] ?? null,
                 ],
             ]);
-        } catch (\Exception $e) {
-            Log::error('ResultCheckerCheckoutController: Payment gateway exception', [
-                'order_id'  => $order->id,
+        } catch (\Throwable $e) {
+            Log::error('ResultCheckerCheckoutController: Checkout exception', [
+                'order_id'  => $order?->id,
                 'vendor_id' => $vendor->id,
                 'error'     => $e->getMessage(),
+                'class'     => get_class($e),
             ]);
-            $order->update(['status' => 'failed']);
+            if ($order) {
+                $order->update(['status' => 'failed']);
+            }
 
             return response()->json([
                 'success' => false,
