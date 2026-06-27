@@ -31,7 +31,7 @@
                     @endphp
                     <tr class="hover:bg-gray-50">
                         <td class="px-6 py-4 text-sm text-gray-900 font-medium">{{ $service->name }}</td>
-                        <td class="px-6 py-4 text-sm text-gray-700">GHS {{ number_format((float) ($service->base_price ?? 0), 2) }}</td>
+                        <td class="px-6 py-4 text-sm text-gray-700">GHS {{ number_format((float) $service->base_price, 2) }}</td>
                         <td class="px-6 py-4 text-sm text-gray-700">
                             <input
                                 type="number"
@@ -48,7 +48,9 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">No result checker services found.</td>
+                        <td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">
+                            No result checker services are currently available. Services appear here once the admin has set their prices.
+                        </td>
                     </tr>
                 @endforelse
             </x-table>

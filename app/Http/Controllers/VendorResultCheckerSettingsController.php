@@ -15,6 +15,8 @@ class VendorResultCheckerSettingsController extends Controller
         $vendor = $this->resolveVendor();
 
         $services = NetworkService::resultsChecker()
+            ->whereNotNull('base_price')
+            ->where('base_price', '>', 0)
             ->orderBy('name')
             ->get();
 
@@ -33,7 +35,12 @@ class VendorResultCheckerSettingsController extends Controller
     public function update(Request $request)
     {
         $vendor = $this->resolveVendor();
-        $services = NetworkService::resultsChecker()->get();
+
+        // Only services the admin has priced are open to vendor configuration.
+        $services = NetworkService::resultsChecker()
+            ->whereNotNull('base_price')
+            ->where('base_price', '>', 0)
+            ->get();
 
         $rules = ['settings' => ['array']];
         foreach ($services as $service) {
