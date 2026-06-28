@@ -12,33 +12,49 @@ use Illuminate\Support\Facades\Schema;
  * ResultCheckerService and ResultCheckerPin model require.
  *
  * This migration idempotently adds that column (and its FK + index) when absent.
+ * Each step checks information_schema before applying, so it is safe to re-run
+ * even after a partial failure (MySQL DDL is non-transactional and auto-commits).
  */
 return new class extends Migration
 {
     public function up(): void
     {
         if (!Schema::hasTable('result_checker_pins')) {
-            return; // Table doesn't exist — nothing to do.
+            return;
         }
 
-        // Add result_checker_order_id if it is missing.
+        $db = DB::getDatabaseName();
+
+        // Step 1: Add result_checker_order_id column if missing.
         if (!Schema::hasColumn('result_checker_pins', 'result_checker_order_id')) {
-            // Use raw DDL so we can add the nullable FK column and its index
-            // without Blueprint guessing the wrong constraint name.
             DB::statement('ALTER TABLE result_checker_pins
                 ADD COLUMN result_checker_order_id BIGINT UNSIGNED NULL DEFAULT NULL
                 AFTER `serial`');
+        }
 
-            // Add FK constraint (result_checker_orders must already exist).
-            if (Schema::hasTable('result_checker_orders')) {
-                DB::statement('ALTER TABLE result_checker_pins
-                    ADD CONSTRAINT result_checker_pins_order_id_foreign
-                    FOREIGN KEY (result_checker_order_id)
-                    REFERENCES result_checker_orders (id)
-                    ON DELETE SET NULL');
-            }
+        // Step 2: Add FK constraint only if it doesn't already exist.
+        $hasFk = DB::table('information_schema.KEY_COLUMN_USAGE')
+            ->where('TABLE_SCHEMA', $db)
+            ->where('TABLE_NAME', 'result_checker_pins')
+            ->where('CONSTRAINT_NAME', 'result_checker_pins_order_id_foreign')
+            ->exists();
 
-            // Add index to support the WHERE clause used in doAllocatePins / doReleasePins.
+        if (!$hasFk && Schema::hasTable('result_checker_orders')) {
+            DB::statement('ALTER TABLE result_checker_pins
+                ADD CONSTRAINT result_checker_pins_order_id_foreign
+                FOREIGN KEY (result_checker_order_id)
+                REFERENCES result_checker_orders (id)
+                ON DELETE SET NULL');
+        }
+
+        // Step 3: Add index only if it doesn't already exist.
+        $hasIndex = DB::table('information_schema.STATISTICS')
+            ->where('TABLE_SCHEMA', $db)
+            ->where('TABLE_NAME', 'result_checker_pins')
+            ->where('INDEX_NAME', 'result_checker_pins_order_id_index')
+            ->exists();
+
+        if (!$hasIndex) {
             DB::statement('ALTER TABLE result_checker_pins
                 ADD INDEX result_checker_pins_order_id_index (result_checker_order_id)');
         }
@@ -51,11 +67,10 @@ return new class extends Migration
         }
 
         Schema::table('result_checker_pins', function (Blueprint $table) {
-            // Drop FK first, then the index and column.
             try {
                 $table->dropForeign('result_checker_pins_order_id_foreign');
             } catch (\Throwable $e) {
-                // Ignore if FK didn't exist.
+                // FK didn't exist — ignore.
             }
             $table->dropColumn('result_checker_order_id');
         });
