@@ -33,22 +33,7 @@
             </div>
         </div>
 
-        <div class="bg-white shadow-sm rounded-lg p-6">
-            <h3 class="text-lg font-semibold">Allocated Pins</h3>
-            @if($order->pins && $order->pins->count() > 0)
-                <x-table :headers="['PIN', 'Serial', 'Sold At']">
-                    @foreach ($order->pins as $pin)
-                        <tr class="hover:bg-gray-50">
-                            <td class="px-6 py-4 text-sm font-medium text-gray-900">{{ $pin->pin }}</td>
-                            <td class="px-6 py-4 text-sm text-gray-900">{{ $pin->serial }}</td>
-                            <td class="px-6 py-4 text-sm text-gray-500">{{ $pin->sold_at?->format('Y-m-d H:i:s') }}</td>
-                        </tr>
-                    @endforeach
-                </x-table>
-            @else
-                <p class="text-sm text-gray-500">No pins allocated to this order.</p>
-            @endif
-        </div>
+        {{-- Allocated Pins only apply to Result Checker orders, not regular bundle orders --}}
     </div>
 </x-admin-layout>
 @endsection
