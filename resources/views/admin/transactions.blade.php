@@ -42,15 +42,32 @@
             </div>
         </form>
 
-        <x-table :headers="['Reference', 'Gateway Ref', 'Gateway Tx ID', 'Vendor', 'Amount', 'Commission', 'Status', 'Payment', 'Created']">
+        <x-table :headers="['Reference', 'Type', 'Gateway Ref', 'Gateway Tx ID', 'Vendor', 'Amount', 'Commission', 'Status', 'Action', 'Created']">
             @forelse ($transactions as $transaction)
                 <tr class="hover:bg-gray-50">
                     <td class="px-6 py-4 text-sm text-gray-900">
                         #{{ $transaction->id }}<br>
-                        <span class="text-xs text-gray-500">Order #{{ $transaction->order_id }}</span>
+                        @if ($transaction->payment_type === 'result_checker')
+                            <span class="text-xs text-gray-500">RC Order #{{ $transaction->transactionable_id }}</span>
+                        @else
+                            <span class="text-xs text-gray-500">Order #{{ $transaction->order_id }}</span>
+                        @endif
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-900">
-                        <span class="text-xs text-gray-500">{{ $transaction->order?->payment_reference ?? '—' }}</span>
+                        @if ($transaction->payment_type === 'result_checker')
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">RC Order</span>
+                        @elseif ($transaction->payment_type === 'afa_registration')
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">AFA Reg</span>
+                        @else
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">Order</span>
+                        @endif
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-900">
+                        @if ($transaction->payment_type === 'result_checker')
+                            <span class="text-xs text-gray-500">{{ $transaction->gateway_transaction_id ?? '—' }}</span>
+                        @else
+                            <span class="text-xs text-gray-500">{{ $transaction->order?->payment_reference ?? '—' }}</span>
+                        @endif
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-900">
                         <span class="text-xs text-gray-500">{{ $transaction->gateway_transaction_id ?? '—' }}</span>
@@ -64,19 +81,36 @@
                         {{ ucfirst($transaction->payment_status ?? 'n/a') }}
                     </td>
                     <td class="px-6 py-4 text-sm">
-                        @php($order = $transaction->order)
-                        @if ($order && !in_array($order->payment_status, ['paid', 'completed'], true))
-                            <form method="POST" action="{{ route('admin.transactions.confirm-payment', $transaction) }}" class="inline-block">
-                                @csrf
-                                <button type="submit"
-                                        class="text-sm px-3 py-2 rounded-lg bg-brand-bright-blue text-white font-medium shadow-sm hover:bg-brand-deep-blue">
-                                    Confirm
-                                </button>
-                            </form>
-                        @elseif ($order)
-                            <span class="text-xs font-medium text-green-700">Paid</span>
+                        @if ($transaction->payment_type === 'result_checker')
+                            @php($rcOrder = $transaction->resultCheckerOrder)
+                            @if ($rcOrder && !$rcOrder->paid_at)
+                                <form method="POST" action="{{ route('admin.transactions.confirm-payment', $transaction) }}" class="inline-block">
+                                    @csrf
+                                    <button type="submit"
+                                            class="text-sm px-3 py-2 rounded-lg bg-purple-600 text-white font-medium shadow-sm hover:bg-purple-700">
+                                        Confirm
+                                    </button>
+                                </form>
+                            @elseif ($rcOrder)
+                                <span class="text-xs font-medium text-green-700">Paid</span>
+                            @else
+                                <span class="text-xs text-gray-500">N/A</span>
+                            @endif
                         @else
-                            <span class="text-xs text-gray-500">N/A</span>
+                            @php($order = $transaction->order)
+                            @if ($order && !in_array($order->payment_status, ['paid', 'completed'], true))
+                                <form method="POST" action="{{ route('admin.transactions.confirm-payment', $transaction) }}" class="inline-block">
+                                    @csrf
+                                    <button type="submit"
+                                            class="text-sm px-3 py-2 rounded-lg bg-brand-bright-blue text-white font-medium shadow-sm hover:bg-brand-deep-blue">
+                                        Confirm
+                                    </button>
+                                </form>
+                            @elseif ($order)
+                                <span class="text-xs font-medium text-green-700">Paid</span>
+                            @else
+                                <span class="text-xs text-gray-500">N/A</span>
+                            @endif
                         @endif
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-500">

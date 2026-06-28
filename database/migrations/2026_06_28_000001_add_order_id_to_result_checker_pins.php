@@ -12,8 +12,8 @@ use Illuminate\Support\Facades\Schema;
  * ResultCheckerService and ResultCheckerPin model require.
  *
  * This migration idempotently adds that column (and its FK + index) when absent.
- * Each step checks information_schema before applying, so it is safe to re-run
- * even after a partial failure (MySQL DDL is non-transactional and auto-commits).
+ * FK and index idempotency on MySQL uses information_schema; on SQLite (tests)
+ * those checks are skipped because SQLite does not support ALTER TABLE ADD FK.
  */
 return new class extends Migration
 {
@@ -23,14 +23,21 @@ return new class extends Migration
             return;
         }
 
-        $db = DB::getDatabaseName();
+        $driver = DB::getDriverName();
 
-        // Step 1: Add result_checker_order_id column if missing.
+        // Step 1: Add result_checker_order_id column if missing (cross-platform).
         if (!Schema::hasColumn('result_checker_pins', 'result_checker_order_id')) {
-            DB::statement('ALTER TABLE result_checker_pins
-                ADD COLUMN result_checker_order_id BIGINT UNSIGNED NULL DEFAULT NULL
-                AFTER `serial`');
+            Schema::table('result_checker_pins', function (Blueprint $table) {
+                $table->unsignedBigInteger('result_checker_order_id')->nullable()->after('serial');
+            });
         }
+
+        // Steps 2 & 3 use MySQL-specific DDL and information_schema — skip on SQLite.
+        if ($driver === 'sqlite') {
+            return;
+        }
+
+        $db = DB::getDatabaseName();
 
         // Step 2: Add FK constraint only if it doesn't already exist.
         $hasFk = DB::table('information_schema.KEY_COLUMN_USAGE')

@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Transaction;
+use App\Models\ResultCheckerOrder;
 use App\Services\PaymentService;
+use App\Services\ResultCheckerService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -15,7 +17,7 @@ class AdminTransactionController extends Controller
 	{
 		$search = trim((string) $request->query('q', ''));
 
-		$transactionsQuery = Transaction::query()->with(['order', 'vendor']);
+		$transactionsQuery = Transaction::query()->with(['order', 'vendor', 'resultCheckerOrder']);
 
 		if ($search !== '') {
 			$transactionsQuery->where(function ($q) use ($search) {
@@ -25,6 +27,10 @@ class AdminTransactionController extends Controller
 					->orWhere('recipient_phone', 'like', '%' . $search . '%')
 					->orWhereHas('order', function ($orderQuery) use ($search) {
 						$orderQuery->where('payment_reference', 'like', '%' . $search . '%');
+					})
+					->orWhereHas('resultCheckerOrder', function ($rcQuery) use ($search) {
+						$rcQuery->where('customer_name', 'like', '%' . $search . '%')
+							->orWhere('payment_reference', 'like', '%' . $search . '%');
 					})
 					->orWhereHas('vendor', function ($vendorQuery) use ($search) {
 						$vendorQuery->where('name', 'like', '%' . $search . '%')
@@ -74,10 +80,33 @@ class AdminTransactionController extends Controller
 	 * This is for cases where the transaction exists but the payment gateway/webhook
 	 * could not be validated automatically. We complete the related order using the
 	 * same idempotent logic as normal payments.
+	 *
+	 * Supports both regular Order transactions and ResultCheckerOrder transactions.
 	 */
-	public function confirmPayment(Request $request, Transaction $transaction, PaymentService $paymentService)
+	public function confirmPayment(Request $request, Transaction $transaction, PaymentService $paymentService, ResultCheckerService $resultCheckerService)
 	{
 		try {
+			// Handle result checker orders
+			if ($transaction->payment_type === 'result_checker') {
+				$rcOrder = ResultCheckerOrder::find($transaction->transactionable_id);
+
+				if (! $rcOrder) {
+					return back()->with('error', 'This transaction is not linked to a result checker order.');
+				}
+
+				$rcOrder->refresh();
+				if ($rcOrder->paid_at && $rcOrder->status !== 'failed') {
+					return back()->with('success', 'Result checker order is already marked as paid.');
+				}
+
+				$resultCheckerService->handlePaymentSuccess($rcOrder);
+
+				$transaction->update(['payment_status' => 'successful']);
+
+				return back()->with('success', 'Payment confirmed and result checker order processed successfully.');
+			}
+
+			// Handle regular orders
 			$transaction->load('order');
 			$order = $transaction->order;
 
@@ -99,8 +128,9 @@ class AdminTransactionController extends Controller
 		} catch (\Throwable $e) {
 			Log::error('Admin confirmPayment (transaction) failed', [
 				'transaction_id' => $transaction->id,
-				'order_id' => $transaction->order_id,
-				'error' => $e->getMessage(),
+				'payment_type'   => $transaction->payment_type,
+				'order_id'       => $transaction->order_id,
+				'error'          => $e->getMessage(),
 			]);
 
 			return back()->with('error', 'Confirm payment failed. Please try again or check logs.');

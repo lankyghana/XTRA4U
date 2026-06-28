@@ -169,7 +169,7 @@
                             @foreach ($vendors as $vendor)
                                 <option value="{{ $vendor->id }}"
                                     {{ ($settings['ussd_default_vendor_id'] ?? '') == $vendor->id ? 'selected' : '' }}>
-                                    {{ $vendor->business_name }} ({{ $vendor->vendor_code }})
+                                    {{ $vendor->name }} ({{ $vendor->vendor_code }})
                                 </option>
                             @endforeach
                         </select>

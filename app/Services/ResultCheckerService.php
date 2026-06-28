@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ResultCheckerOrder;
 use App\Models\ResultCheckerPin;
 use App\Models\NetworkService;
+use App\Models\Transaction;
 use App\Events\ResultCheckerOrderPaid;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -42,6 +43,22 @@ class ResultCheckerService
                 'paid_at'           => now(),
                 'payment_reference' => $paymentReference,
                 'payment_gateway'   => $gateway,
+            ]);
+
+            // Record the payment in the transactions table so it appears in
+            // /admin/transactions alongside regular orders.
+            Transaction::create([
+                'vendor_id'            => $order->vendor_id,
+                'amount'               => $order->total_price,
+                'commission_amount'    => $order->total_price - $order->resolveVendorProfit(),
+                'vendor_earning'       => $order->resolveVendorProfit(),
+                'recipient_phone'      => $order->customer_phone,
+                'payment_status'       => 'successful',
+                'gateway_transaction_id' => $paymentReference,
+                'timestamp'            => now(),
+                'payment_type'         => 'result_checker',
+                'transactionable_type' => ResultCheckerOrder::class,
+                'transactionable_id'   => $order->id,
             ]);
 
             // Try to allocate stock immediately — call the Unsafe variant so we

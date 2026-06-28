@@ -67,4 +67,17 @@ class Transaction extends Model
     {
         return $query->where('payment_type', 'afa_registration');
     }
+
+    /**
+     * Scope to get result checker order transactions
+     */
+    public function scopeResultCheckerOrders($query)
+    {
+        return $query->where('payment_type', 'result_checker');
+    }
+
+    public function resultCheckerOrder(): BelongsTo
+    {
+        return $this->belongsTo(ResultCheckerOrder::class, 'transactionable_id');
+    }
 }

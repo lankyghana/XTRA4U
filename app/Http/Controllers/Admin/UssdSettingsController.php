@@ -12,7 +12,7 @@ class UssdSettingsController extends Controller
     public function index()
     {
         $settings = Setting::getGroup('ussd');
-        $vendors  = Vendor::where('is_approved', true)->orderBy('business_name')->get(['id', 'business_name', 'vendor_code']);
+        $vendors  = Vendor::where('is_approved', true)->orderBy('name')->get(['id', 'name', 'vendor_code']);
 
         return view('admin.settings.ussd', compact('settings', 'vendors'));
     }
