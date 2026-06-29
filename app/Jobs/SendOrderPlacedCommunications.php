@@ -5,7 +5,6 @@ namespace App\Jobs;
 use App\Mail\OrderPlacedMail;
 use App\Models\Order;
 use App\Models\Vendor;
-use App\Services\SmsService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -26,7 +25,6 @@ class SendOrderPlacedCommunications implements ShouldQueue
         public int $vendorId,
         public string $role,
         public float $earning,
-        public string $smsType = 'order'
     ) {
     }
 
@@ -35,9 +33,9 @@ class SendOrderPlacedCommunications implements ShouldQueue
         return [60, 300, 900];
     }
 
-    public function handle(SmsService $smsService): void
+    public function handle(): void
     {
-        $lockKey = sprintf('lock:order-comm:%d:%d:%s:%s', $this->orderId, $this->vendorId, $this->role, $this->smsType);
+        $lockKey = sprintf('lock:order-comm:%d:%d:%s', $this->orderId, $this->vendorId, $this->role);
 
         $lock = Cache::lock($lockKey, 600);
         if (! $lock->get()) {
@@ -64,23 +62,6 @@ class SendOrderPlacedCommunications implements ShouldQueue
                 }
             }
 
-            if (! empty($vendor->phone_number)) {
-                try {
-                    if ($this->smsType === 'affiliate') {
-                        $message = "XTRA4U: Affiliate sale! {$order->service_purchased} sold by your reseller. Your earning: GHS " . number_format($this->earning, 2);
-                    } else {
-                        $message = "XTRA4U: New order! {$order->service_purchased}. Earning: GHS " . number_format($this->earning, 2) . ". Customer: {$order->recipient_phone_number}";
-                    }
-
-                    $smsService->send($vendor->phone_number, $message);
-                } catch (\Throwable $e) {
-                    Log::warning('Failed to send order SMS (job)', [
-                        'order_id' => $this->orderId,
-                        'vendor_id' => $this->vendorId,
-                        'error' => $e->getMessage(),
-                    ]);
-                }
-            }
         } finally {
             optional($lock)->release();
         }

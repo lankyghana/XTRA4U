@@ -716,7 +716,6 @@ class PaymentService
                     (int) $action['vendor_id'],
                     (string) $action['role'],
                     (float) $action['earning'],
-                    (string) ($action['sms_type'] ?? 'order')
                 );
                 continue;
             }
