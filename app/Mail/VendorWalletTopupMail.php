@@ -24,7 +24,7 @@ class VendorWalletTopupMail extends Mailable implements ShouldQueue
 
     public function content(): Content
     {
-        return new Content(view: 'emails.wallet.topup_vendor', with: [
+        return new Content(markdown: 'emails.wallet.topup_vendor', with: [
             'vendor' => $this->vendor,
             'amount' => $this->amount,
             'reference' => $this->reference,

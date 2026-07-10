@@ -447,3 +447,39 @@ Artisan::command('xtra4u:test-moolre-payout-auth {receiver : Phone number (e.g. 
         return self::FAILURE;
     }
 })->purpose('Call Moolre /open/transact/validate using current DB payout config and print response');
+
+// ---------------------------------------------------------------------------
+// USSD subscription lifecycle
+// ---------------------------------------------------------------------------
+// Uses Artisan::call() (in-process) rather than Schedule::command() to avoid
+// proc_open on shared hosting, matching payments:cleanup above.
+
+// Expire past-due subscriptions, releasing each vendor's slot and USSD code.
+Schedule::call(function () {
+    try {
+        Artisan::call('xtra4u:expire-ussd-subscriptions');
+    } catch (\Throwable $e) {
+        Log::error('Scheduled USSD subscription expiry failed', ['error' => $e->getMessage()]);
+    }
+})->hourly()->name('ussd:expire-subscriptions')->withoutOverlapping();
+
+// Warn vendors whose subscription lapses within three days. Once per vendor
+// per subscription — the warning flag lives on the subscription's metadata.
+Schedule::call(function () {
+    try {
+        Artisan::call('xtra4u:notify-expiring-ussd-subscriptions', ['--days' => 3]);
+    } catch (\Throwable $e) {
+        Log::error('Scheduled USSD expiry warnings failed', ['error' => $e->getMessage()]);
+    }
+})->dailyAt('08:00')->name('ussd:notify-expiring')->withoutOverlapping();
+
+// Close abandoned sessions and prune old rows. Sessions are retained rather
+// than deleted on END so replayed session ids stay detectable; this bounds
+// that table's growth.
+Schedule::call(function () {
+    try {
+        Artisan::call('xtra4u:prune-ussd-sessions', ['--days' => 7, '--log-days' => 90]);
+    } catch (\Throwable $e) {
+        Log::error('Scheduled USSD session pruning failed', ['error' => $e->getMessage()]);
+    }
+})->dailyAt('03:30')->name('ussd:prune-sessions')->withoutOverlapping();
