@@ -30,6 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'vendor.approved' => EnsureVendorApproved::class,
             'admin.only' => AdminOnly::class,
             'prune.purchase.tokens' => PrunePurchaseTokens::class,
+            'ussd.gateway' => \App\Http\Middleware\EnsureUssdGatewayRequest::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
