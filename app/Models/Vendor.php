@@ -7,6 +7,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Str;
 
 class Vendor extends Authenticatable
@@ -49,6 +50,25 @@ class Vendor extends Authenticatable
     public function withdrawals(): HasMany
     {
         return $this->hasMany(VendorWithdrawal::class);
+    }
+
+    public function ussdSubscriptions(): HasMany
+    {
+        return $this->hasMany(UssdSubscription::class);
+    }
+
+    /**
+     * The vendor's single live subscription, if any. Resolved through
+     * current_for_vendor_id, whose unique index guarantees at most one row.
+     */
+    public function currentUssdSubscription(): HasOne
+    {
+        return $this->hasOne(UssdSubscription::class, 'current_for_vendor_id');
+    }
+
+    public function hasUssdAccess(): bool
+    {
+        return (bool) $this->currentUssdSubscription?->isUsable();
     }
 
     protected $fillable = [
