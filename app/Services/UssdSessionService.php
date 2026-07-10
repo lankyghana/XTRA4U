@@ -2,91 +2,144 @@
 
 namespace App\Services;
 
-use App\Models\Setting;
-use App\Models\UssdSession;
 use App\Models\UssdLog;
+use App\Models\UssdSession;
+use App\Models\UssdSubscriptionEvent;
+use App\Services\Ussd\UssdConfig;
+use App\Services\Ussd\UssdRouting;
+use App\Services\Ussd\UssdSubscriptionService;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class UssdSessionService
 {
     /**
-     * Session expiration time in minutes.
-     * Moolre sessions usually timeout in ~3 minutes on the network level.
+     * @deprecated Superseded by the admin-configurable `ussd_session_timeout_seconds`
+     *             setting, read through UssdConfig::sessionTimeoutSeconds().
+     *             Retained so any external caller keeps resolving.
      */
     const SESSION_TIMEOUT_MINUTES = 4;
 
-    /**
-     * Find an existing active session or create a new one.
-     */
-    public function getOrCreateSession(string $sessionId, string $phoneNumber, string $network, string $initialText = ''): UssdSession
+    public function __construct(
+        private readonly UssdConfig $config,
+        private readonly UssdSubscriptionService $subscriptions,
+    ) {}
+
+    public function find(string $sessionId): ?UssdSession
     {
-        $session = UssdSession::where('session_id', $sessionId)->first();
-
-        if ($session) {
-            // Check if the session is expired
-            if ($session->updated_at->diffInMinutes(Carbon::now()) > self::SESSION_TIMEOUT_MINUTES) {
-                // Technically Moolre will provide a new session ID for new sessions, 
-                // but just in case, we reset an expired session if the ID is reused.
-                $this->resetSession($session, $network);
-            }
-            return $session;
-        }
-
-        // Determine the vendor ID from the USSD extension (initial text).
-        // The extension segment is the vendor_code slug (e.g. "XTRA4U-001"), not a numeric ID.
-        $vendorId = null;
-        $inputArray = explode('*', $initialText);
-        $firstInput = trim($inputArray[0]);
-
-        if (!empty($firstInput)) {
-            $vendor = \App\Models\Vendor::where('vendor_code', $firstInput)->where('is_approved', true)->first();
-            if ($vendor) {
-                $vendorId = $vendor->id;
-            }
-        }
-
-        // Fallback: use the admin-configured default vendor, then the first approved vendor
-        if (!$vendorId) {
-            $configuredId = Setting::get('ussd_default_vendor_id');
-            if ($configuredId) {
-                $vendorId = (int) $configuredId;
-            } else {
-                $fallback = \App\Models\Vendor::where('is_approved', true)->first();
-                $vendorId = $fallback ? $fallback->id : 1;
-            }
-        }
-
-        // Create a new session
-        return UssdSession::create([
-            'session_id' => $sessionId,
-            'phone_number' => $phoneNumber,
-            'network' => $network,
-            'current_step' => 'MAIN_MENU',
-            'data' => [
-                'vendor_id' => $vendorId
-            ],
-        ]);
+        return UssdSession::where('session_id', $sessionId)->first();
     }
 
     /**
-     * Terminate or reset a session.
+     * Idle longer than the configured timeout.
      */
-    public function resetSession(UssdSession $session, string $network = null): void
+    public function isTimedOut(UssdSession $session): bool
     {
-        $session->update([
+        $deadline = $session->updated_at?->addSeconds($this->config->sessionTimeoutSeconds());
+
+        return $deadline !== null && $deadline->isPast();
+    }
+
+    /**
+     * Open a session and reserve one of the vendor's paid sessions for it.
+     *
+     * The reservation happens up front, not on completion: the USSD endpoint is
+     * reachable by anyone the gateway lets through, and billing only completed
+     * flows would let abandoned sessions run a vendor's allowance down for free.
+     *
+     * Both writes share a transaction, so a failed insert never burns a session.
+     *
+     * @return UssdSession|null null when no session could be reserved
+     */
+    public function start(string $sessionId, string $phoneNumber, string $network, UssdRouting $routing): ?UssdSession
+    {
+        $subscription = $routing->subscription;
+
+        if (! $subscription || ! $routing->vendor) {
+            return null;
+        }
+
+        return DB::transaction(function () use ($sessionId, $phoneNumber, $network, $routing, $subscription) {
+            if (! $this->subscriptions->reserveSession($subscription)) {
+                return null;
+            }
+
+            return UssdSession::create([
+                'session_id' => $sessionId,
+                'vendor_id' => $routing->vendor->id,
+                'ussd_subscription_id' => $subscription->id,
+                'phone_number' => $phoneNumber,
+                'network' => $network,
+                'current_step' => 'MAIN_MENU',
+                'status' => UssdSession::STATUS_ACTIVE,
+                'request_count' => 1,
+                'data' => [
+                    // How many leading segments of `text` belonged to the dialled
+                    // code. Recorded once: menu keypresses are numeric too, so it
+                    // cannot be re-derived on later requests.
+                    'prefix_length' => $routing->prefixLength,
+                ],
+            ]);
+        });
+    }
+
+    /**
+     * Count this request against the session's per-session request cap.
+     *
+     * @return bool false when the cap has been exceeded
+     */
+    public function registerRequest(UssdSession $session): bool
+    {
+        $session->increment('request_count');
+
+        return $session->request_count <= $this->config->maxRequestsPerSession();
+    }
+
+    /**
+     * Count an invalid entry.
+     *
+     * @return bool false when the retry cap has been exceeded
+     */
+    public function registerRetry(UssdSession $session): bool
+    {
+        $session->increment('retry_count');
+
+        return $session->retry_count < $this->config->maxRetryAttempts();
+    }
+
+    /**
+     * Close a session. The row is retained rather than deleted: a deleted row is
+     * indistinguishable from a session that never existed, which is precisely
+     * what makes a replayed session id look like a fresh dial.
+     */
+    public function endSession(UssdSession $session, string $status = UssdSession::STATUS_ENDED): void
+    {
+        if (! $session->isActive()) {
+            return;
+        }
+
+        $session->forceFill([
+            'status' => $status,
+            'ended_at' => Carbon::now(),
+        ])->save();
+    }
+
+    public function expireSession(UssdSession $session): void
+    {
+        $this->endSession($session, UssdSession::STATUS_EXPIRED);
+    }
+
+    /**
+     * Reset a session back to the main menu, preserving its routing metadata.
+     */
+    public function resetSession(UssdSession $session, ?string $network = null): void
+    {
+        $session->forceFill([
             'current_step' => 'MAIN_MENU',
             'network' => $network ?? $session->network,
-            'data' => [],
-            'updated_at' => Carbon::now(), // force update timestamp
-        ]);
-    }
-
-    /**
-     * Delete the session completely (usually upon END response).
-     */
-    public function endSession(UssdSession $session): void
-    {
-        $session->delete();
+            'retry_count' => 0,
+            'data' => ['prefix_length' => $session->getData('prefix_length', 0)],
+        ])->save();
     }
 
     /**
@@ -98,6 +151,21 @@ class UssdSessionService
             'session_id' => $sessionId,
             'request_data' => $requestData,
             'response_data' => $responseData,
+        ]);
+    }
+
+    /**
+     * Record a rejected request against the audit trail.
+     */
+    public function logSecurityEvent(string $description, array $context = [], ?int $vendorId = null, ?string $ip = null): void
+    {
+        UssdSubscriptionEvent::create([
+            'vendor_id' => $vendorId,
+            'event' => UssdSubscriptionEvent::INVALID_USSD_REQUEST,
+            'description' => $description,
+            'context' => $context ?: null,
+            'actor_type' => 'gateway',
+            'ip_address' => $ip,
         ]);
     }
 }
