@@ -83,8 +83,9 @@
                         <li>• Configure the method as <strong>POST</strong></li>
                     </ul>
                     <p class="mt-3 text-sm text-blue-100">
-                        Customers dial <strong>*SERVICE_CODE*VENDOR_CODE#</strong> to route to a specific vendor,
-                        or just <strong>*SERVICE_CODE#</strong> to reach the default vendor below.
+                        Each subscribed vendor is issued a code in the form
+                        <strong>&lt;base code&gt;&lt;plan extension&gt;*&lt;vendor id&gt;#</strong> — for example
+                        <strong>*203*45*102#</strong>. Dialling the base code alone reaches the default vendor below.
                     </p>
                 </div>
             </div>
@@ -121,10 +122,34 @@
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
+                    {{-- Base code --}}
+                    <div>
+                        <label for="ussd_base_code" class="block text-sm font-medium text-gray-700 mb-2">
+                            Global USSD Base Code
+                        </label>
+                        <input type="text" name="ussd_base_code" id="ussd_base_code"
+                               value="{{ $settings['ussd_base_code'] ?? '' }}"
+                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                               placeholder="e.g. *203*">
+                        <p class="mt-1 text-xs text-gray-500">Prefix for every generated vendor code, e.g. <code>*203*</code> &rarr; <code>*203*45*102#</code>.</p>
+                    </div>
+
+                    {{-- Provider --}}
+                    <div>
+                        <label for="ussd_provider" class="block text-sm font-medium text-gray-700 mb-2">
+                            Provider
+                        </label>
+                        <select name="ussd_provider" id="ussd_provider"
+                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue">
+                            <option value="moolre" {{ ($settings['ussd_provider'] ?? 'moolre') === 'moolre' ? 'selected' : '' }}>Moolre</option>
+                        </select>
+                        <p class="mt-1 text-xs text-gray-500">The aggregator delivering USSD traffic to this platform.</p>
+                    </div>
+
                     {{-- Service code --}}
                     <div>
                         <label for="ussd_service_code" class="block text-sm font-medium text-gray-700 mb-2">
-                            USSD Service Code
+                            USSD Service Code <span class="text-gray-400 font-normal">(legacy)</span>
                         </label>
                         <input type="text" name="ussd_service_code" id="ussd_service_code"
                                value="{{ $settings['ussd_service_code'] ?? '' }}"
@@ -178,6 +203,83 @@
                         </p>
                     </div>
 
+                </div>
+
+                {{-- Session controls --}}
+                <div class="pt-6 border-t border-gray-200">
+                    <h3 class="text-sm font-semibold text-gray-900 mb-4">Session Controls</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div>
+                            <label for="ussd_session_timeout_seconds" class="block text-sm font-medium text-gray-700 mb-2">
+                                Session Timeout (seconds)
+                            </label>
+                            <input type="number" name="ussd_session_timeout_seconds" id="ussd_session_timeout_seconds"
+                                   value="{{ $settings['ussd_session_timeout_seconds'] ?? 240 }}" min="30" max="600"
+                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue">
+                            <p class="mt-1 text-xs text-gray-500">Idle time before a session is rejected. Between 30 and 600.</p>
+                        </div>
+
+                        <div>
+                            <label for="ussd_max_requests_per_session" class="block text-sm font-medium text-gray-700 mb-2">
+                                Max Requests per Session
+                            </label>
+                            <input type="number" name="ussd_max_requests_per_session" id="ussd_max_requests_per_session"
+                                   value="{{ $settings['ussd_max_requests_per_session'] ?? 20 }}" min="1" max="100"
+                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue">
+                            <p class="mt-1 text-xs text-gray-500">Caps how many screens one session may request.</p>
+                        </div>
+
+                        <div>
+                            <label for="ussd_max_retry_attempts" class="block text-sm font-medium text-gray-700 mb-2">
+                                Max Retry Attempts
+                            </label>
+                            <input type="number" name="ussd_max_retry_attempts" id="ussd_max_retry_attempts"
+                                   value="{{ $settings['ussd_max_retry_attempts'] ?? 3 }}" min="1" max="10"
+                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue">
+                            <p class="mt-1 text-xs text-gray-500">Invalid entries allowed before the session is ended.</p>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Gateway security --}}
+                <div class="pt-6 border-t border-gray-200">
+                    <h3 class="text-sm font-semibold text-gray-900 mb-1">Gateway Security</h3>
+                    <p class="text-xs text-gray-500 mb-4">
+                        Restricts who may post to the USSD endpoint. Without these, anyone can drive the menu and consume vendors' paid sessions.
+                    </p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="ussd_gateway_ip_allowlist" class="block text-sm font-medium text-gray-700 mb-2">
+                                Gateway IP Allowlist
+                            </label>
+                            <input type="text" name="ussd_gateway_ip_allowlist" id="ussd_gateway_ip_allowlist"
+                                   value="{{ $settings['ussd_gateway_ip_allowlist'] ?? '' }}"
+                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                                   placeholder="e.g. 41.210.0.0/16, 197.251.1.20">
+                            <p class="mt-1 text-xs text-gray-500">Comma-separated IPs or CIDR blocks. Leave blank to allow any source IP.</p>
+                        </div>
+
+                        <div>
+                            <label for="ussd_gateway_secret" class="block text-sm font-medium text-gray-700 mb-2">
+                                Gateway Shared Secret
+                                @if ($hasGatewaySecret ?? false)
+                                    <span class="ml-1 text-xs font-normal text-green-600">&bull; configured</span>
+                                @endif
+                            </label>
+                            <input type="password" name="ussd_gateway_secret" id="ussd_gateway_secret"
+                                   autocomplete="new-password"
+                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                                   placeholder="{{ ($hasGatewaySecret ?? false) ? 'Leave blank to keep the current secret' : 'At least 16 characters' }}">
+                            <p class="mt-1 text-xs text-gray-500">Stored encrypted and never displayed again.</p>
+                            @if ($hasGatewaySecret ?? false)
+                                <label class="mt-2 inline-flex items-center text-xs text-gray-600">
+                                    <input type="checkbox" name="ussd_gateway_secret_clear" value="1"
+                                           class="rounded border-gray-300 text-brand-deep-blue focus:ring-brand-deep-blue mr-2">
+                                    Remove the stored secret
+                                </label>
+                            @endif
+                        </div>
+                    </div>
                 </div>
 
                 <div class="pt-4 border-t border-gray-200 flex justify-end">

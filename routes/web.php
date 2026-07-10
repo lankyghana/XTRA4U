@@ -315,6 +315,14 @@ Route::middleware(['vendor.approved'])
         Route::get('wallet/balance', [\App\Http\Controllers\VendorWalletController::class, 'balance'])
             ->name('wallet.balance');
         
+        // Vendor USSD subscription. The gateway callback is public and lives
+        // outside this group as `vendor.ussd.subscription.callback`.
+        Route::get('ussd/subscription', [\App\Http\Controllers\Vendor\UssdSubscriptionController::class, 'index'])
+            ->name('ussd.subscription.index');
+        Route::post('ussd/subscription/purchase', [\App\Http\Controllers\Vendor\UssdSubscriptionController::class, 'purchase'])
+            ->middleware('throttle:10,1')
+            ->name('ussd.subscription.purchase');
+
         // Vendor Quick Buy (dashboard shortcut)
         Route::get('quick-buy', [VendorQuickBuyController::class, 'show'])->name('quick-buy.show');
         Route::post('quick-buy', [VendorQuickBuyController::class, 'store'])->name('quick-buy.store');
@@ -330,6 +338,14 @@ Route::post('/checkout/verify', [CheckoutController::class, 'verify'])->name('ch
 Route::match(['GET','POST'], '/vendor/wallet/topup/callback/{reference}', [\App\Http\Controllers\VendorWalletController::class, 'topupCallback'])
     ->middleware('throttle:10,1')
     ->name('vendor.wallet.topup.callback');
+
+// Public USSD subscription callback. Must sit outside `vendor.approved`: the
+// payment gateway redirects here without the vendor's session. It only ever
+// re-verifies the reference against the gateway before activating.
+Route::match(['GET', 'POST'], '/vendor/ussd/subscription/callback/{reference}', [\App\Http\Controllers\Vendor\UssdSubscriptionController::class, 'callback'])
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
+    ->middleware('throttle:10,1')
+    ->name('vendor.ussd.subscription.callback');
 // Backwards-compatibility: preserve existing external bookmarks and old links.
 // Requests to the old path `/vendor/withdrawals` are permanently redirected
 // to `/vendor/wallet`. We keep route names unchanged so internal `route(...)`
@@ -352,6 +368,7 @@ Route::post('/webhooks/moolre/payment', [\App\Http\Controllers\Webhooks\MoolreWe
     ->name('webhooks.moolre.payment');
 Route::post('/api/ussd', [\App\Http\Controllers\Api\UssdController::class, 'handle'])
     ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
+    ->middleware('ussd.gateway')
     ->name('api.ussd');
 // Client-side polling endpoint for inline embed/iframe payment flows
 Route::get('/payment/status/{reference}', [\App\Http\Controllers\PaymentStatusController::class, 'status'])
@@ -412,6 +429,17 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
     // USSD Settings
     Route::get('settings/ussd', [\App\Http\Controllers\Admin\UssdSettingsController::class, 'index'])->name('settings.ussd');
     Route::put('settings/ussd', [\App\Http\Controllers\Admin\UssdSettingsController::class, 'update'])->name('settings.ussd.update');
+
+    // USSD Subscription Plans
+    Route::resource('ussd-plans', \App\Http\Controllers\Admin\UssdPlanController::class)
+        ->except(['show'])
+        ->parameters(['ussd-plans' => 'ussd_plan']);
+    Route::patch('ussd-plans/{ussd_plan}/toggle-active', [\App\Http\Controllers\Admin\UssdPlanController::class, 'toggleActive'])
+        ->name('ussd-plans.toggle-active');
+
+    // USSD audit trail
+    Route::get('ussd-events', [\App\Http\Controllers\Admin\UssdEventController::class, 'index'])
+        ->name('ussd-events.index');
 
     // External Fulfillment Settings
 
