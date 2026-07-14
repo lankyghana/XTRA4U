@@ -109,6 +109,12 @@
             'matches' => ['admin.settings.service-availability*'],
         ],
         [
+            'key' => 'delivery-status',
+            'label' => 'Delivery Status',
+            'href' => route('admin.settings.delivery-status'),
+            'matches' => ['admin.settings.delivery-status*'],
+        ],
+        [
             'key' => 'email-settings',
             'label' => 'Email Settings',
             'href' => route('admin.settings.email'),
