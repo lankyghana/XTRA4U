@@ -2,11 +2,10 @@
 
 namespace App\Services;
 
+use App\Events\ResultCheckerOrderPaid;
 use App\Models\ResultCheckerOrder;
 use App\Models\ResultCheckerPin;
-use App\Models\NetworkService;
 use App\Models\Transaction;
-use App\Events\ResultCheckerOrderPaid;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -25,40 +24,41 @@ class ResultCheckerService
      * so that we never open a nested DB::transaction (which requires savepoint
      * support and varies across DB drivers).
      */
-    public function handlePaymentCallback(ResultCheckerOrder $order, string $paymentReference, string $gateway = null): void
+    public function handlePaymentCallback(ResultCheckerOrder $order, string $paymentReference, ?string $gateway = null): void
     {
         $processed = DB::transaction(function () use ($order, $paymentReference, $gateway) {
             // Idempotent: if already paid, skip
             $order->refresh();
             if ($order->status === 'completed' || $order->paid_at) {
                 Log::info('ResultCheckerService: Order already paid, skipping duplicate callback', [
-                    'order_id'  => $order->id,
+                    'order_id' => $order->id,
                     'reference' => $paymentReference,
                 ]);
+
                 return false;
             }
 
             // Mark order as paid
             $order->update([
-                'paid_at'           => now(),
+                'paid_at' => now(),
                 'payment_reference' => $paymentReference,
-                'payment_gateway'   => $gateway,
+                'payment_gateway' => $gateway,
             ]);
 
             // Record the payment in the transactions table so it appears in
             // /admin/transactions alongside regular orders.
             Transaction::create([
-                'vendor_id'            => $order->vendor_id,
-                'amount'               => $order->total_price,
-                'commission_amount'    => $order->total_price - $order->resolveVendorProfit(),
-                'vendor_earning'       => $order->resolveVendorProfit(),
-                'recipient_phone'      => $order->customer_phone,
-                'payment_status'       => 'successful',
+                'vendor_id' => $order->vendor_id,
+                'amount' => $order->total_price,
+                'commission_amount' => $order->total_price - $order->resolveVendorProfit(),
+                'vendor_earning' => $order->resolveVendorProfit(),
+                'recipient_phone' => $order->customer_phone,
+                'payment_status' => 'successful',
                 'gateway_transaction_id' => $paymentReference,
-                'timestamp'            => now(),
-                'payment_type'         => 'result_checker',
+                'timestamp' => now(),
+                'payment_type' => 'result_checker',
                 'transactionable_type' => ResultCheckerOrder::class,
-                'transactionable_id'   => $order->id,
+                'transactionable_id' => $order->id,
             ]);
 
             // Try to allocate stock immediately — call the Unsafe variant so we
@@ -69,8 +69,8 @@ class ResultCheckerService
                 // No stock available, queue for fulfillment when stock arrives
                 $order->update(['status' => 'pending_stock']);
                 Log::info('ResultCheckerService: Insufficient stock, order marked pending', [
-                    'order_id'   => $order->id,
-                    'quantity'   => $order->quantity,
+                    'order_id' => $order->id,
+                    'quantity' => $order->quantity,
                     'service_id' => $order->service_id,
                 ]);
             }
@@ -139,7 +139,7 @@ class ResultCheckerService
 
             if ($locked->sms_sent_at) {
                 return [
-                    'ok'    => false,
+                    'ok' => false,
                     'error' => 'Cannot fail this order — the delivery SMS was already sent to the customer. The PINs cannot be returned to stock.',
                 ];
             }
@@ -148,7 +148,7 @@ class ResultCheckerService
             $locked->update(['status' => 'failed']);
 
             Log::info('ResultCheckerService: Order marked failed by admin', [
-                'order_id'      => $locked->id,
+                'order_id' => $locked->id,
                 'pins_released' => $released,
             ]);
 
@@ -186,11 +186,12 @@ class ResultCheckerService
 
         if ($availablePins->count() < $order->quantity) {
             Log::warning('ResultCheckerService: Insufficient available pins', [
-                'order_id'   => $order->id,
-                'requested'  => $order->quantity,
-                'available'  => $availablePins->count(),
+                'order_id' => $order->id,
+                'requested' => $order->quantity,
+                'available' => $availablePins->count(),
                 'service_id' => $order->service_id,
             ]);
+
             return false;
         }
 
@@ -198,12 +199,12 @@ class ResultCheckerService
         $pinsData = [];
         $availablePins->each(function ($pin) use ($order, &$pinsData) {
             $pin->update([
-                'status'                  => 'sold',
+                'status' => 'sold',
                 'result_checker_order_id' => $order->id,
-                'sold_at'                 => now(),
+                'sold_at' => now(),
             ]);
             $pinsData[] = [
-                'pin'    => $pin->pin,
+                'pin' => $pin->pin,
                 'serial' => $pin->serial,
             ];
         });
@@ -211,8 +212,8 @@ class ResultCheckerService
         // Store delivered pins on the order and mark as completed
         $order->update([
             'delivered_pins_json' => $pinsData,
-            'status'              => 'completed',
-            'fulfilled_at'        => now(),
+            'status' => 'completed',
+            'fulfilled_at' => now(),
         ]);
 
         // Credit vendor wallet — ResultCheckerOrder::resolveVendorProfit() handles
@@ -220,15 +221,15 @@ class ResultCheckerService
         $profit = $order->resolveVendorProfit();
         if ($profit > 0) {
             $this->walletService->creditVendor($order->vendor_id, (float) $profit, [
-                'purpose'                  => 'order_earning',
-                'result_checker_order_id'  => $order->id,
-                'service_purchased'        => $order->service->name ?? 'Result Checker',
+                'purpose' => 'order_earning',
+                'result_checker_order_id' => $order->id,
+                'service_purchased' => $order->service->name ?? 'Result Checker',
             ]);
         }
 
         Log::info('ResultCheckerService: Pins allocated successfully', [
-            'order_id'      => $order->id,
-            'quantity'      => $order->quantity,
+            'order_id' => $order->id,
+            'quantity' => $order->quantity,
             'vendor_profit' => $profit,
         ]);
 
@@ -258,9 +259,9 @@ class ResultCheckerService
 
         ResultCheckerPin::whereIn('id', $linkedPins->pluck('id'))
             ->update([
-                'status'                  => 'available',
+                'status' => 'available',
                 'result_checker_order_id' => null,
-                'sold_at'                 => null,
+                'sold_at' => null,
             ]);
 
         // Wipe the snapshot of delivered pins stored on the order itself
@@ -269,9 +270,9 @@ class ResultCheckerService
         $count = $linkedPins->count();
 
         Log::info('ResultCheckerService: Released pins back to stock', [
-            'order_id'      => $order->id,
+            'order_id' => $order->id,
             'pins_released' => $count,
-            'service_id'    => $order->service_id,
+            'service_id' => $order->service_id,
         ]);
 
         return $count;
@@ -304,7 +305,7 @@ class ResultCheckerService
         if ($order->status !== 'pending_stock') {
             return [
                 'success' => false,
-                'message' => 'Order is not in pending_stock status (current: ' . $order->status . ')',
+                'message' => 'Order is not in pending_stock status (current: '.$order->status.')',
             ];
         }
 
@@ -314,6 +315,7 @@ class ResultCheckerService
             if ($allocated) {
                 // Fire event for SMS delivery
                 event(new ResultCheckerOrderPaid($order->refresh()));
+
                 return [
                     'success' => true,
                     'message' => 'Order fulfilled successfully',
@@ -329,9 +331,10 @@ class ResultCheckerService
                 'order_id' => $order->id,
                 'error' => $e->getMessage(),
             ]);
+
             return [
                 'success' => false,
-                'message' => 'Error during fulfillment: ' . $e->getMessage(),
+                'message' => 'Error during fulfillment: '.$e->getMessage(),
             ];
         }
     }
@@ -345,8 +348,9 @@ class ResultCheckerService
             return true;
         }
 
-        if (!$order->delivered_pins_json || count($order->delivered_pins_json) === 0) {
+        if (! $order->delivered_pins_json || count($order->delivered_pins_json) === 0) {
             Log::warning('ResultCheckerService: No pins to send', ['order_id' => $order->id]);
+
             return false;
         }
 
@@ -355,7 +359,7 @@ class ResultCheckerService
             $pins = $order->delivered_pins_json;
             $message = $this->formatSmsMessage($order, $pins);
 
-            $sent = $this->smsService->send($order->customer_phone, $message);
+            $sent = $this->smsService->sendResultCheckerPin($order->customer_phone, $message);
 
             if ($sent) {
                 $order->update(['sms_sent_at' => now()]);
@@ -363,12 +367,14 @@ class ResultCheckerService
                     'order_id' => $order->id,
                     'phone' => $order->customer_phone,
                 ]);
+
                 return true;
             } else {
                 Log::warning('ResultCheckerService: SMS send returned false', [
                     'order_id' => $order->id,
                     'phone' => $order->customer_phone,
                 ]);
+
                 return false;
             }
         } catch (\Exception $e) {
@@ -376,6 +382,7 @@ class ResultCheckerService
                 'order_id' => $order->id,
                 'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -388,7 +395,7 @@ class ResultCheckerService
         $checker = $order->service->name ?? 'Result Checker';
         $pinList = implode(
             "\n",
-            array_map(fn($p) => "PIN: {$p['pin']}\nSERIAL: {$p['serial']}", $pins)
+            array_map(fn ($p) => "PIN: {$p['pin']}\nSERIAL: {$p['serial']}", $pins)
         );
 
         return "Your {$checker} has been delivered.\n{$pinList}\n\nThank you for using XTRA4U.";
@@ -410,7 +417,7 @@ class ResultCheckerService
         $order = ResultCheckerOrder::where('payment_reference', $query)->first();
 
         // 2. Try by numeric order ID (only when the query is a plain integer)
-        if (!$order && ctype_digit($query)) {
+        if (! $order && ctype_digit($query)) {
             $order = ResultCheckerOrder::find((int) $query);
         }
 
@@ -419,7 +426,7 @@ class ResultCheckerService
         //    "024 123 4567", "024-123-4567", and "0241234567" all match.
         //    A leading-wildcard LIKE cannot use an index and exposes any customer's
         //    order to a partial-number search, so we use an exact match instead.
-        if (!$order && $this->looksLikePhoneNumber($query)) {
+        if (! $order && $this->looksLikePhoneNumber($query)) {
             $normalised = $this->normalisePhone($query);
             $order = ResultCheckerOrder::whereRaw(
                 "REPLACE(REPLACE(REPLACE(REPLACE(customer_phone, ' ', ''), '-', ''), '.', ''), '()', '') = ?",
@@ -429,11 +436,12 @@ class ResultCheckerService
                 ->first();
         }
 
-        if (!$order) {
+        if (! $order) {
             return null;
         }
 
         $order->load('service');
+
         return $this->formatOrderStatus($order);
     }
 
@@ -497,7 +505,7 @@ class ResultCheckerService
 
         // Require at least 7 digits (minimum local phone length)
         $digitsOnly = preg_replace('/\D/', '', $query);
+
         return strlen($digitsOnly ?? '') >= 7;
     }
 }
-

@@ -1,18 +1,18 @@
-<?php 
+<?php
+
 namespace App\Http\Controllers;
 
 use App\Models\NetworkService;
 use App\Models\Order;
 use App\Models\Transaction;
 use App\Models\Vendor;
-use App\Services\SmsService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class VendorFulfillmentController extends Controller
@@ -57,9 +57,13 @@ class VendorFulfillmentController extends Controller
 
         return back()->with('success', "Resent {$resentCount} failed External API order(s) for processing.");
     }
+
     private const DEFAULT_NETWORKS = ['MTN', 'Vodafone', 'AirtelTigo', 'Telecel'];
+
     private const EXTERNAL_API_NETWORK = 'External API';
+
     private const MAX_NETWORKS_ON_PAGE = 50;
+
     private const PREVIEW_NETWORKS_LIMIT = 5;
 
     public function index(Request $request)
@@ -123,6 +127,7 @@ class VendorFulfillmentController extends Controller
                     $downloadedByNetwork[$network] = 0;
 
                     $downloadedOrdersPreview[$network] = collect();
+
                     continue;
                 }
 
@@ -262,7 +267,7 @@ class VendorFulfillmentController extends Controller
         });
 
         if ($orders->isEmpty()) {
-            return back()->with('status', 'No new orders available for download for ' . $network . '.');
+            return back()->with('status', 'No new orders available for download for '.$network.'.');
         }
 
         $lines = [];
@@ -271,16 +276,16 @@ class VendorFulfillmentController extends Controller
         foreach ($orders as $order) {
             $number = (string) $order->recipient_phone_number;
             $package = (string) $order->display_product_label;
-            $lines[] = $number . "\t" . str_replace(["\r", "\n", "\t"], ' ', $package);
+            $lines[] = $number."\t".str_replace(["\r", "\n", "\t"], ' ', $package);
         }
 
-        $content = implode("\n", $lines) . "\n";
+        $content = implode("\n", $lines)."\n";
 
-        $filename = 'fulfillment_' . Str::slug($network) . '_' . now()->format('Ymd_His') . '.txt';
+        $filename = 'fulfillment_'.Str::slug($network).'_'.now()->format('Ymd_His').'.txt';
 
         return response($content, 200)
             ->header('Content-Type', 'text/plain; charset=UTF-8')
-            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+            ->header('Content-Disposition', 'attachment; filename="'.$filename.'"');
     }
 
     public function complete(Request $request, string $network): RedirectResponse
@@ -302,6 +307,7 @@ class VendorFulfillmentController extends Controller
             $orderIds = is_array($orderIds) ? $orderIds : [];
             $orderIds = array_values(array_unique(array_filter(array_map(function ($value) {
                 $value = is_scalar($value) ? (string) $value : '';
+
                 return ctype_digit($value) ? (int) $value : null;
             }, $orderIds))));
 
@@ -313,14 +319,13 @@ class VendorFulfillmentController extends Controller
                 return back()->with('status', 'Please select 500 orders or fewer at a time.');
             }
 
-            $smsService = app(SmsService::class);
             $updatedCount = 0;
 
             $this->externalApiSentOrdersQuery($vendor)
                 ->whereIn('id', $orderIds)
                 ->with(['service'])
                 ->orderBy('id')
-                ->chunkById(200, function ($orders) use (&$updatedCount, $smsService) {
+                ->chunkById(200, function ($orders) use (&$updatedCount) {
                     foreach ($orders as $order) {
                         $didUpdate = DB::transaction(function () use ($order) {
                             $fresh = Order::query()
@@ -348,16 +353,6 @@ class VendorFulfillmentController extends Controller
                         }
 
                         $updatedCount++;
-
-                        try {
-                            $smsService->sendOrderCompletedSms(
-                                $order->recipient_phone_number,
-                                $order->service_purchased,
-                                $order->id
-                            );
-                        } catch (\Throwable $e) {
-                            // Completion should still succeed even if SMS fails.
-                        }
                     }
                 });
 
@@ -365,17 +360,15 @@ class VendorFulfillmentController extends Controller
                 return back()->with('status', 'No selected External API orders were eligible to be marked completed.');
             }
 
-            return back()->with('success', 'Marked ' . $updatedCount . ' External API orders as completed.');
+            return back()->with('success', 'Marked '.$updatedCount.' External API orders as completed.');
         }
-
-        $smsService = app(SmsService::class);
 
         $updatedCount = 0;
 
         $this->downloadedOrdersQuery($vendor, $network)
             ->with(['service'])
             ->orderBy('id')
-            ->chunkById(200, function ($orders) use (&$updatedCount, $smsService) {
+            ->chunkById(200, function ($orders) use (&$updatedCount) {
                 foreach ($orders as $order) {
                     $didUpdate = DB::transaction(function () use ($order) {
                         $fresh = Order::query()
@@ -403,24 +396,14 @@ class VendorFulfillmentController extends Controller
                     }
 
                     $updatedCount++;
-
-                    try {
-                        $smsService->sendOrderCompletedSms(
-                            $order->recipient_phone_number,
-                            $order->service_purchased,
-                            $order->id
-                        );
-                    } catch (\Throwable $e) {
-                        // Completion should still succeed even if SMS fails.
-                    }
                 }
             });
 
         if ($updatedCount === 0) {
-            return back()->with('status', 'No downloaded orders found to mark as completed for ' . $network . '.');
+            return back()->with('status', 'No downloaded orders found to mark as completed for '.$network.'.');
         }
 
-        return back()->with('success', 'Marked ' . $updatedCount . ' downloaded orders as completed for ' . $network . '.');
+        return back()->with('success', 'Marked '.$updatedCount.' downloaded orders as completed for '.$network.'.');
     }
 
     private function resolveVendor(): Vendor
@@ -574,17 +557,17 @@ class VendorFulfillmentController extends Controller
                         ->where('orders.vendor_id', $vendorId);
                 })
                 // Affiliate/reseller orders: product owner fulfills.
-                ->orWhere(function ($q2) use ($vendorId) {
-                    $q2->where('orders.is_reseller_order', true)
-                        ->where('orders.owner_vendor_id', $vendorId);
-                })
+                    ->orWhere(function ($q2) use ($vendorId) {
+                        $q2->where('orders.is_reseller_order', true)
+                            ->where('orders.owner_vendor_id', $vendorId);
+                    })
                 // Backward-compatible fallback: infer owner via reseller product.
-                ->orWhere(function ($q2) use ($vendorId) {
-                    $q2->where('orders.is_reseller_order', true)
-                        ->whereHas('resellerProduct', function ($q3) use ($vendorId) {
-                            $q3->where('owner_vendor_id', $vendorId);
-                        });
-                });
+                    ->orWhere(function ($q2) use ($vendorId) {
+                        $q2->where('orders.is_reseller_order', true)
+                            ->whereHas('resellerProduct', function ($q3) use ($vendorId) {
+                                $q3->where('owner_vendor_id', $vendorId);
+                            });
+                    });
             })
             // Paid-only safety: fulfillment should only operate on successfully-paid orders.
             ->whereIn('orders.payment_status', ['paid', 'completed'])
