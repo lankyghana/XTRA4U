@@ -3,24 +3,20 @@
 namespace App\Http\Controllers;
 
 use App\Mail\OrderPlacedMail;
+use App\Models\AdminNotification;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ResellerProduct;
 use App\Models\Transaction;
 use App\Models\Vendor;
 use App\Models\VendorNotification;
-use App\Models\AdminNotification;
 use App\Services\PaymentService;
 use App\Services\WalletService;
-use App\Services\AffiliateChainService;
-use App\Services\PaystackPaymentService;
-use App\Services\SmsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class PurchaseController extends Controller
@@ -31,7 +27,7 @@ class PurchaseController extends Controller
     {
         // Allow PaymentService to be injected (helpful for tests). If not provided,
         // fall back to the default implementation with GatewayManager.
-        $this->paymentService = $paymentService ?? new PaymentService();
+        $this->paymentService = $paymentService ?? new PaymentService;
     }
 
     public function store(Request $request)
@@ -49,7 +45,7 @@ class PurchaseController extends Controller
         ]);
 
         $isResellerOrder = $validated['is_reseller_product'] ?? false;
-        
+
         if ($isResellerOrder && isset($validated['reseller_product_id'])) {
             // Handle reseller product
             $resellerProduct = ResellerProduct::with(['product', 'ownerVendor', 'resellerVendor'])
@@ -58,7 +54,7 @@ class PurchaseController extends Controller
                 ->where('is_active', true)
                 ->first();
 
-            if (!$resellerProduct || !$resellerProduct->product || !$resellerProduct->product->is_active) {
+            if (! $resellerProduct || ! $resellerProduct->product || ! $resellerProduct->product->is_active) {
                 throw ValidationException::withMessages([
                     'vendor_service_id' => 'The selected reseller product is unavailable.',
                 ]);
@@ -91,7 +87,7 @@ class PurchaseController extends Controller
         $payWithWallet = (bool) ($request->input('pay_with_wallet') ?? false);
 
         if ($payWithWallet && auth('vendor')->check()) {
-            $walletService = new WalletService();
+            $walletService = new WalletService;
 
             // Wrap the vendor wallet purchase in a DB transaction and lock the vendor row
             return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $validated, $isResellerOrder, $resellerProduct, $walletService) {
@@ -190,6 +186,7 @@ class PurchaseController extends Controller
                     if ($request->expectsJson()) {
                         return response()->json(['success' => false, 'message' => 'Insufficient wallet balance'], 400);
                     }
+
                     return back()->withErrors(['wallet' => 'Insufficient wallet balance']);
                 }
 
@@ -247,7 +244,7 @@ class PurchaseController extends Controller
         // Use vendor's email for Paystack instead of requiring customer email
         $vendor = Vendor::find($validated['vendor_id']);
         $vendorEmail = $vendor->email ?? 'noreply@xtra4u.com';
-        
+
         // Initiate payment
         $paymentResult = $this->paymentService->initiatePayment(
             $order,
@@ -265,7 +262,7 @@ class PurchaseController extends Controller
                     'authorization_url' => $paymentResult['authorization_url'] ?? null,
                     'gateway_name' => $paymentResult['gateway_name'] ?? null,
                     'order_id' => $order->id,
-                    'redirect' => route('checkout.show') . '?payment_pending=1&reference=' . $paymentResult['reference'],
+                    'redirect' => route('checkout.show').'?payment_pending=1&reference='.$paymentResult['reference'],
                 ]);
             }
 
@@ -321,13 +318,13 @@ class PurchaseController extends Controller
         ])->validate();
 
         $isResellerOrder = $validated['is_reseller_product'] ?? false;
-        
+
         if ($isResellerOrder && isset($validated['reseller_product_id'])) {
             $resellerProduct = ResellerProduct::with(['product', 'ownerVendor', 'resellerVendor'])
                 ->where('id', $validated['reseller_product_id'])
                 ->where('is_active', true)
                 ->firstOrFail();
-            
+
             $product = $resellerProduct->product;
             $amountPaid = (float) $resellerProduct->selling_price;
         } else {
@@ -336,7 +333,7 @@ class PurchaseController extends Controller
                 ->where('vendor_id', $validated['vendor_id'])
                 ->where('is_active', true)
                 ->firstOrFail();
-            
+
             $amountPaid = (float) $product->price;
             $resellerProduct = null;
         }
@@ -360,16 +357,16 @@ class PurchaseController extends Controller
                 // **RESELLER ORDER - Split Payment**
                 $basePrice = $resellerProduct->base_price;
                 $markupPrice = $resellerProduct->markup_price;
-                
+
                 // Calculate commissions (2% each)
                 $ownerCommission = round($basePrice * 0.02, 2);
                 $resellerCommission = round($markupPrice * 0.02, 2);
                 $totalPlatformCommission = $ownerCommission + $resellerCommission;
-                
+
                 // Calculate earnings (after commission)
                 $ownerEarning = round($basePrice - $ownerCommission, 2);
                 $resellerEarning = round($markupPrice - $resellerCommission, 2);
-                
+
                 // Create order with reseller info
                 $order = Order::create([
                     'recipient_phone_number' => $validated['recipient_phone_number'],
@@ -428,7 +425,7 @@ class PurchaseController extends Controller
                     'vendor_id' => $resellerProduct->owner_vendor_id,
                     'type' => VendorNotification::TYPE_AFFILIATE_ORDER,
                     'title' => 'New Affiliate Order',
-                    'message' => "A reseller has made a sale of your product '{$product->name}'. Your earning: GHS " . number_format($ownerEarning, 2),
+                    'message' => "A reseller has made a sale of your product '{$product->name}'. Your earning: GHS ".number_format($ownerEarning, 2),
                     'order_id' => $order->id,
                     'data' => [
                         'product_name' => $product->name,
@@ -443,7 +440,7 @@ class PurchaseController extends Controller
                     'vendor_id' => $resellerProduct->reseller_vendor_id,
                     'type' => VendorNotification::TYPE_NEW_ORDER,
                     'title' => 'New Order Received',
-                    'message' => "You have a new order for '{$product->name}'. Your markup earning: GHS " . number_format($resellerEarning, 2),
+                    'message' => "You have a new order for '{$product->name}'. Your markup earning: GHS ".number_format($resellerEarning, 2),
                     'order_id' => $order->id,
                     'data' => [
                         'product_name' => $product->name,
@@ -511,7 +508,7 @@ class PurchaseController extends Controller
                     'vendor_id' => $product->vendor_id,
                     'type' => VendorNotification::TYPE_NEW_ORDER,
                     'title' => 'New Order Received',
-                    'message' => "You have a new order for '{$product->name}'. Earning: GHS " . number_format($vendorEarnings, 2),
+                    'message' => "You have a new order for '{$product->name}'. Earning: GHS ".number_format($vendorEarnings, 2),
                     'order_id' => $order->id,
                     'data' => [
                         'product_name' => $product->name,
@@ -546,24 +543,6 @@ class PurchaseController extends Controller
                 Log::warning('Failed to send legacy callback order email', [
                     'order_id' => $order?->id,
                     'vendor_id' => $email['vendor_id'] ?? null,
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        }
-
-        // Send SMS to mobile money number after successful order
-        if ($order && $order->status !== 'Failed') {
-            try {
-                $smsService = app(SmsService::class);
-                $smsService->sendOrderPlacedSms(
-                    $order->mobile_money_number,
-                    $order->id,
-                    $order->recipient_phone_number,
-                    $order->service_purchased
-                );
-            } catch (\Exception $e) {
-                Log::error('Failed to send order placement SMS', [
-                    'order_id' => $order->id,
                     'error' => $e->getMessage(),
                 ]);
             }

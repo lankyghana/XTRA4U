@@ -1,9 +1,9 @@
 <?php
+
 namespace App\Services;
 
 use App\Events\OrderCompleted;
 use App\Jobs\SendOrderPlacedCommunications;
-use App\Mail\OrderPlacedMail;
 use App\Models\AdminNotification;
 use App\Models\Order;
 use App\Models\PaymentGatewayConfig;
@@ -18,12 +18,10 @@ use Illuminate\Support\Facades\Log;
 class PaymentService
 {
     protected GatewayManager $gatewayManager;
-    protected ?SmsService $smsService;
 
     public function __construct(?GatewayManager $gatewayManager = null)
     {
-        $this->gatewayManager = $gatewayManager ?? new GatewayManager();
-        $this->smsService = $this->gatewayManager->getSmsService();
+        $this->gatewayManager = $gatewayManager ?? new GatewayManager;
     }
 
     /**
@@ -80,6 +78,7 @@ class PaymentService
                 'order_id' => $order->id,
             ];
         }
+
         return [
             'success' => false,
             'message' => $result['message'] ?? 'Failed to initiate payment. Please try again.',
@@ -132,7 +131,7 @@ class PaymentService
             return $this->completeRegularOrder($locked, $postCommit);
         });
 
-        if ($didComplete && !empty($postCommit)) {
+        if ($didComplete && ! empty($postCommit)) {
             $this->dispatchPostCommitActions($postCommit);
         }
 
@@ -148,25 +147,25 @@ class PaymentService
         $commission = round($amountPaid * 0.02, 2);
         $vendorEarnings = round($amountPaid - $commission, 2);
 
-		// Prefer resolved product name over legacy/raw identifiers.
-		$resolvedServiceName = $order->service?->name;
+        // Prefer resolved product name over legacy/raw identifiers.
+        $resolvedServiceName = $order->service?->name;
 
-		// Update or create transaction (lifecycle: pending -> completed)
-		$this->upsertOrderTransaction($order, $order->vendor_id, [
-			'recipient_phone' => $order->recipient_phone_number,
-			'amount' => $amountPaid,
-			'commission_amount' => $commission,
-			'vendor_earning' => $vendorEarnings,
+        // Update or create transaction (lifecycle: pending -> completed)
+        $this->upsertOrderTransaction($order, $order->vendor_id, [
+            'recipient_phone' => $order->recipient_phone_number,
+            'amount' => $amountPaid,
+            'commission_amount' => $commission,
+            'vendor_earning' => $vendorEarnings,
             'payment_status' => 'successful',
-		]);
+        ]);
 
         // Update order status
         $order->update([
             'status' => 'Processing',
             'payment_status' => 'paid',
             'payment_completed_at' => now(),
-			// Normalize display name whenever possible.
-			...($resolvedServiceName ? ['service_purchased' => $resolvedServiceName] : []),
+            // Normalize display name whenever possible.
+            ...($resolvedServiceName ? ['service_purchased' => $resolvedServiceName] : []),
         ]);
 
         // Update vendor wallet balance
@@ -179,7 +178,7 @@ class PaymentService
                 'vendor_id' => $vendor->id,
                 'type' => VendorNotification::TYPE_NEW_ORDER,
                 'title' => 'New Order Received',
-                'message' => "You have a new order for '{$order->service_purchased}'. Earning: GHS " . number_format($vendorEarnings, 2),
+                'message' => "You have a new order for '{$order->service_purchased}'. Earning: GHS ".number_format($vendorEarnings, 2),
                 'order_id' => $order->id,
                 'data' => [
                     'product_name' => $order->service_purchased,
@@ -188,15 +187,15 @@ class PaymentService
                 ],
             ]);
 
-			// External side-effects must not run inside DB transactions.
-			$postCommit[] = [
-				'type' => 'communications',
-				'order_id' => $order->id,
-				'vendor_id' => $vendor->id,
-				'role' => 'owner',
-				'earning' => $vendorEarnings,
-				'sms_type' => 'order',
-			];
+            // External side-effects must not run inside DB transactions.
+            $postCommit[] = [
+                'type' => 'communications',
+                'order_id' => $order->id,
+                'vendor_id' => $vendor->id,
+                'role' => 'owner',
+                'earning' => $vendorEarnings,
+                'sms_type' => 'order',
+            ];
         }
 
         // Send admin notification
@@ -290,7 +289,7 @@ class PaymentService
                     'vendor_id' => (int) $locked->owner_vendor_id,
                     'type' => VendorNotification::TYPE_AFFILIATE_ORDER,
                     'title' => 'New Affiliate Order',
-                    'message' => "A reseller made a sale of your product '{$locked->service_purchased}'. Your earning: GHS " . number_format($vendorEarning, 2),
+                    'message' => "A reseller made a sale of your product '{$locked->service_purchased}'. Your earning: GHS ".number_format($vendorEarning, 2),
                     'order_id' => $locked->id,
                     'data' => [
                         'product_name' => $locked->service_purchased,
@@ -315,7 +314,7 @@ class PaymentService
                         'vendor_id' => $locked->vendor_id,
                         'type' => VendorNotification::TYPE_NEW_ORDER,
                         'title' => 'New Order Received',
-                        'message' => "You have a new reseller order for '{$locked->service_purchased}'.", 
+                        'message' => "You have a new reseller order for '{$locked->service_purchased}'.",
                         'order_id' => $locked->id,
                         'data' => [
                             'product_name' => $locked->service_purchased,
@@ -339,7 +338,7 @@ class PaymentService
                         'vendor_id' => $locked->vendor_id,
                         'type' => VendorNotification::TYPE_NEW_ORDER,
                         'title' => 'New Order Received',
-                        'message' => "You have a new order for '{$locked->service_purchased}'. Earning recorded: GHS " . number_format($vendorEarning, 2),
+                        'message' => "You have a new order for '{$locked->service_purchased}'. Earning recorded: GHS ".number_format($vendorEarning, 2),
                         'order_id' => $locked->id,
                         'data' => [
                             'product_name' => $locked->service_purchased,
@@ -384,15 +383,16 @@ class PaymentService
         $resellerProduct = ResellerProduct::with(['ownerVendor', 'resellerVendor', 'product'])
             ->find($order->reseller_product_id);
 
-        if (!$resellerProduct) {
+        if (! $resellerProduct) {
             Log::error('Reseller product not found for order', ['order_id' => $order->id]);
+
             return false;
         }
 
         // Multi-level reseller chain support (additive):
         // If this reseller product is sourced from an upstream reseller listing,
         // distribute earnings across the full chain. Single-level path stays unchanged.
-        if (!empty($resellerProduct->source_reseller_product_id)) {
+        if (! empty($resellerProduct->source_reseller_product_id)) {
             return $this->completeMultiLevelResellerOrder($order, $resellerProduct, $postCommit);
         }
 
@@ -408,11 +408,11 @@ class PaymentService
         $ownerEarning = round($basePrice - $ownerCommission, 2);
         $resellerEarning = round($markupPrice - $resellerCommission, 2);
 
-		$resolvedServiceName = $resellerProduct->product?->name ?? $order->service?->name;
+        $resolvedServiceName = $resellerProduct->product?->name ?? $order->service?->name;
 
-		// Update order with earnings info
-		$order->update([
-			'status' => 'Processing',
+        // Update order with earnings info
+        $order->update([
+            'status' => 'Processing',
             'payment_status' => 'paid',
             'payment_completed_at' => now(),
             'base_price' => $basePrice,
@@ -420,30 +420,30 @@ class PaymentService
             'owner_earning' => $ownerEarning,
             'reseller_earning' => $resellerEarning,
             'platform_commission' => $totalPlatformCommission,
-			// Persist affiliate mapping on the order for consistent UI and reporting.
-			'owner_vendor_id' => $resellerProduct->owner_vendor_id,
-			'reseller_vendor_id' => $resellerProduct->reseller_vendor_id,
-			'is_reseller_order' => true,
-			...($resellerProduct->product?->id ? ['vendor_service_id' => $resellerProduct->product->id] : []),
-			...($resolvedServiceName ? ['service_purchased' => $resolvedServiceName] : []),
+            // Persist affiliate mapping on the order for consistent UI and reporting.
+            'owner_vendor_id' => $resellerProduct->owner_vendor_id,
+            'reseller_vendor_id' => $resellerProduct->reseller_vendor_id,
+            'is_reseller_order' => true,
+            ...($resellerProduct->product?->id ? ['vendor_service_id' => $resellerProduct->product->id] : []),
+            ...($resolvedServiceName ? ['service_purchased' => $resolvedServiceName] : []),
         ]);
 
-		// Update or create transactions (lifecycle: pending -> completed)
-		$this->upsertOrderTransaction($order, $resellerProduct->owner_vendor_id, [
-			'recipient_phone' => $order->recipient_phone_number,
-			'amount' => $basePrice,
-			'commission_amount' => $ownerCommission,
-			'vendor_earning' => $ownerEarning,
+        // Update or create transactions (lifecycle: pending -> completed)
+        $this->upsertOrderTransaction($order, $resellerProduct->owner_vendor_id, [
+            'recipient_phone' => $order->recipient_phone_number,
+            'amount' => $basePrice,
+            'commission_amount' => $ownerCommission,
+            'vendor_earning' => $ownerEarning,
             'payment_status' => 'successful',
-		]);
+        ]);
 
-		$this->upsertOrderTransaction($order, $resellerProduct->reseller_vendor_id, [
-			'recipient_phone' => $order->recipient_phone_number,
-			'amount' => $markupPrice,
-			'commission_amount' => $resellerCommission,
-			'vendor_earning' => $resellerEarning,
+        $this->upsertOrderTransaction($order, $resellerProduct->reseller_vendor_id, [
+            'recipient_phone' => $order->recipient_phone_number,
+            'amount' => $markupPrice,
+            'commission_amount' => $resellerCommission,
+            'vendor_earning' => $resellerEarning,
             'payment_status' => 'successful',
-		]);
+        ]);
 
         // Update wallet balances
         $ownerVendor = $resellerProduct->ownerVendor;
@@ -457,7 +457,7 @@ class PaymentService
                 'vendor_id' => $ownerVendor->id,
                 'type' => VendorNotification::TYPE_AFFILIATE_ORDER,
                 'title' => 'New Affiliate Order',
-                'message' => "A reseller made a sale of your product '{$order->service_purchased}'. Your earning: GHS " . number_format($ownerEarning, 2),
+                'message' => "A reseller made a sale of your product '{$order->service_purchased}'. Your earning: GHS ".number_format($ownerEarning, 2),
                 'order_id' => $order->id,
                 'data' => [
                     'product_name' => $order->service_purchased,
@@ -467,14 +467,14 @@ class PaymentService
                 ],
             ]);
 
-			$postCommit[] = [
-				'type' => 'communications',
-				'order_id' => $order->id,
-				'vendor_id' => $ownerVendor->id,
-				'role' => 'owner',
-				'earning' => $ownerEarning,
-				'sms_type' => 'affiliate',
-			];
+            $postCommit[] = [
+                'type' => 'communications',
+                'order_id' => $order->id,
+                'vendor_id' => $ownerVendor->id,
+                'role' => 'owner',
+                'earning' => $ownerEarning,
+                'sms_type' => 'affiliate',
+            ];
         }
 
         if ($resellerVendor) {
@@ -485,7 +485,7 @@ class PaymentService
                 'vendor_id' => $resellerVendor->id,
                 'type' => VendorNotification::TYPE_NEW_ORDER,
                 'title' => 'New Order Received',
-                'message' => "You have a new order for '{$order->service_purchased}'. Your markup earning: GHS " . number_format($resellerEarning, 2),
+                'message' => "You have a new order for '{$order->service_purchased}'. Your markup earning: GHS ".number_format($resellerEarning, 2),
                 'order_id' => $order->id,
                 'data' => [
                     'product_name' => $order->service_purchased,
@@ -494,14 +494,14 @@ class PaymentService
                 ],
             ]);
 
-			$postCommit[] = [
-				'type' => 'communications',
-				'order_id' => $order->id,
-				'vendor_id' => $resellerVendor->id,
-				'role' => 'reseller',
-				'earning' => $resellerEarning,
-				'sms_type' => 'order',
-			];
+            $postCommit[] = [
+                'type' => 'communications',
+                'order_id' => $order->id,
+                'vendor_id' => $resellerVendor->id,
+                'role' => 'reseller',
+                'earning' => $resellerEarning,
+                'sms_type' => 'order',
+            ];
         }
 
         // Admin notification
@@ -535,10 +535,10 @@ class PaymentService
      */
     protected function completeMultiLevelResellerOrder(Order $order, ResellerProduct $resellerProduct, array &$postCommit = []): bool
     {
-        $chainService = new AffiliateChainService();
+        $chainService = new AffiliateChainService;
         $payout = $chainService->computeResellerProductPayout($resellerProduct);
 
-        if (!($payout['ok'] ?? false)) {
+        if (! ($payout['ok'] ?? false)) {
             Log::warning('Multi-level reseller payout computation failed; falling back to 2-party split', [
                 'order_id' => $order->id,
                 'reseller_product_id' => $resellerProduct->id,
@@ -645,7 +645,7 @@ class PaymentService
                 'vendor_id' => $ownerVendor->id,
                 'type' => VendorNotification::TYPE_AFFILIATE_ORDER,
                 'title' => 'New Affiliate Order',
-                'message' => "A reseller made a sale of your product '{$order->service_purchased}'. Your earning: GHS " . number_format((float) $payout['owner_earning'], 2),
+                'message' => "A reseller made a sale of your product '{$order->service_purchased}'. Your earning: GHS ".number_format((float) $payout['owner_earning'], 2),
                 'order_id' => $order->id,
                 'data' => [
                     'product_name' => $order->service_purchased,
@@ -669,7 +669,7 @@ class PaymentService
                 'vendor_id' => $immediateSeller->id,
                 'type' => VendorNotification::TYPE_NEW_ORDER,
                 'title' => 'New Order Received',
-                'message' => "You have a new order for '{$order->service_purchased}'. Your markup earning: GHS " . number_format((float) $payout['immediate_seller_earning'], 2),
+                'message' => "You have a new order for '{$order->service_purchased}'. Your markup earning: GHS ".number_format((float) $payout['immediate_seller_earning'], 2),
                 'order_id' => $order->id,
                 'data' => [
                     'product_name' => $order->service_purchased,
@@ -717,6 +717,7 @@ class PaymentService
                     (string) $action['role'],
                     (float) $action['earning'],
                 );
+
                 continue;
             }
 
@@ -733,41 +734,20 @@ class PaymentService
     }
 
     /**
-     * Send SMS notification to vendor
-     */
-    protected function sendVendorSms(Vendor $vendor, Order $order, float $earning, string $type = 'order'): void
-    {
-        if (!$this->smsService || !$vendor->phone_number) {
-            return;
-        }
-
-        try {
-            if ($type === 'affiliate') {
-                $message = "XTRA4U: Affiliate sale! {$order->service_purchased} sold by your reseller. Your earning: GHS " . number_format($earning, 2);
-            } else {
-                $message = "XTRA4U: New order! {$order->service_purchased}. Earning: GHS " . number_format($earning, 2) . ". Customer: {$order->recipient_phone_number}";
-            }
-
-            $this->smsService->send($vendor->phone_number, $message);
-        } catch (\Exception $e) {
-            Log::warning('Failed to send SMS to vendor', ['error' => $e->getMessage()]);
-        }
-    }
-
-    /**
      * Handle payment webhook callback
      */
     public function handleWebhook(string $reference): array
     {
         $result = $this->gatewayManager->verifyCollection($reference);
 
-        if (!$result['success']) {
+        if (! $result['success']) {
             return $result;
         }
 
         $order = Order::where('payment_reference', $reference)->first();
-        if (!$order) {
+        if (! $order) {
             Log::error('Webhook: Order not found', ['reference' => $reference]);
+
             return [
                 'success' => false,
                 'message' => 'Order not found',
@@ -784,6 +764,7 @@ class PaymentService
             }
 
             Log::info('Webhook: Order already completed', ['order_id' => $order->id]);
+
             return [
                 'success' => true,
                 'message' => 'Order already processed',
@@ -806,6 +787,7 @@ class PaymentService
                 'order_id' => $order->id,
                 'reference' => $reference,
             ]);
+
             return [
                 'success' => true,
                 'message' => 'Payment processed successfully',
@@ -817,6 +799,7 @@ class PaymentService
                 'reference' => $reference,
                 'status' => $paymentStatus,
             ]);
+
             return [
                 'success' => true,
                 'message' => 'Payment pending',
@@ -827,12 +810,13 @@ class PaymentService
                 'payment_status' => 'failed',
                 'status' => 'Failed',
             ]);
-			$this->markOrderTransactionsFailed($order);
+            $this->markOrderTransactionsFailed($order);
             Log::info('Webhook: Payment failed', [
                 'order_id' => $order->id,
                 'reference' => $reference,
                 'status' => $paymentStatus,
             ]);
+
             return [
                 'success' => true,
                 'message' => 'Payment failure recorded',
@@ -857,7 +841,7 @@ class PaymentService
         // Balance is not standardized across payout providers in this codebase.
         $payoutService = $this->gatewayManager->getPayoutService();
 
-        if (!$payoutService || !method_exists($payoutService, 'getBalance')) {
+        if (! $payoutService || ! method_exists($payoutService, 'getBalance')) {
             return [
                 'success' => false,
                 'message' => 'No active payout gateway configured.',
@@ -865,6 +849,7 @@ class PaymentService
         }
 
         $balance = $payoutService->getBalance();
+
         return [
             'success' => $balance !== null,
             'balance' => $balance ?? 0,
@@ -915,7 +900,7 @@ class PaymentService
 
         if ($order->is_reseller_order && $order->reseller_product_id) {
             $resellerProduct = ResellerProduct::find($order->reseller_product_id);
-            if (!$resellerProduct) {
+            if (! $resellerProduct) {
                 return;
             }
 
@@ -983,6 +968,7 @@ class PaymentService
                 return;
             }
             $transaction->update($attributes);
+
             return;
         }
 
@@ -1016,6 +1002,7 @@ class PaymentService
                 return;
             }
             $transaction->update($attributes);
+
             return;
         }
 
@@ -1050,8 +1037,10 @@ class PaymentService
         $newGateway = $this->gatewayManager->getPaymentServiceByGateway($gatewayName);
         if ($newGateway && $newGateway->isConfigured()) {
             $this->paymentGateway = $newGateway;
+
             return true;
         }
+
         return false;
     }
 
@@ -1060,7 +1049,7 @@ class PaymentService
      */
     public function getCurrentGatewayInfo(): ?array
     {
-        if (!$this->paymentGateway) {
+        if (! $this->paymentGateway) {
             return null;
         }
 
@@ -1179,6 +1168,7 @@ class PaymentService
                     'gateway' => $gatewayName,
                     'error' => $e->getMessage(),
                 ]);
+
                 continue;
             }
 

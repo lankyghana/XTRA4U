@@ -3,13 +3,13 @@
 namespace App\Services;
 
 use App\Events\AfaRegistrationCompleted;
+use App\Mail\AfaOrderPlacedMail;
 use App\Models\AfaRegistration;
+use App\Models\Transaction;
 use App\Models\Vendor;
 use App\Models\VendorNotification;
-use App\Models\Transaction;
-use App\Mail\AfaOrderPlacedMail;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
@@ -19,12 +19,6 @@ use Illuminate\Support\Facades\Mail;
  */
 class AfaPaymentService
 {
-    public function __construct(
-        private ?SmsService $smsService = null
-    ) {
-        $this->smsService = $smsService ?? (new GatewayManager())->getSmsService();
-    }
-
     /**
      * Complete AFA registration after successful payment
      */
@@ -42,7 +36,7 @@ class AfaPaymentService
                 ->lockForUpdate()
                 ->first();
 
-            if (!$lockedRegistration) {
+            if (! $lockedRegistration) {
                 return false;
             }
 
@@ -62,7 +56,7 @@ class AfaPaymentService
             $vendorEarning = (float) $lockedRegistration->vendor_earning;
             $resellerEarning = (float) $lockedRegistration->reseller_earning;
 
-            if ($lockedRegistration->is_reseller_order && is_array($lockedRegistration->affiliate_chain_snapshot) && !empty($lockedRegistration->affiliate_chain_snapshot)) {
+            if ($lockedRegistration->is_reseller_order && is_array($lockedRegistration->affiliate_chain_snapshot) && ! empty($lockedRegistration->affiliate_chain_snapshot)) {
                 $computed = $this->computePayoutFromSnapshot($lockedRegistration);
                 if ($computed['ok'] ?? false) {
                     $payoutLines = $computed['lines'];
@@ -169,9 +163,9 @@ class AfaPaymentService
     private function sendCommunicationsAfterCommit(int $registrationId): void
     {
         try {
-            Cache::lock('afa_registration_comm:' . $registrationId, 60)->get(function () use ($registrationId) {
+            Cache::lock('afa_registration_comm:'.$registrationId, 60)->get(function () use ($registrationId) {
                 $registration = AfaRegistration::find($registrationId);
-                if (!$registration) {
+                if (! $registration) {
                     return;
                 }
 
@@ -200,7 +194,7 @@ class AfaPaymentService
                 'vendor_id' => $sourceVendor->id,
                 'type' => VendorNotification::TYPE_AFA_REGISTRATION,
                 'title' => $registration->is_reseller_order ? 'New AFA Registration (Reseller Sale)' : 'New AFA Registration',
-                'message' => "New AFA registration for {$registration->full_name}. Your earning: GHS " . number_format($registration->vendor_earning, 2),
+                'message' => "New AFA registration for {$registration->full_name}. Your earning: GHS ".number_format($registration->vendor_earning, 2),
                 'data' => [
                     'registration_id' => $registration->id,
                     'customer_name' => $registration->full_name,
@@ -218,7 +212,7 @@ class AfaPaymentService
                     'vendor_id' => $resellerVendor->id,
                     'type' => VendorNotification::TYPE_AFA_REGISTRATION,
                     'title' => 'New AFA Registration Sale',
-                    'message' => "You sold an AFA registration! Customer: {$registration->full_name}. Your markup earning: GHS " . number_format($registration->reseller_earning, 2),
+                    'message' => "You sold an AFA registration! Customer: {$registration->full_name}. Your markup earning: GHS ".number_format($registration->reseller_earning, 2),
                     'data' => [
                         'registration_id' => $registration->id,
                         'customer_name' => $registration->full_name,
@@ -237,12 +231,12 @@ class AfaPaymentService
     private function computePayoutFromSnapshot(AfaRegistration $registration): array
     {
         $snapshot = $registration->affiliate_chain_snapshot;
-        if (!is_array($snapshot) || empty($snapshot)) {
+        if (! is_array($snapshot) || empty($snapshot)) {
             return ['ok' => false, 'reason' => 'missing_snapshot'];
         }
 
         $ownerEntry = $snapshot[0] ?? null;
-        if (!is_array($ownerEntry) || ($ownerEntry['role'] ?? null) !== 'owner') {
+        if (! is_array($ownerEntry) || ($ownerEntry['role'] ?? null) !== 'owner') {
             return ['ok' => false, 'reason' => 'invalid_snapshot_owner'];
         }
 
@@ -272,7 +266,7 @@ class AfaPaymentService
 
         // Remaining entries are reseller markups
         foreach (array_slice($snapshot, 1) as $entry) {
-            if (!is_array($entry)) {
+            if (! is_array($entry)) {
                 continue;
             }
 
@@ -358,6 +352,7 @@ class AfaPaymentService
                 return;
             }
             $transaction->update($attributes);
+
             return;
         }
 
@@ -374,7 +369,7 @@ class AfaPaymentService
     private function updateVendorWallets(AfaRegistration $registration): void
     {
         // Multi-level path: if snapshot exists, credit all vendors in the chain.
-        if ($registration->is_reseller_order && is_array($registration->affiliate_chain_snapshot) && !empty($registration->affiliate_chain_snapshot)) {
+        if ($registration->is_reseller_order && is_array($registration->affiliate_chain_snapshot) && ! empty($registration->affiliate_chain_snapshot)) {
             $computed = $this->computePayoutFromSnapshot($registration);
             if ($computed['ok'] ?? false) {
                 foreach (($computed['lines'] ?? []) as $line) {
@@ -384,6 +379,7 @@ class AfaPaymentService
                         Vendor::whereKey($vendorId)->increment('wallet_balance', $earning);
                     }
                 }
+
                 return;
             }
         }
@@ -424,9 +420,6 @@ class AfaPaymentService
                     Log::warning('Failed to send AFA email to source vendor', ['error' => $e->getMessage()]);
                 }
             }
-
-            // Send SMS
-            $this->sendVendorSms($sourceVendor, $registration, $registration->vendor_earning);
         }
 
         // Notify reseller vendor if applicable
@@ -446,30 +439,7 @@ class AfaPaymentService
                         Log::warning('Failed to send AFA email to reseller vendor', ['error' => $e->getMessage()]);
                     }
                 }
-
-                // Send SMS
-                $this->sendVendorSms($resellerVendor, $registration, $registration->reseller_earning, true);
             }
-        }
-    }
-
-    /**
-     * Send SMS notification to vendor
-     */
-    private function sendVendorSms(Vendor $vendor, AfaRegistration $registration, float $earning, bool $isReseller = false): void
-    {
-        if (!$this->smsService || !$vendor->phone_number) {
-            return;
-        }
-
-        try {
-            $message = $isReseller
-                ? "XTRA4U: You sold AFA registration! Customer: {$registration->full_name}. Earning: GHS " . number_format($earning, 2)
-                : "XTRA4U: New AFA registration for {$registration->full_name}. Earning: GHS " . number_format($earning, 2);
-
-            $this->smsService->send($vendor->phone_number, $message);
-        } catch (\Exception $e) {
-            Log::warning('Failed to send AFA SMS to vendor', ['error' => $e->getMessage()]);
         }
     }
 }
