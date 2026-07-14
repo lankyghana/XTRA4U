@@ -280,6 +280,89 @@ class UssdSubscriptionPurchaseTest extends TestCase
         $this->assertSame([], $this->verifiedReferences, 'A malformed reference must be rejected before any gateway call.');
     }
 
+    // ------------------------------------------------------------ status polling
+
+    public function test_status_endpoint_reports_pending_then_paid(): void
+    {
+        $vendor = Vendor::factory()->create();
+        $this->pendingSubscription($vendor, $this->starter(), 'ussd-poll-1');
+
+        // While the gateway has not settled, polling must report pending and must
+        // not activate the subscription.
+        $this->actingAs($vendor, 'vendor')
+            ->getJson(route('vendor.ussd.subscription.status', ['reference' => 'ussd-poll-1']))
+            ->assertOk()
+            ->assertJson(['success' => true, 'status' => 'pending']);
+
+        $this->assertSame(
+            UssdSubscription::STATUS_PENDING_PAYMENT,
+            UssdSubscription::firstOrFail()->status
+        );
+
+        // Once the gateway settles, the next poll activates and reports paid.
+        $this->settles('ussd-poll-1', 80.00);
+
+        $this->actingAs($vendor, 'vendor')
+            ->getJson(route('vendor.ussd.subscription.status', ['reference' => 'ussd-poll-1']))
+            ->assertOk()
+            ->assertJson(['success' => true, 'status' => 'paid']);
+
+        $this->assertSame(
+            UssdSubscription::STATUS_ACTIVE,
+            UssdSubscription::firstOrFail()->status
+        );
+    }
+
+    public function test_status_endpoint_never_records_a_failure_while_pending(): void
+    {
+        $vendor = Vendor::factory()->create();
+        $this->pendingSubscription($vendor, $this->starter(), 'ussd-poll-2');
+
+        $this->actingAs($vendor, 'vendor')
+            ->getJson(route('vendor.ussd.subscription.status', ['reference' => 'ussd-poll-2']))
+            ->assertOk();
+
+        // A merely-pending poll must not spam PAYMENT_FAILED events/notifications.
+        $this->assertDatabaseMissing('ussd_subscription_events', [
+            'event' => UssdSubscriptionEvent::PAYMENT_FAILED,
+        ]);
+    }
+
+    public function test_status_endpoint_blocks_cross_vendor_access(): void
+    {
+        $owner = Vendor::factory()->create();
+        $other = Vendor::factory()->create();
+        $this->pendingSubscription($owner, $this->starter(), 'ussd-poll-3');
+
+        $this->actingAs($other, 'vendor')
+            ->getJson(route('vendor.ussd.subscription.status', ['reference' => 'ussd-poll-3']))
+            ->assertStatus(404)
+            ->assertJson(['success' => false, 'status' => 'unknown']);
+    }
+
+    public function test_status_endpoint_rejects_a_malformed_reference(): void
+    {
+        $vendor = Vendor::factory()->create();
+
+        $this->actingAs($vendor, 'vendor')
+            ->getJson(url('/vendor/ussd/subscription/status/short'))
+            ->assertStatus(422)
+            ->assertJson(['success' => false]);
+
+        $this->assertSame([], $this->verifiedReferences, 'A malformed reference must never reach the gateway.');
+    }
+
+    public function test_status_endpoint_requires_authentication(): void
+    {
+        $vendor = Vendor::factory()->create();
+        $this->pendingSubscription($vendor, $this->starter(), 'ussd-poll-4');
+
+        // The vendor.approved guard sends unauthenticated visitors to the login
+        // form rather than exposing any subscription state.
+        $this->get(route('vendor.ussd.subscription.status', ['reference' => 'ussd-poll-4']))
+            ->assertRedirect(route('vendor.login.form'));
+    }
+
     // ---------------------------------------------------- upgrade and carryover
 
     public function test_upgrade_carries_over_unused_sessions_and_reissues_the_code(): void

@@ -109,6 +109,44 @@ class UssdSubscriptionController extends Controller
     }
 
     /**
+     * Client-side polling endpoint for inline (MoMo) purchases. The vendor's
+     * browser hits this every few seconds after the STK prompt is sent, so the
+     * page can react the moment the payment settles instead of dead-ending on a
+     * static "check your phone" message.
+     *
+     * Read-only apart from the idempotent activation performed once the gateway
+     * confirms settlement. Scoped to the authenticated vendor's own references.
+     */
+    public function status(Request $request, string $reference)
+    {
+        $vendor = $this->authenticatedVendor();
+
+        if (! preg_match('/^[A-Za-z0-9._-]{8,128}$/', $reference)) {
+            return response()->json(['success' => false, 'status' => 'unknown'], 422);
+        }
+
+        $result = $this->purchases->checkStatus($reference);
+        $subscription = $result['subscription'] ?? null;
+
+        // Never leak another vendor's subscription state through this endpoint.
+        if (! $subscription || (int) $subscription->vendor_id !== (int) $vendor->id) {
+            Log::warning('USSD subscription status: cross-vendor or unknown reference blocked', [
+                'authenticated_vendor_id' => $vendor->id,
+                'reference' => $reference,
+                'ip' => $request->ip(),
+            ]);
+
+            return response()->json(['success' => false, 'status' => 'unknown'], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'status' => $result['status'],
+            'reference' => $reference,
+        ]);
+    }
+
+    /**
      * Public gateway callback. Deliberately unauthenticated — the gateway is
      * not carrying the vendor's session — and safe because it does nothing but
      * re-verify the reference against the gateway. The reference itself grants

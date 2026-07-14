@@ -207,6 +207,42 @@ class UssdSubscriptionPurchaseService
         ];
     }
 
+    /**
+     * Read-only status probe for client-side polling of an inline (MoMo) purchase.
+     *
+     * Unlike verifyAndActivate(), this never records a PAYMENT_FAILED event while
+     * the payment is merely still pending — a "not settled yet" gateway response
+     * during polling is normal, not a failure. It only activates (idempotently,
+     * via verifyAndActivate) once the gateway confirms settlement.
+     *
+     * @return array{status: string, subscription: ?UssdSubscription}
+     */
+    public function checkStatus(string $reference): array
+    {
+        $subscription = $this->resolveSubscription($reference);
+
+        if (! $subscription) {
+            return ['status' => 'unknown', 'subscription' => null];
+        }
+
+        if ($subscription->status === UssdSubscription::STATUS_ACTIVE) {
+            return ['status' => 'paid', 'subscription' => $subscription];
+        }
+
+        $verification = $this->paymentService->checkPaymentStatus($reference);
+
+        if (($verification['success'] ?? false) && $this->isSettled($verification)) {
+            $result = $this->verifyAndActivate($reference);
+
+            return [
+                'status' => ($result['success'] ?? false) ? 'paid' : 'pending',
+                'subscription' => $subscription->fresh(),
+            ];
+        }
+
+        return ['status' => 'pending', 'subscription' => $subscription];
+    }
+
     private function resolveSubscription(string $reference): ?UssdSubscription
     {
         $subscription = UssdSubscription::where('payment_reference', $reference)->first();

@@ -154,6 +154,40 @@
                 @endif
             </p>
 
+            {{-- Mobile-money payer details. Used by inline gateways (BulkClix/Moolre)
+                 to send the approval prompt; redirect gateways (Paystack) ignore them. --}}
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-4">
+                <p class="text-sm font-medium text-gray-900 mb-3">Payment details</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label for="ussd-payer-phone" class="block text-xs font-medium text-gray-600 mb-1">
+                            Mobile Money number
+                        </label>
+                        <input type="tel" id="ussd-payer-phone" inputmode="numeric"
+                               value="{{ $vendor->phone_number }}"
+                               placeholder="e.g. 0244123456"
+                               class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-deep-blue focus:ring-brand-deep-blue">
+                    </div>
+                    <div>
+                        <label for="ussd-payer-network" class="block text-xs font-medium text-gray-600 mb-1">
+                            Network
+                        </label>
+                        <select id="ussd-payer-network"
+                                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-deep-blue focus:ring-brand-deep-blue">
+                            <option value="">Auto-detect</option>
+                            <option value="MTN">MTN</option>
+                            <option value="TELECEL">Telecel</option>
+                            <option value="AIRTELTIGO">AirtelTigo</option>
+                        </select>
+                    </div>
+                </div>
+                <p class="mt-2 text-xs text-gray-500">
+                    You'll get a prompt on this number to approve the payment. Leave the network on
+                    <span class="font-medium">Auto-detect</span> unless it's a ported number.
+                </p>
+                <div id="ussd-purchase-message" class="hidden mt-3 rounded-lg px-4 py-3 text-sm"></div>
+            </div>
+
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 @forelse ($plans as $plan)
                     @php
@@ -205,17 +239,16 @@
                         </div>
 
                         <div class="px-5 pb-5">
-                            <form action="{{ route('vendor.ussd.subscription.purchase') }}" method="POST">
-                                @csrf
-                                <input type="hidden" name="plan_id" value="{{ $plan->id }}">
-                                <button type="submit"
-                                        class="w-full px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors
-                                        {{ $isCurrentPlan
-                                            ? 'bg-white border border-brand-deep-blue text-brand-deep-blue hover:bg-blue-50'
-                                            : 'bg-brand-deep-blue text-white hover:bg-brand-bright-blue' }}">
-                                    {{ $label }}
-                                </button>
-                            </form>
+                            <button type="button"
+                                    data-ussd-buy
+                                    data-plan-id="{{ $plan->id }}"
+                                    data-plan-name="{{ $plan->name }}"
+                                    class="w-full px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed
+                                    {{ $isCurrentPlan
+                                        ? 'bg-white border border-brand-deep-blue text-brand-deep-blue hover:bg-blue-50'
+                                        : 'bg-brand-deep-blue text-white hover:bg-brand-bright-blue' }}">
+                                {{ $label }}
+                            </button>
                         </div>
                     </div>
                 @empty
@@ -269,5 +302,119 @@
             </div>
         @endif
     </div>
+
+    @include('components.inline_payment_manager')
+
+    <script>
+    (function () {
+        const purchaseUrl = @json(route('vendor.ussd.subscription.purchase'));
+        const statusBase  = @json(url('/vendor/ussd/subscription/status'));
+        const reloadUrl   = @json(route('vendor.ussd.subscription.index'));
+        const csrfToken   = @json(csrf_token());
+
+        const phoneInput = document.getElementById('ussd-payer-phone');
+        const networkInput = document.getElementById('ussd-payer-network');
+        const messageBox = document.getElementById('ussd-purchase-message');
+        const buttons = document.querySelectorAll('[data-ussd-buy]');
+
+        function showMessage(text, type) {
+            if (!messageBox) return;
+            const styles = {
+                info: 'bg-blue-50 border border-blue-200 text-blue-800',
+                error: 'bg-red-50 border border-red-200 text-red-800',
+                success: 'bg-green-50 border border-green-200 text-green-800',
+            };
+            messageBox.className = 'mt-3 rounded-lg px-4 py-3 text-sm ' + (styles[type] || styles.info);
+            messageBox.textContent = text;
+            messageBox.classList.remove('hidden');
+        }
+
+        function clearMessage() {
+            if (messageBox) messageBox.classList.add('hidden');
+        }
+
+        function setBusy(busy) {
+            buttons.forEach(b => { b.disabled = busy; });
+        }
+
+        async function buy(button) {
+            clearMessage();
+            setBusy(true);
+
+            const body = new URLSearchParams();
+            body.append('plan_id', button.getAttribute('data-plan-id'));
+            if (phoneInput && phoneInput.value.trim() !== '') {
+                body.append('payer_phone', phoneInput.value.trim());
+            }
+            if (networkInput && networkInput.value !== '') {
+                body.append('network', networkInput.value);
+            }
+
+            let data;
+            try {
+                const res = await fetch(purchaseUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-CSRF-TOKEN': csrfToken,
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json',
+                    },
+                    body: body.toString(),
+                });
+                data = await res.json();
+            } catch (e) {
+                setBusy(false);
+                showMessage('Network error. Please try again.', 'error');
+                return;
+            }
+
+            if (!data || !data.success) {
+                setBusy(false);
+                showMessage((data && data.message) || 'Failed to start the purchase.', 'error');
+                return;
+            }
+
+            // Redirect gateways (Paystack) return an authorization_url; inline
+            // MoMo gateways (BulkClix/Moolre) return null and push a phone prompt.
+            // InlinePaymentManager handles both: it embeds the URL when present
+            // and polls our status endpoint until the payment settles.
+            showMessage(
+                data.authorization_url
+                    ? 'Opening secure payment window…'
+                    : 'Payment prompt sent. Approve it on your phone to activate your plan.',
+                'info'
+            );
+
+            const pollUrl = statusBase + '/' + encodeURIComponent(data.reference);
+
+            window.InlinePaymentManager.open({
+                reference: data.reference,
+                authorization_url: data.authorization_url || null,
+                gateway_name: data.gateway_name || null,
+                flow_type: data.flow_type || 'inline',
+                no_redirect: true,
+                poll_url: pollUrl,
+            }, function (status) {
+                if (status === 'paid') {
+                    showMessage('Payment confirmed. Activating your subscription…', 'success');
+                    window.location.href = reloadUrl;
+                    return true; // suppress InlinePaymentManager's own redirect
+                }
+                if (status === 'failed') {
+                    setBusy(false);
+                    showMessage('The payment was not completed. Please try again.', 'error');
+                } else if (status === 'timeout') {
+                    setBusy(false);
+                    showMessage('We could not confirm the payment in time. If you approved it, refresh this page in a moment.', 'error');
+                }
+            });
+        }
+
+        buttons.forEach(button => {
+            button.addEventListener('click', () => buy(button));
+        });
+    })();
+    </script>
 </x-vendor-layout>
 @endsection
