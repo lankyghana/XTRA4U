@@ -322,6 +322,10 @@ Route::middleware(['vendor.approved'])
         Route::post('ussd/subscription/purchase', [\App\Http\Controllers\Vendor\UssdSubscriptionController::class, 'purchase'])
             ->middleware('throttle:10,1')
             ->name('ussd.subscription.purchase');
+        // Polling endpoint for client-side verification of inline (MoMo) purchases.
+        Route::get('ussd/subscription/status/{reference}', [\App\Http\Controllers\Vendor\UssdSubscriptionController::class, 'status'])
+            ->middleware('throttle:60,1')
+            ->name('ussd.subscription.status');
 
         // Vendor Quick Buy (dashboard shortcut)
         Route::get('quick-buy', [VendorQuickBuyController::class, 'show'])->name('quick-buy.show');
@@ -425,6 +429,10 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
     // Service Availability (open/close storefront service categories)
     Route::get('settings/service-availability', [\App\Http\Controllers\Admin\ServiceAvailabilityController::class, 'index'])->name('settings.service-availability');
     Route::put('settings/service-availability', [\App\Http\Controllers\Admin\ServiceAvailabilityController::class, 'update'])->name('settings.service-availability.update');
+
+    // Delivery Status (broadcast a fast/slow delivery notice to vendors)
+    Route::get('settings/delivery-status', [\App\Http\Controllers\Admin\DeliveryStatusController::class, 'index'])->name('settings.delivery-status');
+    Route::put('settings/delivery-status', [\App\Http\Controllers\Admin\DeliveryStatusController::class, 'update'])->name('settings.delivery-status.update');
 
     // Email Settings
     Route::get('settings/email', [\App\Http\Controllers\Admin\EmailSettingsController::class, 'index'])->name('settings.email');
