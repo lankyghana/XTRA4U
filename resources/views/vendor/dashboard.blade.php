@@ -28,6 +28,72 @@
         @endif
     </x-slot>
 
+    @if(!empty($deliveryStatus))
+        @php
+            $dsStyles = [
+                'fast'   => ['label' => 'Fast delivery', 'bar' => 'bg-green-500', 'dot' => 'bg-green-500', 'badge' => 'bg-green-100 text-green-700', 'icon' => 'M13 10V3L4 14h7v7l9-11h-7z'],
+                'normal' => ['label' => 'Delivery update', 'bar' => 'bg-blue-500', 'dot' => 'bg-blue-500', 'badge' => 'bg-blue-100 text-blue-700', 'icon' => 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'],
+                'slow'   => ['label' => 'Slow delivery', 'bar' => 'bg-amber-500', 'dot' => 'bg-amber-500', 'badge' => 'bg-amber-100 text-amber-700', 'icon' => 'M12 8v4m0 4h.01M12 3a9 9 0 100 18 9 9 0 000-18z'],
+            ];
+            $ds = $dsStyles[$deliveryStatus['level']] ?? $dsStyles['normal'];
+        @endphp
+        <div
+            x-data="{
+                open: false,
+                version: @js($deliveryStatus['version']),
+                init() {
+                    if (localStorage.getItem('deliveryNoticeDismissed') !== this.version) {
+                        this.open = true;
+                    }
+                },
+                dismiss() {
+                    localStorage.setItem('deliveryNoticeDismissed', this.version);
+                    this.open = false;
+                }
+            }"
+            x-show="open"
+            x-cloak
+            @keydown.escape.window="dismiss()"
+            class="fixed inset-0 z-50 flex items-center justify-center p-4"
+        >
+            <div x-show="open" x-transition.opacity class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm" @click="dismiss()"></div>
+
+            <div
+                x-show="open"
+                x-transition:enter="transition ease-out duration-300"
+                x-transition:enter-start="opacity-0 translate-y-4 sm:scale-95"
+                x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                class="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden"
+                role="dialog"
+                aria-modal="true"
+            >
+                <div class="h-1.5 w-full {{ $ds['bar'] }}"></div>
+                <div class="p-6">
+                    <div class="flex items-start gap-4">
+                        <div class="shrink-0 w-11 h-11 rounded-full {{ $ds['badge'] }} flex items-center justify-center">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ $ds['icon'] }}" />
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full {{ $ds['badge'] }}">
+                                <span class="w-1.5 h-1.5 rounded-full {{ $ds['dot'] }}"></span>
+                                {{ $ds['label'] }}
+                            </span>
+                            <p class="mt-3 text-sm leading-relaxed text-gray-700 whitespace-pre-line">{{ $deliveryStatus['message'] }}</p>
+                        </div>
+                    </div>
+                    <button
+                        @click="dismiss()"
+                        class="mt-6 w-full rounded-xl bg-brand-deep-blue hover:bg-brand-bright-blue text-white text-sm font-semibold py-2.5 transition-colors"
+                    >
+                        Got it — Continue
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
     <!-- Sales Overview Section -->
     <div x-data="salesFilter()" class="mb-8">
         <!-- Section Header with Filter -->

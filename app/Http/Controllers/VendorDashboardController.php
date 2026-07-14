@@ -110,6 +110,9 @@ class VendorDashboardController extends Controller
             ->where('status', 'pending_stock')
             ->count();
 
+        // Admin-broadcast delivery-speed notice (shown once per version, dashboard only).
+        $deliveryStatus = \App\Support\DeliveryStatus::current();
+
         return view('vendor.dashboard', compact(
             'vendor',
             'orders',
@@ -125,7 +128,8 @@ class VendorDashboardController extends Controller
             'resultCheckerOrdersToday',
             'resultCheckerRevenueToday',
             'resultCheckerCompletedToday',
-            'resultCheckerPendingStock'
+            'resultCheckerPendingStock',
+            'deliveryStatus'
         ));
     }
 
