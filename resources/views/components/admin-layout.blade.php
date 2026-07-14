@@ -103,6 +103,12 @@
             'matches' => ['admin.result-checkers.*'],
         ],
         [
+            'key' => 'service-availability',
+            'label' => 'Service Availability',
+            'href' => route('admin.settings.service-availability'),
+            'matches' => ['admin.settings.service-availability*'],
+        ],
+        [
             'key' => 'email-settings',
             'label' => 'Email Settings',
             'href' => route('admin.settings.email'),
