@@ -390,6 +390,7 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
     Route::post('vendors/{vendor}/approve', [AdminVendorController::class, 'approve'])->name('vendors.approve');
     Route::post('vendors/{vendor}/reject', [AdminVendorController::class, 'reject'])->name('vendors.reject');
 	Route::post('vendors/{vendor}/disable-affiliate', [AdminVendorController::class, 'disableAffiliate'])->name('vendors.disable-affiliate');
+	Route::post('vendors/{vendor}/tier', [AdminVendorController::class, 'updateTier'])->name('vendors.update-tier');
         Route::resource('orders', AdminOrderController::class)->only(['index', 'show']);
 	Route::post('orders/{order}/confirm-payment', [AdminOrderController::class, 'confirmPayment'])
 		->name('orders.confirm-payment');
@@ -421,6 +422,10 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
     Route::post('notifications/{notification}/read', [AdminController::class, 'markNotificationRead'])->name('notifications.read');
     Route::post('notifications/read-all', [AdminController::class, 'markAllNotificationsRead'])->name('notifications.read-all');
     
+    // Service Availability (open/close storefront service categories)
+    Route::get('settings/service-availability', [\App\Http\Controllers\Admin\ServiceAvailabilityController::class, 'index'])->name('settings.service-availability');
+    Route::put('settings/service-availability', [\App\Http\Controllers\Admin\ServiceAvailabilityController::class, 'update'])->name('settings.service-availability.update');
+
     // Email Settings
     Route::get('settings/email', [\App\Http\Controllers\Admin\EmailSettingsController::class, 'index'])->name('settings.email');
     Route::put('settings/email', [\App\Http\Controllers\Admin\EmailSettingsController::class, 'update'])->name('settings.email.update');
