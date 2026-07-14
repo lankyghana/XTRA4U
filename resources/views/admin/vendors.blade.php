@@ -99,18 +99,27 @@
                         @else
                             <x-badge variant="pending">Pending</x-badge>
                         @endif
+                        <div class="mt-1 text-xs text-gray-500">
+                            Tier: <span class="font-medium text-gray-700">{{ $vendor->tier?->name ?? '—' }}</span>
+                        </div>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium" x-data="{ showAdjust: false, showEdit: false }">
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium" x-data="{ showAdjust: false, showEdit: false, showTier: false }">
                         <div class="flex flex-wrap justify-end gap-2">
                             {{-- Edit Contact button --}}
-                            <button type="button" @click="showEdit = !showEdit; showAdjust = false"
+                            <button type="button" @click="showEdit = !showEdit; showAdjust = false; showTier = false"
                                 class="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-semibold">
                                 Edit Contact
                             </button>
-                            <button type="button" @click="showAdjust = !showAdjust; showEdit = false"
+                            <button type="button" @click="showAdjust = !showAdjust; showEdit = false; showTier = false"
                                 class="px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold">
                                 Adjust Balance
                             </button>
+                            @if ($vendor->is_approved)
+                                <button type="button" @click="showTier = !showTier; showEdit = false; showAdjust = false"
+                                    class="px-3 py-1.5 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 text-xs font-semibold">
+                                    Change Tier
+                                </button>
+                            @endif
                             @if ($vendor->affiliate_vendor_id)
                                 <form method="POST" action="{{ route('admin.vendors.disable-affiliate', $vendor) }}" onsubmit="return confirm('Disable this affiliate relationship?');">
                                     @csrf
@@ -212,6 +221,48 @@
                                 </form>
                             </div>
                         </div>
+
+                        {{-- ── Change Tier Panel ── --}}
+                        @if ($vendor->is_approved)
+                        <div class="mt-3 text-left" x-show="showTier" x-cloak>
+                            <div class="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
+                                <div class="flex items-center justify-between text-xs text-purple-700 font-semibold">
+                                    <span>Change Vendor Tier</span>
+                                    <button type="button" class="text-purple-400 hover:text-purple-600" @click="showTier = false">✕ Close</button>
+                                </div>
+                                <p class="text-[11px] text-purple-600">
+                                    Manually overrides the tier, bypassing the qualification queue. Current: <strong>{{ $vendor->tier?->name ?? '—' }}</strong>
+                                </p>
+                                <form method="POST" action="{{ route('admin.vendors.update-tier', $vendor) }}" class="space-y-2" onsubmit="return confirm('Change this vendor\'s tier?');">
+                                    @csrf
+                                    <div>
+                                        <label class="block text-xs font-semibold text-gray-700 mb-1">Tier</label>
+                                        <select name="tier_id" required class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-purple-500 focus:border-purple-500">
+                                            @foreach ($tiers as $tier)
+                                                <option value="{{ $tier->id }}" @selected((int) $vendor->tier_id === (int) $tier->id)>
+                                                    {{ $tier->name }} ({{ rtrim(rtrim(number_format($tier->discount_value, 2), '0'), '.') }}% discount)
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-semibold text-gray-700 mb-1">Notes (optional)</label>
+                                        <textarea name="notes" maxlength="500" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-purple-500 focus:border-purple-500" placeholder="Reason for this tier change (recorded in history)"></textarea>
+                                    </div>
+                                    <div class="flex justify-end gap-2 pt-1">
+                                        <button type="button" @click="showTier = false"
+                                            class="px-3 py-1.5 rounded-md text-xs font-medium border border-gray-300 text-gray-600 hover:bg-gray-100">
+                                            Cancel
+                                        </button>
+                                        <button type="submit"
+                                            class="px-4 py-1.5 rounded-md text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700">
+                                            Save Tier
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                        @endif
                     </td>
                 </tr>
             @empty

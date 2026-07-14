@@ -4,166 +4,203 @@ namespace App\Http\Controllers;
 
 use App\Mail\VendorApprovedMail;
 use App\Models\Vendor;
+use App\Models\VendorTier;
 use App\Models\WalletLedger;
 use App\Services\VendorTierQualificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\View\View;
-use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
+use Illuminate\View\View;
 
 class AdminVendorController extends Controller
 {
-	public function index(Request $request): View
-	{
-		$statusFilter = $request->query('status');
-		$search = trim((string) $request->query('q', ''));
+    public function index(Request $request): View
+    {
+        $statusFilter = $request->query('status');
+        $search = trim((string) $request->query('q', ''));
 
-		$vendors = Vendor::query()
-			->with('affiliateVendor')
-			->withCount('affiliates')
-			->when($search !== '', function ($query) use ($search) {
-				$query->where(function ($q) use ($search) {
-					$q->where('name', 'like', '%' . $search . '%')
-						->orWhere('email', 'like', '%' . $search . '%')
-						->orWhere('phone_number', 'like', '%' . $search . '%')
-						->orWhere('vendor_code', 'like', '%' . $search . '%');
-				});
-			})
-			->when($statusFilter === 'approved', fn ($query) => $query->where('is_approved', true))
-			->when($statusFilter === 'pending', fn ($query) => $query->where('is_approved', false))
-			->latest()
-			->paginate(15)
-			->withQueryString();
+        $vendors = Vendor::query()
+            ->with(['affiliateVendor', 'tier'])
+            ->withCount('affiliates')
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', '%'.$search.'%')
+                        ->orWhere('email', 'like', '%'.$search.'%')
+                        ->orWhere('phone_number', 'like', '%'.$search.'%')
+                        ->orWhere('vendor_code', 'like', '%'.$search.'%');
+                });
+            })
+            ->when($statusFilter === 'approved', fn ($query) => $query->where('is_approved', true))
+            ->when($statusFilter === 'pending', fn ($query) => $query->where('is_approved', false))
+            ->latest()
+            ->paginate(15)
+            ->withQueryString();
 
-		$stats = [
-			'total' => Vendor::count(),
-			'approved' => Vendor::where('is_approved', true)->count(),
-			'pending' => Vendor::where('is_approved', false)->count(),
-		];
+        $stats = [
+            'total' => Vendor::count(),
+            'approved' => Vendor::where('is_approved', true)->count(),
+            'pending' => Vendor::where('is_approved', false)->count(),
+        ];
 
-		return view('admin.vendors', compact('vendors', 'stats', 'statusFilter', 'search'));
-	}
+        $tiers = VendorTier::active()->ordered()->get();
 
-	public function update(Request $request, Vendor $vendor): RedirectResponse
-	{
-		$data = $request->validate([
-			'name'         => ['sometimes', 'string', 'max:255'],
-			'email'        => ['sometimes', 'email', 'max:255', 'unique:vendors,email,' . $vendor->id],
-			'phone_number' => ['sometimes', 'nullable', 'string', 'max:40'],
-		]);
+        return view('admin.vendors', compact('vendors', 'stats', 'statusFilter', 'search', 'tiers'));
+    }
 
-		// Trim whitespace from string fields before persisting.
-		foreach (['name', 'email', 'phone_number'] as $field) {
-			if (isset($data[$field])) {
-				$data[$field] = trim($data[$field]);
-			}
-		}
+    public function update(Request $request, Vendor $vendor): RedirectResponse
+    {
+        $data = $request->validate([
+            'name' => ['sometimes', 'string', 'max:255'],
+            'email' => ['sometimes', 'email', 'max:255', 'unique:vendors,email,'.$vendor->id],
+            'phone_number' => ['sometimes', 'nullable', 'string', 'max:40'],
+        ]);
 
-		$vendor->update(array_filter($data, fn ($v) => $v !== null));
+        // Trim whitespace from string fields before persisting.
+        foreach (['name', 'email', 'phone_number'] as $field) {
+            if (isset($data[$field])) {
+                $data[$field] = trim($data[$field]);
+            }
+        }
 
-		Log::info('Admin updated vendor contact details', [
-			'admin_id'  => auth()->id(),
-			'vendor_id' => $vendor->id,
-			'fields'    => array_keys($data),
-		]);
+        $vendor->update(array_filter($data, fn ($v) => $v !== null));
 
-		return back()->with('status', 'Vendor contact details updated successfully.');
-	}
+        Log::info('Admin updated vendor contact details', [
+            'admin_id' => auth()->id(),
+            'vendor_id' => $vendor->id,
+            'fields' => array_keys($data),
+        ]);
 
-	public function destroy(Vendor $vendor): RedirectResponse
-	{
-		$vendor->delete();
+        return back()->with('status', 'Vendor contact details updated successfully.');
+    }
 
-		return redirect()->route('admin.vendors.index')->with('status', 'Vendor removed successfully.');
-	}
+    public function destroy(Vendor $vendor): RedirectResponse
+    {
+        $vendor->delete();
 
-	public function approve(Vendor $vendor, VendorTierQualificationService $tierService): RedirectResponse
-	{
-		$wasApproved = (bool) $vendor->is_approved;
-		if (! $wasApproved) {
-			$vendor->forceFill(['is_approved' => true])->save();
+        return redirect()->route('admin.vendors.index')->with('status', 'Vendor removed successfully.');
+    }
 
-			// Assign the Regular (base) tier to newly approved vendors.
-			$tierService->assignBaseTier($vendor);
+    public function approve(Vendor $vendor, VendorTierQualificationService $tierService): RedirectResponse
+    {
+        $wasApproved = (bool) $vendor->is_approved;
+        if (! $wasApproved) {
+            $vendor->forceFill(['is_approved' => true])->save();
 
-			if ($vendor->email) {
-				try {
-					Mail::to($vendor->email)->queue(new VendorApprovedMail($vendor));
-				} catch (\Throwable $e) {
-					// Approval should still succeed even if email fails.
-				}
-			}
-		}
+            // Assign the Regular (base) tier to newly approved vendors.
+            $tierService->assignBaseTier($vendor);
 
-		return back()->with('status', 'Vendor approved successfully.');
-	}
+            if ($vendor->email) {
+                try {
+                    Mail::to($vendor->email)->queue(new VendorApprovedMail($vendor));
+                } catch (\Throwable $e) {
+                    // Approval should still succeed even if email fails.
+                }
+            }
+        }
 
-	public function reject(Vendor $vendor): RedirectResponse
-	{
-		if ($vendor->is_approved) {
-			$vendor->forceFill(['is_approved' => false])->save();
-		}
+        return back()->with('status', 'Vendor approved successfully.');
+    }
 
-		return back()->with('status', 'Vendor marked as pending/suspended.');
-	}
+    public function reject(Vendor $vendor): RedirectResponse
+    {
+        if ($vendor->is_approved) {
+            $vendor->forceFill(['is_approved' => false])->save();
+        }
 
-	public function disableAffiliate(Vendor $vendor): RedirectResponse
-	{
-		if (is_null($vendor->affiliate_vendor_id)) {
-			return back()->with('status', 'This vendor is not currently affiliated to anyone.');
-		}
+        return back()->with('status', 'Vendor marked as pending/suspended.');
+    }
 
-		$vendor->forceFill(['affiliate_vendor_id' => null])->save();
+    public function disableAffiliate(Vendor $vendor): RedirectResponse
+    {
+        if (is_null($vendor->affiliate_vendor_id)) {
+            return back()->with('status', 'This vendor is not currently affiliated to anyone.');
+        }
 
-		return back()->with('status', 'Affiliate relationship disabled successfully.');
-	}
+        $vendor->forceFill(['affiliate_vendor_id' => null])->save();
 
-	public function adjustBalance(Request $request, Vendor $vendor): RedirectResponse
-	{
-		$data = $request->validate([
-			'amount' => ['required', 'numeric', 'min:0.01'],
-			'reason' => ['required', 'string', 'min:5'],
-		]);
+        return back()->with('status', 'Affiliate relationship disabled successfully.');
+    }
 
-		DB::transaction(function () use ($vendor, $data, $request) {
-			$lockedVendor = Vendor::whereKey($vendor->id)->lockForUpdate()->firstOrFail();
-			$amount = (float) $data['amount'];
+    public function updateTier(Request $request, Vendor $vendor, VendorTierQualificationService $tierService): RedirectResponse
+    {
+        if (! $vendor->is_approved) {
+            return back()->withErrors(['tier_id' => 'Only approved vendors can be assigned a tier.']);
+        }
 
-			if ($lockedVendor->wallet_balance < $amount) {
-				throw ValidationException::withMessages([
-					'amount' => 'Insufficient vendor balance.',
-				]);
-			}
+        $data = $request->validate([
+            'tier_id' => ['required', 'integer', 'exists:vendor_tiers,id'],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ]);
 
-			$lockedVendor->decrement('wallet_balance', $amount);
-			$lockedVendor->refresh();
+        $tier = VendorTier::active()->findOrFail($data['tier_id']);
 
-			WalletLedger::create([
-				'vendor_id' => $lockedVendor->id,
-				'type' => 'debit',
-				'source' => 'admin_adjustment',
-				'amount' => $amount,
-				'balance_after' => (float) $lockedVendor->wallet_balance,
-				'metadata' => [
-					'reason' => $data['reason'],
-					'admin_id' => auth()->id(),
-					'ip_address' => $request->ip(),
-					'action' => 'admin_debit',
-				],
-			]);
-		});
+        $changed = $tierService->manuallyAssignTier(
+            $vendor->loadMissing('tier'),
+            $tier,
+            (int) Auth::guard('admin')->id(),
+            $data['notes'] ?? null
+        );
 
-		Log::info('Admin adjusted vendor wallet balance', [
-			'admin_id' => auth()->id(),
-			'admin_ip' => $request->ip(),
-			'vendor_id' => $vendor->id,
-			'amount' => $data['amount'],
-			'reason' => $data['reason'],
-		]);
+        if (! $changed) {
+            return back()->with('status', 'Vendor is already on that tier.');
+        }
 
-		return back()->with('status', 'Balance adjusted successfully.');
-	}
+        Log::info('Admin manually adjusted vendor tier', [
+            'admin_id' => Auth::guard('admin')->id(),
+            'vendor_id' => $vendor->id,
+            'tier_id' => $tier->id,
+        ]);
+
+        return back()->with('status', "Vendor tier updated to {$tier->name}.");
+    }
+
+    public function adjustBalance(Request $request, Vendor $vendor): RedirectResponse
+    {
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'min:0.01'],
+            'reason' => ['required', 'string', 'min:5'],
+        ]);
+
+        DB::transaction(function () use ($vendor, $data, $request) {
+            $lockedVendor = Vendor::whereKey($vendor->id)->lockForUpdate()->firstOrFail();
+            $amount = (float) $data['amount'];
+
+            if ($lockedVendor->wallet_balance < $amount) {
+                throw ValidationException::withMessages([
+                    'amount' => 'Insufficient vendor balance.',
+                ]);
+            }
+
+            $lockedVendor->decrement('wallet_balance', $amount);
+            $lockedVendor->refresh();
+
+            WalletLedger::create([
+                'vendor_id' => $lockedVendor->id,
+                'type' => 'debit',
+                'source' => 'admin_adjustment',
+                'amount' => $amount,
+                'balance_after' => (float) $lockedVendor->wallet_balance,
+                'metadata' => [
+                    'reason' => $data['reason'],
+                    'admin_id' => auth()->id(),
+                    'ip_address' => $request->ip(),
+                    'action' => 'admin_debit',
+                ],
+            ]);
+        });
+
+        Log::info('Admin adjusted vendor wallet balance', [
+            'admin_id' => auth()->id(),
+            'admin_ip' => $request->ip(),
+            'vendor_id' => $vendor->id,
+            'amount' => $data['amount'],
+            'reason' => $data['reason'],
+        ]);
+
+        return back()->with('status', 'Balance adjusted successfully.');
+    }
 }

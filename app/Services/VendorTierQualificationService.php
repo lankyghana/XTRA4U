@@ -21,17 +21,17 @@ class VendorTierQualificationService
     {
         $totalOrders = Order::where(function ($q) use ($vendor) {
             $q->where('vendor_id', $vendor->id)
-              ->orWhere('reseller_vendor_id', $vendor->id);
+                ->orWhere('reseller_vendor_id', $vendor->id);
         })->count();
 
         $successfulOrders = Order::where(function ($q) use ($vendor) {
             $q->where('vendor_id', $vendor->id)
-              ->orWhere('reseller_vendor_id', $vendor->id);
+                ->orWhere('reseller_vendor_id', $vendor->id);
         })->where('status', 'completed')->count();
 
         $affiliateSales = (float) Order::where(function ($q) use ($vendor) {
             $q->where('vendor_id', $vendor->id)
-              ->orWhere('reseller_vendor_id', $vendor->id);
+                ->orWhere('reseller_vendor_id', $vendor->id);
         })->where('status', 'completed')->sum('amount_paid');
 
         $successRate = $totalOrders > 0
@@ -46,14 +46,14 @@ class VendorTierQualificationService
             ->sum('amount');
 
         return [
-            'min_affiliate_sales'   => $affiliateSales,
-            'min_affiliate_orders'  => $totalOrders,
+            'min_affiliate_sales' => $affiliateSales,
+            'min_affiliate_orders' => $totalOrders,
             'min_successful_orders' => $successfulOrders,
-            'min_success_rate'      => $successRate,
-            'min_account_age_days'  => $accountAgeDays,
-            'max_refund_rate'       => 0.0,
-            'max_complaint_rate'    => 0.0,
-            'min_wallet_volume'     => $walletVolume,
+            'min_success_rate' => $successRate,
+            'min_account_age_days' => $accountAgeDays,
+            'max_refund_rate' => 0.0,
+            'max_complaint_rate' => 0.0,
+            'min_wallet_volume' => $walletVolume,
         ];
     }
 
@@ -219,6 +219,44 @@ class VendorTierQualificationService
     }
 
     /**
+     * Manually set a vendor's tier, bypassing the qualification queue.
+     * Records the change in history (as promoted/demoted based on direction)
+     * and clears any pending eligibility. Returns false if the tier is unchanged.
+     */
+    public function manuallyAssignTier(Vendor $vendor, VendorTier $tier, int $adminId, ?string $notes = null): bool
+    {
+        $previousTierId = $vendor->tier_id;
+
+        if ((int) $previousTierId === (int) $tier->id) {
+            return false;
+        }
+
+        $previousPriority = $vendor->tier ? (int) $vendor->tier->priority : -1;
+        $action = (int) $tier->priority >= $previousPriority ? 'promoted' : 'demoted';
+
+        return DB::transaction(function () use ($vendor, $tier, $previousTierId, $adminId, $notes, $action) {
+            $vendor->update([
+                'tier_id' => $tier->id,
+                'eligible_for_tier_id' => null,
+                'is_tier_eligible' => false,
+                'tier_reviewed_at' => now(),
+                'tier_reviewed_by' => $adminId,
+            ]);
+
+            VendorTierHistory::create([
+                'vendor_id' => $vendor->id,
+                'previous_tier_id' => $previousTierId,
+                'new_tier_id' => $tier->id,
+                'action' => $action,
+                'admin_id' => $adminId,
+                'notes' => $notes,
+            ]);
+
+            return true;
+        });
+    }
+
+    /**
      * Assign the Regular tier to a newly approved vendor.
      */
     public function assignBaseTier(Vendor $vendor): void
@@ -257,11 +295,11 @@ class VendorTierQualificationService
     private function evaluateRule(float $actual, string $operator, float $threshold): bool
     {
         return match ($operator) {
-            '>='    => $actual >= $threshold,
-            '<='    => $actual <= $threshold,
-            '>'     => $actual > $threshold,
-            '<'     => $actual < $threshold,
-            '='     => abs($actual - $threshold) < 0.001,
+            '>=' => $actual >= $threshold,
+            '<=' => $actual <= $threshold,
+            '>' => $actual > $threshold,
+            '<' => $actual < $threshold,
+            '=' => abs($actual - $threshold) < 0.001,
             default => false,
         };
     }
