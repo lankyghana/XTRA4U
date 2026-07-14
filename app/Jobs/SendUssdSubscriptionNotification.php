@@ -4,7 +4,6 @@ namespace App\Jobs;
 
 use App\Mail\UssdSubscriptionMail;
 use App\Models\UssdSubscription;
-use App\Services\GatewayManager;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -61,7 +60,6 @@ class SendUssdSubscriptionNotification implements ShouldQueue
             }
 
             $this->email($subscription);
-            $this->sms($subscription);
         } finally {
             $lock->release();
         }
@@ -88,60 +86,5 @@ class SendUssdSubscriptionNotification implements ShouldQueue
                 'error' => $e->getMessage(),
             ]);
         }
-    }
-
-    private function sms(UssdSubscription $subscription): void
-    {
-        $vendor = $subscription->vendor;
-        $phone = trim((string) ($vendor->phone_number ?? ''));
-
-        if ($phone === '') {
-            return;
-        }
-
-        $message = $this->smsMessage($subscription);
-
-        if ($message === null) {
-            return;
-        }
-
-        try {
-            $smsService = app(GatewayManager::class)->getSmsService();
-            $smsService?->send($phone, $message);
-        } catch (\Throwable $e) {
-            Log::warning('Failed to send USSD subscription SMS', [
-                'subscription_id' => $this->subscriptionId,
-                'type' => $this->type,
-                'error' => $e->getMessage(),
-            ]);
-        }
-    }
-
-    private function smsMessage(UssdSubscription $subscription): ?string
-    {
-        $plan = $subscription->plan?->name ?? 'USSD';
-
-        return match ($this->type) {
-            self::TYPE_ACTIVATED => sprintf(
-                'XTRA4U: Your %s USSD plan is active. Your code is %s. %s sessions until %s.',
-                $plan,
-                $subscription->ussd_code ?? '',
-                number_format($subscription->remaining_sessions),
-                $subscription->expires_at?->format('d M Y') ?? '',
-            ),
-            self::TYPE_EXPIRING => sprintf(
-                'XTRA4U: Your %s USSD plan expires on %s. Renew to keep your code active.',
-                $plan,
-                $subscription->expires_at?->format('d M Y') ?? '',
-            ),
-            self::TYPE_EXPIRED => 'XTRA4U: Your USSD subscription has expired. Renew in your dashboard to restore service.',
-            self::TYPE_USAGE_ALERT => sprintf(
-                'XTRA4U: You have used %s%% of your USSD sessions. %s remaining.',
-                $this->context['threshold'] ?? '',
-                number_format($subscription->remaining_sessions),
-            ),
-            self::TYPE_PAYMENT_FAILED => 'XTRA4U: Your USSD subscription payment failed. No charge was made. Please try again.',
-            default => null,
-        };
     }
 }

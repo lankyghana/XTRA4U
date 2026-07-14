@@ -2,12 +2,11 @@
 
 namespace App\Jobs;
 
+use App\Mail\VendorWithdrawalMail;
 use App\Models\Vendor;
 use App\Models\VendorNotification;
 use App\Models\VendorWithdrawal;
-use App\Mail\VendorWithdrawalMail;
 use App\Services\GatewayManager;
-use App\Services\SmsService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -22,15 +21,13 @@ class ProcessVendorWithdrawalPayout implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public function __construct(public int $withdrawalId)
-    {
-    }
+    public function __construct(public int $withdrawalId) {}
 
     public function middleware(): array
     {
         return [
             // Prevent concurrent processing for the same withdrawal ID.
-            (new WithoutOverlapping('vendor-withdrawal:' . $this->withdrawalId))->expireAfter(300),
+            (new WithoutOverlapping('vendor-withdrawal:'.$this->withdrawalId))->expireAfter(300),
         ];
     }
 
@@ -59,7 +56,7 @@ class ProcessVendorWithdrawalPayout implements ShouldQueue
                 return;
             }
 
-            if (!$withdrawal->payout_gateway) {
+            if (! $withdrawal->payout_gateway) {
                 $gateway = $gatewayManager->resolvePayoutConfigForWithdrawal($withdrawal);
                 $withdrawal->payout_gateway = $gateway?->gateway_name;
             }
@@ -70,7 +67,7 @@ class ProcessVendorWithdrawalPayout implements ShouldQueue
             $shouldCallGateway = true;
         });
 
-        if (!$shouldCallGateway || !$withdrawal) {
+        if (! $shouldCallGateway || ! $withdrawal) {
             return;
         }
 
@@ -80,6 +77,7 @@ class ProcessVendorWithdrawalPayout implements ShouldQueue
 
         if (($result['success'] ?? false) === true) {
             $this->markApproved($withdrawal, $result);
+
             return;
         }
 
@@ -87,21 +85,21 @@ class ProcessVendorWithdrawalPayout implements ShouldQueue
         if (($result['pending'] ?? false) === true || ($result['success'] ?? null) === null) {
             DB::transaction(function () use ($withdrawal, $result) {
                 $locked = VendorWithdrawal::whereKey($withdrawal->id)->lockForUpdate()->first();
-                if (!$locked || $locked->status !== VendorWithdrawal::STATUS_PROCESSING) {
+                if (! $locked || $locked->status !== VendorWithdrawal::STATUS_PROCESSING) {
                     return;
                 }
 
                 $updates = [];
-                if (empty($locked->payout_reference) && !empty($result['reference'])) {
+                if (empty($locked->payout_reference) && ! empty($result['reference'])) {
                     $updates['payout_reference'] = $result['reference'];
                 }
-                if (empty($locked->payout_transaction_id) && !empty($result['transaction_id'])) {
+                if (empty($locked->payout_transaction_id) && ! empty($result['transaction_id'])) {
                     $updates['payout_transaction_id'] = $result['transaction_id'];
                 }
-                if (!empty($result['message'])) {
+                if (! empty($result['message'])) {
                     $updates['error_message'] = (string) $result['message'];
                 }
-                if (!empty($updates)) {
+                if (! empty($updates)) {
                     $locked->update($updates);
                 }
             });
@@ -113,6 +111,7 @@ class ProcessVendorWithdrawalPayout implements ShouldQueue
                 'gateway' => $withdrawal->payout_gateway,
                 'message' => $result['message'] ?? null,
             ]);
+
             return;
         }
 
@@ -206,7 +205,7 @@ class ProcessVendorWithdrawalPayout implements ShouldQueue
             'vendor_id' => $withdrawal->vendor_id,
             'type' => 'withdrawal_approved',
             'title' => 'Withdrawal Approved',
-            'message' => 'Your withdrawal of GHS ' . number_format($withdrawal->amount, 2) . ' has been paid to ' . $withdrawal->momo_number . '.',
+            'message' => 'Your withdrawal of GHS '.number_format($withdrawal->amount, 2).' has been paid to '.$withdrawal->momo_number.'.',
             'data' => [
                 'withdrawal_id' => $withdrawal->id,
                 'amount' => $withdrawal->amount,
@@ -215,18 +214,6 @@ class ProcessVendorWithdrawalPayout implements ShouldQueue
                 'gateway' => $withdrawal->payout_gateway,
             ],
         ]);
-
-        try {
-            $smsService = app(SmsService::class);
-            $vendor = $withdrawal->vendor;
-
-            if ($vendor && $vendor->phone_number) {
-                $message = 'XTRA4U: Withdrawal of GHS ' . number_format($withdrawal->amount, 2) . ' paid to ' . $withdrawal->momo_number . '. Ref: ' . ($withdrawal->payout_reference ?? $withdrawal->reference);
-                $smsService->send($vendor->phone_number, $message);
-            }
-        } catch (\Exception $e) {
-            Log::warning('Failed to send withdrawal approved SMS', ['error' => $e->getMessage()]);
-        }
 
         try {
             $vendor = $withdrawal->vendor;
@@ -248,7 +235,7 @@ class ProcessVendorWithdrawalPayout implements ShouldQueue
             'vendor_id' => $withdrawal->vendor_id,
             'type' => 'withdrawal_failed',
             'title' => 'Withdrawal Failed',
-            'message' => 'Your withdrawal of GHS ' . number_format($withdrawal->amount, 2) . ' failed and has been refunded. Reason: ' . $errorMessage,
+            'message' => 'Your withdrawal of GHS '.number_format($withdrawal->amount, 2).' failed and has been refunded. Reason: '.$errorMessage,
             'data' => [
                 'withdrawal_id' => $withdrawal->id,
                 'amount' => $withdrawal->amount,
@@ -258,18 +245,6 @@ class ProcessVendorWithdrawalPayout implements ShouldQueue
                 'error' => $errorMessage,
             ],
         ]);
-
-        try {
-            $smsService = app(SmsService::class);
-            $vendor = $withdrawal->vendor;
-
-            if ($vendor && $vendor->phone_number) {
-                $message = 'XTRA4U: Withdrawal of GHS ' . number_format($withdrawal->amount, 2) . ' failed and was refunded. Reason: ' . $errorMessage;
-                $smsService->send($vendor->phone_number, $message);
-            }
-        } catch (\Exception $e) {
-            Log::warning('Failed to send withdrawal failed SMS', ['error' => $e->getMessage()]);
-        }
 
         try {
             $vendor = $withdrawal->vendor;
