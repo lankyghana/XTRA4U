@@ -152,12 +152,21 @@
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 mt-3">
                 @if(count($categories))
                     @foreach($categories as $index => $category)
-                        <button type="button"
-                            class="flex flex-col items-center justify-center p-6 rounded-2xl border text-lg shadow-md transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 min-h-[110px]"
-                            :class="selectedCategory && selectedCategory.value === '{{ $category['value'] }}' ? 'bg-purple-100 border-purple-400 text-purple-700 font-semibold ring-2 ring-purple-300' : 'bg-white border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-200'"
-                            @click="selectCategory(categories[{{ $index }}])">
-                            <span class="text-center font-medium">{{ $category['label'] }}</span>
-                        </button>
+                        @php $categoryClosed = ($serviceStatuses[$category['value']] ?? true) === false; @endphp
+                        @if($categoryClosed)
+                            <div class="flex flex-col items-center justify-center p-6 rounded-2xl border border-gray-200 bg-gray-50 text-gray-400 text-lg shadow-inner min-h-[110px] cursor-not-allowed"
+                                 title="{{ $serviceClosedMessage ?? 'Temporarily unavailable' }}">
+                                <span class="text-center font-medium">{{ $category['label'] }}</span>
+                                <span class="mt-2 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-700">Temporarily closed</span>
+                            </div>
+                        @else
+                            <button type="button"
+                                class="flex flex-col items-center justify-center p-6 rounded-2xl border text-lg shadow-md transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 min-h-[110px]"
+                                :class="selectedCategory && selectedCategory.value === '{{ $category['value'] }}' ? 'bg-purple-100 border-purple-400 text-purple-700 font-semibold ring-2 ring-purple-300' : 'bg-white border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-200'"
+                                @click="selectCategory(categories[{{ $index }}])">
+                                <span class="text-center font-medium">{{ $category['label'] }}</span>
+                            </button>
+                        @endif
                     @endforeach
                 @else
                     <div class="col-span-full text-sm text-gray-500">No categories available. Please contact the vendor.</div>

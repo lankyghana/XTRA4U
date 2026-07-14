@@ -30,6 +30,15 @@ class AfaRegistrationController extends Controller
      */
     public function show(Vendor $vendor)
     {
+        // Service availability guard: an admin may have closed AFA registration.
+        if (\App\Support\ServiceAvailability::isClosed('afa')) {
+            return response()->view('pages.services-closed', [
+                'title' => 'AFA Registration Unavailable',
+                'message' => \App\Support\ServiceAvailability::message(),
+                'backHref' => route('storefront.vendor', $vendor->vendor_code),
+            ], 503);
+        }
+
         // Check if vendor has AFA service enabled (direct or reseller)
         $afaPrice = null;
         $isReseller = false;
@@ -73,6 +82,21 @@ class AfaRegistrationController extends Controller
      */
     public function store(Request $request, Vendor $vendor)
     {
+        // Service availability guard: an admin may have closed AFA registration.
+        if (\App\Support\ServiceAvailability::isClosed('afa')) {
+            $message = \App\Support\ServiceAvailability::message();
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $message,
+                ], 422);
+            }
+
+            return redirect()->route('afa.register', $vendor->vendor_code)
+                ->with('error', $message);
+        }
+
         $requiresInlineMomo = PaymentGatewayConfig::defaultCollectionRequiresPayerPhone();
 
         // Build validation rules based on ID type

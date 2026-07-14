@@ -169,6 +169,10 @@ class StorefrontController extends Controller
 			'vendor' => $vendor,
 			'services' => $services,
 			'categories' => $categories,
+			// Admin-controlled per-category open/closed flags for UX (server-side
+			// guards at the purchase endpoints are the real enforcement).
+			'serviceStatuses' => \App\Support\ServiceAvailability::statuses(),
+			'serviceClosedMessage' => \App\Support\ServiceAvailability::message(),
 			// Inline/API gateways like BulkClix require a MoMo number (and network) before initiating payment.
 			'requiresInlineMomo' => PaymentGatewayConfig::defaultCollectionRequiresPayerPhone(),
 		]);

@@ -31,6 +31,14 @@ class ResultCheckerCheckoutController extends Controller
             'payer_network' => ['nullable', 'string', 'max:20'],
         ]);
 
+        // Service availability guard: an admin may have closed result checkers.
+        if (\App\Support\ServiceAvailability::isClosed('results')) {
+            return response()->json([
+                'success' => false,
+                'message' => \App\Support\ServiceAvailability::message(),
+            ], 422);
+        }
+
         // Validate service and vendor eligibility (read-only — no transaction needed).
         $service = NetworkService::findOrFail($validated['service_id']);
 

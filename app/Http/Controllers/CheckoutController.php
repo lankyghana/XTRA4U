@@ -204,6 +204,19 @@ class CheckoutController extends Controller
 			}
 		}
 
+		// Server-side service availability guard. The category is resolved from the
+		// underlying product metadata so a stale or forged client cannot buy a
+		// category an admin has closed.
+		$categoryProduct = $product ?? $resellerProduct?->product;
+		$category = \App\Support\ServiceAvailability::categoryForProduct($categoryProduct);
+		if (\App\Support\ServiceAvailability::isClosed($category)) {
+			return response()->json([
+				'success' => false,
+				'message' => \App\Support\ServiceAvailability::message(),
+				'errors' => ['service' => [\App\Support\ServiceAvailability::message()]],
+			], 422);
+		}
+
 		$resolvedServiceName = $product?->name
 			?? $resellerProduct?->product?->name
 			?? ($validated['service_purchased'] ?? null)

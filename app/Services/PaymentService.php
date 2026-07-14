@@ -19,6 +19,14 @@ class PaymentService
 {
     protected GatewayManager $gatewayManager;
 
+    /**
+     * Legacy handle for a manually-switched collection gateway. Actual payment
+     * routing goes through $gatewayManager; this is only read back by
+     * switchPaymentGateway()/getCurrentGatewayInfo(). Declared (not dynamic) so
+     * reading it never trips PHP 8.2's undefined-property error.
+     */
+    protected ?object $paymentGateway = null;
+
     public function __construct(?GatewayManager $gatewayManager = null)
     {
         $this->gatewayManager = $gatewayManager ?? new GatewayManager;
@@ -1065,7 +1073,12 @@ class PaymentService
      */
     public function isReady(): bool
     {
-        return $this->paymentGateway && $this->paymentGateway->isConfigured();
+        // Source of truth is the active default collection gateway from the
+        // gateway manager — not $this->paymentGateway, which is only populated
+        // by the rarely-used switchPaymentGateway() and is null in normal flows.
+        $gateway = $this->gatewayManager->getPaymentService();
+
+        return $gateway !== null && $gateway->isConfigured();
     }
 
     private function extractGatewayTransactionId(array $payload): ?string
