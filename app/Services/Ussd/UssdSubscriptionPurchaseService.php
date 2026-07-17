@@ -150,16 +150,28 @@ class UssdSubscriptionPurchaseService
         $verification = $this->paymentService->checkPaymentStatus($reference);
 
         if (! ($verification['success'] ?? false) || ! $this->isSettled($verification)) {
-            $this->recordEvent($subscription, $subscription->vendor_id, $subscription->ussd_plan_id,
-                UssdSubscriptionEvent::PAYMENT_FAILED, 'Payment was not successful.', ['reference' => $reference]);
+            // Only an explicit terminal status from the gateway counts as a
+            // failure. A payment that has merely not settled yet (MoMo approval
+            // lag, gateway callback firing early) — or a verification call that
+            // itself errored — says nothing about the charge, and the money may
+            // already have left the vendor's account. Telling them "payment
+            // failed, no charge was made" here would be wrong.
+            if (($verification['success'] ?? false) && $this->isTerminalFailure($verification)) {
+                $this->failPayment($subscription, 'Payment was not successful.',
+                    'The payment was not completed.', [
+                        'reference' => $reference,
+                        'gateway_status' => data_get($verification, 'data.status'),
+                    ]);
 
-            SendUssdSubscriptionNotification::dispatch(
-                $subscription->id,
-                SendUssdSubscriptionNotification::TYPE_PAYMENT_FAILED,
-                ['reason' => 'The payment was not completed.'],
-            );
+                return ['success' => false, 'message' => 'Payment was not successful.'];
+            }
 
-            return ['success' => false, 'message' => 'Payment was not successful.'];
+            Log::info('USSD subscription payment not settled yet', [
+                'reference' => $reference,
+                'gateway_status' => data_get($verification, 'data.status'),
+            ]);
+
+            return ['success' => false, 'message' => 'The payment has not been confirmed yet. If you approved it, it will activate automatically in a moment.'];
         }
 
         $paidAmount = $this->normalizeAmount($verification, $subscription);
@@ -173,17 +185,12 @@ class UssdSubscriptionPurchaseService
                 'received' => $paidAmount,
             ]);
 
-            $this->recordEvent($subscription, $subscription->vendor_id, $subscription->ussd_plan_id,
-                UssdSubscriptionEvent::PAYMENT_FAILED, 'Payment amount did not match the plan price.', [
+            $this->failPayment($subscription, 'Payment amount did not match the plan price.',
+                'The amount received did not match the plan price.', [
+                    'reference' => $reference,
                     'expected' => (float) $subscription->price_paid,
                     'received' => $paidAmount,
                 ]);
-
-            SendUssdSubscriptionNotification::dispatch(
-                $subscription->id,
-                SendUssdSubscriptionNotification::TYPE_PAYMENT_FAILED,
-                ['reason' => 'The amount received did not match the plan price.'],
-            );
 
             return ['success' => false, 'message' => 'Payment amount did not match the plan price.'];
         }
@@ -267,6 +274,45 @@ class UssdSubscriptionPurchaseService
         $status = strtolower((string) data_get($verification, 'data.status', ''));
 
         return in_array($status, ['success', 'successful', 'completed', 'paid'], true);
+    }
+
+    /**
+     * True only when the gateway explicitly reports the payment as dead.
+     * Anything else (pending, processing, initiated, unknown) may still settle.
+     */
+    private function isTerminalFailure(array $verification): bool
+    {
+        $status = strtolower((string) data_get($verification, 'data.status', ''));
+
+        return in_array($status, [
+            'failed', 'error', 'cancelled', 'canceled', 'declined',
+            'abandoned', 'expired', 'reversed',
+        ], true);
+    }
+
+    /**
+     * Record a payment failure and notify the vendor — at most once per
+     * subscription. Gateways retry callbacks, and every retry used to send
+     * the vendor another "payment failed" email.
+     */
+    private function failPayment(UssdSubscription $subscription, string $eventDescription, string $notifyReason, array $context = []): void
+    {
+        $alreadyFailed = UssdSubscriptionEvent::where('ussd_subscription_id', $subscription->id)
+            ->where('event', UssdSubscriptionEvent::PAYMENT_FAILED)
+            ->exists();
+
+        if ($alreadyFailed) {
+            return;
+        }
+
+        $this->recordEvent($subscription, $subscription->vendor_id, $subscription->ussd_plan_id,
+            UssdSubscriptionEvent::PAYMENT_FAILED, $eventDescription, $context);
+
+        SendUssdSubscriptionNotification::dispatch(
+            $subscription->id,
+            SendUssdSubscriptionNotification::TYPE_PAYMENT_FAILED,
+            ['reason' => $notifyReason],
+        );
     }
 
     /**

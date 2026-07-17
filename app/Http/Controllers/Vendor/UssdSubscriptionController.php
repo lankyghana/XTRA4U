@@ -34,6 +34,8 @@ class UssdSubscriptionController extends Controller
         // guard, but Gate resolves its user from the default (`web`) guard.
         Gate::forUser($vendor)->authorize('viewAny', UssdSubscription::class);
 
+        $this->reconcilePendingPurchase($vendor);
+
         $current = $vendor->currentUssdSubscription()->with('plan')->first();
 
         // Only ever the authenticated vendor's own rows.
@@ -187,6 +189,37 @@ class UssdSubscriptionController extends Controller
         }
 
         return back()->withErrors(['error' => $message]);
+    }
+
+    /**
+     * A payment can settle after the browser stopped polling (late MoMo
+     * approval, closed tab, dropped connection). Re-verify the vendor's most
+     * recent pending purchase whenever they return to this page, so a paid
+     * subscription activates instead of sitting in pending_payment forever.
+     * checkStatus() never records a failure for a merely-pending payment.
+     */
+    private function reconcilePendingPurchase(Vendor $vendor): void
+    {
+        $pending = UssdSubscription::forVendor($vendor->id)
+            ->where('status', UssdSubscription::STATUS_PENDING_PAYMENT)
+            ->where('created_at', '>=', now()->subDay())
+            ->whereNotNull('payment_reference')
+            ->latest()
+            ->first();
+
+        if (! $pending) {
+            return;
+        }
+
+        try {
+            $this->purchases->checkStatus($pending->payment_reference);
+        } catch (\Throwable $e) {
+            // The page must still render if the gateway is unreachable.
+            Log::warning('USSD subscription reconciliation failed', [
+                'subscription_id' => $pending->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     private function authenticatedVendor(): Vendor
