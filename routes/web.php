@@ -151,7 +151,7 @@ Route::get('/store/{vendor:vendor_code}', [StorefrontController::class, 'showVen
 // Result Checker Routes - Customer Facing
 Route::get('/store/{vendor:vendor_code}/result-checkers', [StorefrontController::class, 'showResultCheckers'])->name('storefront.result-checkers');
 Route::post('/store/{vendor:vendor_code}/result-checkers/checkout', [ResultCheckerCheckoutController::class, 'initiateCheckout'])
-    ->middleware('throttle:20,1') // 20 checkout initiations per minute
+    ->middleware('throttle:20,1,rc-checkout') // 20 checkout initiations per minute
     ->name('result-checkers.checkout');
 Route::match(['GET', 'POST'], '/result-checkers/payment/callback/{order}', [ResultCheckerPaymentCallbackController::class, 'handle'])->name('result-checkers.payment.callback');
 Route::post('/result-checkers/payment/webhook', [ResultCheckerPaymentCallbackController::class, 'webhook'])
@@ -169,10 +169,10 @@ Route::post('/webhooks/paystack', [\App\Http\Controllers\Webhooks\PaystackWebhoo
 // SECURITY: Add rate limiting to prevent enumeration/brute force attacks
 Route::get('/results-checker/status', [ResultCheckerStatusController::class, 'index'])->name('result-checkers.status');
 Route::post('/results-checker/status/check', [ResultCheckerStatusController::class, 'check'])
-    ->middleware('throttle:10,1') // 10 requests per minute
+    ->middleware('throttle:10,1,rc-status-check') // 10 requests per minute
     ->name('result-checkers.status.check');
 Route::get('/results-checker/status/{order}', [ResultCheckerStatusController::class, 'show'])
-    ->middleware('throttle:10,1') // 10 requests per minute
+    ->middleware('throttle:10,1,rc-status-show') // 10 requests per minute
     ->name('result-checkers.status.show');
 
 // Success/pending pages
@@ -302,11 +302,11 @@ Route::middleware(['vendor.approved'])
 
         // Vendor wallet top-up and ledger
         Route::post('wallet/topup', [\App\Http\Controllers\VendorWalletController::class, 'initiateTopup'])
-            ->middleware('throttle:20,1')
+            ->middleware('throttle:20,1,wallet-topup')
             ->name('wallet.topup');
         // Polling endpoint for client-side verification of inline top-ups
         Route::get('wallet/topup/status/{reference}', [\App\Http\Controllers\VendorWalletController::class, 'topupStatus'])
-            ->middleware('throttle:60,1')
+            ->middleware('throttle:60,1,wallet-topup-status')
             ->name('wallet.topup.status');
         // Wallet ledger endpoint (no vendor_id parameter - uses authenticated context only)
         Route::get('wallet/ledger', [\App\Http\Controllers\VendorWalletController::class, 'ledger'])
@@ -319,12 +319,17 @@ Route::middleware(['vendor.approved'])
         // outside this group as `vendor.ussd.subscription.callback`.
         Route::get('ussd/subscription', [\App\Http\Controllers\Vendor\UssdSubscriptionController::class, 'index'])
             ->name('ussd.subscription.index');
+        // NOTE: inline `throttle` keys by user/IP only — the route is not part
+        // of the key — so each route needs its own prefix (3rd parameter) or
+        // they all drain one shared bucket. Without prefixes, the 3s status
+        // polling exhausted the callback's 10/min allowance and the gateway's
+        // iframe redirect landed on a 429 page.
         Route::post('ussd/subscription/purchase', [\App\Http\Controllers\Vendor\UssdSubscriptionController::class, 'purchase'])
-            ->middleware('throttle:10,1')
+            ->middleware('throttle:10,1,ussd-purchase')
             ->name('ussd.subscription.purchase');
         // Polling endpoint for client-side verification of inline (MoMo) purchases.
         Route::get('ussd/subscription/status/{reference}', [\App\Http\Controllers\Vendor\UssdSubscriptionController::class, 'status'])
-            ->middleware('throttle:60,1')
+            ->middleware('throttle:60,1,ussd-status')
             ->name('ussd.subscription.status');
 
         // Vendor Quick Buy (dashboard shortcut)
@@ -340,7 +345,7 @@ Route::post('/checkout', [CheckoutController::class, 'process'])->name('checkout
 Route::post('/checkout/verify', [CheckoutController::class, 'verify'])->name('checkout.verify');
 // Public wallet top-up callback (payment gateway will call/redirect here)
 Route::match(['GET','POST'], '/vendor/wallet/topup/callback/{reference}', [\App\Http\Controllers\VendorWalletController::class, 'topupCallback'])
-    ->middleware('throttle:10,1')
+    ->middleware('throttle:10,1,wallet-topup-callback')
     ->name('vendor.wallet.topup.callback');
 
 // Public USSD subscription callback. Must sit outside `vendor.approved`: the
@@ -348,7 +353,7 @@ Route::match(['GET','POST'], '/vendor/wallet/topup/callback/{reference}', [\App\
 // re-verifies the reference against the gateway before activating.
 Route::match(['GET', 'POST'], '/vendor/ussd/subscription/callback/{reference}', [\App\Http\Controllers\Vendor\UssdSubscriptionController::class, 'callback'])
     ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
-    ->middleware('throttle:10,1')
+    ->middleware('throttle:10,1,ussd-callback')
     ->name('vendor.ussd.subscription.callback');
 // Backwards-compatibility: preserve existing external bookmarks and old links.
 // Requests to the old path `/vendor/withdrawals` are permanently redirected

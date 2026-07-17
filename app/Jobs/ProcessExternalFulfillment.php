@@ -5,8 +5,8 @@ namespace App\Jobs;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Vendor;
-use App\Services\ExternalFulfillment\ExternalFulfillmentConfig;
 use App\Services\ExternalFulfillment\ExternalFulfillmentClientFactory;
+use App\Services\ExternalFulfillment\ExternalFulfillmentConfig;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -21,9 +21,14 @@ class ProcessExternalFulfillment implements ShouldQueue
 
     public int $tries = 3;
 
-    public function __construct(public int $orderId)
-    {
-    }
+    private const RECIPIENT_CONFLICT_RETRY_SECONDS = 600;
+
+    // Rechecks run every 10 minutes, so 144 attempts gives a conflict-held
+    // order ~24 hours to clear before it may be marked failed. Orders the
+    // provider has actually accepted are never failed automatically.
+    private const MAX_RECIPIENT_CONFLICT_ATTEMPTS = 144;
+
+    public function __construct(public int $orderId) {}
 
     public function backoff(): array
     {
@@ -69,8 +74,8 @@ class ProcessExternalFulfillment implements ShouldQueue
                 return;
             }
 
-            $idempotencyKey = (string) ($order->external_fulfillment_idempotency_key ?: ('order-' . $order->id));
-            
+            $idempotencyKey = (string) ($order->external_fulfillment_idempotency_key ?: ('order-'.$order->id));
+
             [$providerUsed, $providerNetwork] = $this->resolveProviderAndNetwork($config, $order);
 
             if (! $config->isProviderReady($providerUsed)) {
@@ -78,6 +83,7 @@ class ProcessExternalFulfillment implements ShouldQueue
                     'order_id' => $order->id,
                     'provider' => $providerUsed,
                 ]);
+
                 return;
             }
 
@@ -142,6 +148,50 @@ class ProcessExternalFulfillment implements ShouldQueue
                 return;
             }
 
+            // The provider rejects submissions with HTTP 409 while it already has an
+            // in-flight order for the same recipient (usually an earlier purchase for
+            // that number). Hold the order and re-check later instead of failing it —
+            // that pending order may belong to a different local order, so this one
+            // still needs to be delivered once the provider clears.
+            if ($this->isRecipientConflict($message)) {
+                $attempts = (int) ($order->external_fulfillment_attempts ?? 0) + 1;
+
+                if ($attempts < self::MAX_RECIPIENT_CONFLICT_ATTEMPTS) {
+                    Order::whereKey($order->id)->update([
+                        'external_fulfillment_status' => 'processing',
+                        'external_fulfillment_last_error' => $message,
+                        'external_fulfillment_provider_used' => $providerUsed,
+                    ]);
+
+                    Log::info('External fulfillment held: provider has an in-flight order for this recipient', [
+                        'order_id' => $order->id,
+                        'provider' => $providerUsed,
+                        'attempts' => $attempts,
+                    ]);
+
+                    self::dispatch($this->orderId)
+                        ->delay(now()->addSeconds(self::RECIPIENT_CONFLICT_RETRY_SECONDS));
+
+                    return;
+                }
+
+                // Recheck budget exhausted: record the failure without throwing, since
+                // the queue's short backoffs cannot outlast the provider conflict.
+                Order::whereKey($order->id)->update([
+                    'external_fulfillment_status' => 'failed',
+                    'external_fulfillment_last_error' => $message,
+                    'external_fulfillment_provider_used' => $providerUsed,
+                ]);
+
+                Log::warning('External fulfillment failed: recipient conflict did not clear', [
+                    'order_id' => $order->id,
+                    'provider' => $providerUsed,
+                    'attempts' => $attempts,
+                ]);
+
+                return;
+            }
+
             $errorMessage = $message !== '' ? $message : 'External fulfillment failed';
 
             Order::whereKey($order->id)->update([
@@ -159,6 +209,14 @@ class ProcessExternalFulfillment implements ShouldQueue
         } finally {
             optional($lock)->release();
         }
+    }
+
+    private function isRecipientConflict(string $message): bool
+    {
+        $normalized = strtolower($message);
+
+        return str_contains($normalized, 'already pending')
+            || str_contains($normalized, 'already processing');
     }
 
     private function resolveProviderAndNetwork(ExternalFulfillmentConfig $config, Order $order): array
