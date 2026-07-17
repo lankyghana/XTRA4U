@@ -80,6 +80,37 @@
         if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
     }
 
+    /* Replace the iframe/loader with a final outcome panel so the user sees a
+       clear "Payment completed" (or failed) state instead of whatever page the
+       gateway's post-payment redirect happens to land on. */
+    function showOutcome(kind, title, subtitle) {
+        const loader = document.getElementById('inline-payment-loader');
+        const iframe = document.getElementById('inline-payment-frame');
+        const heading = document.getElementById('ipm-title');
+        if (iframe) iframe.style.display = 'none';
+        if (!loader) return;
+
+        const colours = { success: '#16a34a', error: '#dc2626', info: '#6b7280' };
+        const icons = {
+            success: '<svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M8 12.5l2.5 2.5L16 9"></path></svg>',
+            error: '<svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M15 9l-6 6M9 9l6 6"></path></svg>',
+            info: '<svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 7v5l3 2"></path></svg>',
+        };
+
+        if (heading) {
+            heading.textContent = kind === 'success' ? 'Payment completed'
+                : (kind === 'error' ? 'Payment failed' : 'Complete payment');
+        }
+
+        loader.style.display = 'block';
+        loader.innerHTML = `
+            <div style="padding:40px 16px;text-align:center;">
+                ${icons[kind] || icons.info}
+                <div style="font-weight:700;font-size:18px;margin-top:12px;color:${colours[kind] || colours.info};">${title}</div>
+                ${subtitle ? `<div style="color:#6b7280;font-size:13px;margin-top:6px;">${subtitle}</div>` : ''}
+            </div>`;
+    }
+
     const InlinePaymentManager = {
         open(opts = {}, onComplete) {
             const { reference, authorization_url = null, gateway_name = null, flow_type = 'checkout', callback_url = null, no_redirect = false, poll_url = null } = opts || {};
@@ -98,19 +129,36 @@
 
             function restoreSubmits() { submits.forEach(s => s.removeAttribute('disabled')); }
 
-            // onUpdate will handle status transitions
-            function onUpdate(status) {
-                if (status === 'paid' || status === 'completed') {
-                    stopPolling();
+            // Show the outcome in the modal first, then close and hand off to
+            // onComplete / the redirect after a short pause so the user always
+            // sees a clear final state instead of an abrupt disappearance.
+            let settled = false;
+
+            function finish(status) {
+                if (settled) return;
+                settled = true;
+                stopPolling();
+
+                if (status === 'paid') {
+                    showOutcome('success', 'Payment completed', 'Thank you! Finishing up…');
+                } else if (status === 'failed') {
+                    showOutcome('error', 'Payment failed', 'No charge was completed. You can try again.');
+                } else {
+                    showOutcome('info', 'Still waiting for confirmation', 'If you approved the payment, it may take a moment to reflect. This window will close shortly.');
+                }
+
+                setTimeout(() => {
                     InlinePaymentManager.close();
                     restoreSubmits();
-                    
+
                     let handled = false;
                     if (typeof onComplete === 'function') {
-                        handled = onComplete('paid');
+                        handled = onComplete(status);
                     }
 
-                    if (!no_redirect) {
+                    if (no_redirect) return;
+
+                    if (status === 'paid') {
                         // For wallet top-ups, invoke callback to credit wallet before redirecting
                         if (flow_type === 'wallet_topup') {
                             const cbUrl = callback_url || `/vendor/wallet/topup/callback/${encodeURIComponent(reference)}`;
@@ -126,23 +174,19 @@
                             // For checkout flow, redirect to checkout success
                             window.location.href = '/checkout/success';
                         }
-                    }
-                } else if (status === 'failed') {
-                    stopPolling();
-                    InlinePaymentManager.close();
-                    restoreSubmits();
-                    if (typeof onComplete === 'function') onComplete('failed');
-                    if (!no_redirect) {
+                    } else if (status === 'failed') {
                         alert('Payment failed. Please try another method.');
-                    }
-                } else if (status === 'timeout') {
-                    stopPolling();
-                    InlinePaymentManager.close();
-                    restoreSubmits();
-                    if (typeof onComplete === 'function') onComplete('timeout');
-                    if (!no_redirect) {
+                    } else if (status === 'timeout') {
                         alert('Payment confirmation timed out. Please check your payment provider or try again.');
                     }
+                }, status === 'paid' ? 1800 : 3000);
+            }
+
+            function onUpdate(status) {
+                if (status === 'paid' || status === 'completed') {
+                    finish('paid');
+                } else if (status === 'failed' || status === 'timeout') {
+                    finish(status);
                 }
             }
 
