@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\SendUssdSubscriptionNotification;
 use App\Models\UssdPlan;
 use App\Models\UssdSubscription;
 use App\Models\UssdSubscriptionEvent;
@@ -10,6 +11,7 @@ use App\Services\PaymentService;
 use App\Services\Ussd\UssdSubscriptionPurchaseService;
 use App\Services\Ussd\UssdSubscriptionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Str;
 use Mockery;
 use Tests\TestCase;
@@ -249,6 +251,71 @@ class UssdSubscriptionPurchaseTest extends TestCase
         $this->hitCallback('ussd-ref-4');
 
         $this->assertSame(UssdSubscription::STATUS_PENDING_PAYMENT, UssdSubscription::firstOrFail()->status);
+    }
+
+    public function test_pending_gateway_status_on_callback_never_notifies_failure(): void
+    {
+        Bus::fake();
+
+        $vendor = Vendor::factory()->create();
+        $this->pendingSubscription($vendor, $this->starter(), 'ussd-ref-pend');
+        $this->settles('ussd-ref-pend', 80.00, 'pending');
+
+        $this->hitCallback('ussd-ref-pend');
+
+        // A payment that is merely not settled yet is not a failure: the money
+        // may already be deducted and settlement just lagging.
+        $this->assertSame(UssdSubscription::STATUS_PENDING_PAYMENT, UssdSubscription::firstOrFail()->status);
+        $this->assertDatabaseMissing('ussd_subscription_events', ['event' => UssdSubscriptionEvent::PAYMENT_FAILED]);
+        Bus::assertNotDispatched(SendUssdSubscriptionNotification::class);
+    }
+
+    public function test_verification_error_on_callback_never_notifies_failure(): void
+    {
+        Bus::fake();
+
+        $vendor = Vendor::factory()->create();
+        // No settles(): the gateway double returns success=false ("Not found"),
+        // i.e. the verification call itself failed — not the payment.
+        $this->pendingSubscription($vendor, $this->starter(), 'ussd-ref-err');
+
+        $this->hitCallback('ussd-ref-err');
+
+        $this->assertSame(UssdSubscription::STATUS_PENDING_PAYMENT, UssdSubscription::firstOrFail()->status);
+        $this->assertDatabaseMissing('ussd_subscription_events', ['event' => UssdSubscriptionEvent::PAYMENT_FAILED]);
+        Bus::assertNotDispatched(SendUssdSubscriptionNotification::class);
+    }
+
+    public function test_terminal_failure_notifies_only_once_across_retried_callbacks(): void
+    {
+        Bus::fake();
+
+        $vendor = Vendor::factory()->create();
+        $this->pendingSubscription($vendor, $this->starter(), 'ussd-ref-term');
+        $this->settles('ussd-ref-term', 80.00, 'failed');
+
+        $this->hitCallback('ussd-ref-term');
+        $this->hitCallback('ussd-ref-term');
+        $this->hitCallback('ussd-ref-term');
+
+        $this->assertSame(1, UssdSubscriptionEvent::where('event', UssdSubscriptionEvent::PAYMENT_FAILED)->count());
+        Bus::assertDispatchedTimes(SendUssdSubscriptionNotification::class, 1);
+    }
+
+    public function test_visiting_the_subscription_page_activates_a_late_settled_purchase(): void
+    {
+        $vendor = Vendor::factory()->create();
+        $this->pendingSubscription($vendor, $this->starter(), 'ussd-late-1');
+        // Settlement arrived after the purchase page's polling window closed.
+        $this->settles('ussd-late-1', 80.00);
+
+        $this->actingAs($vendor, 'vendor')
+            ->get(route('vendor.ussd.subscription.index'))
+            ->assertOk();
+
+        $subscription = UssdSubscription::firstOrFail();
+        $this->assertSame(UssdSubscription::STATUS_ACTIVE, $subscription->status);
+        $this->assertNotNull($subscription->ussd_code);
     }
 
     public function test_paystack_pesewa_amounts_are_normalised_before_comparison(): void
