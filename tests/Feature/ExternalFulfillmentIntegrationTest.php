@@ -259,6 +259,98 @@ class ExternalFulfillmentIntegrationTest extends TestCase
         });
     }
 
+    public function test_job_holds_order_and_reschedules_when_provider_reports_recipient_conflict(): void
+    {
+        Queue::fake();
+
+        config([
+            'services.external_fulfillment.base_url' => 'https://api.datafyhub.com',
+            'services.external_fulfillment.endpoint' => '/api/v1/placeOrder',
+        ]);
+
+        Http::fake([
+            'https://api.datafyhub.com/api/v1/placeOrder' => Http::response([
+                'success' => false,
+                'error' => 'An order for 0240000000 is already pending. Please wait for it to be delivered, refunded, or cancelled.',
+            ], 409),
+        ]);
+
+        $vendor = Vendor::factory()->create([
+            'affiliate_vendor_id' => null,
+        ]);
+
+        $this->enableExternalFulfillmentForVendor($vendor);
+
+        $order = Order::create([
+            'recipient_phone_number' => '0240000000',
+            'mobile_money_number' => '0240000000',
+            'service_purchased' => 'TEST-SERVICE',
+            'amount_paid' => 10.00,
+            'vendor_id' => $vendor->id,
+            'status' => 'Processing',
+            'payment_status' => 'paid',
+            'payment_reference' => 'TEST-REF-EXT-409',
+            'payment_gateway' => 'test',
+        ]);
+
+        $job = new ProcessExternalFulfillment($order->id);
+        $job->handle();
+
+        $order->refresh();
+        $this->assertSame('processing', $order->external_fulfillment_status);
+        $this->assertStringContainsString('already pending', $order->external_fulfillment_last_error);
+
+        Queue::assertPushed(ProcessExternalFulfillment::class, function (ProcessExternalFulfillment $pushed) use ($order) {
+            return $pushed->orderId === $order->id && $pushed->delay !== null;
+        });
+    }
+
+    public function test_job_marks_order_failed_when_recipient_conflict_never_clears(): void
+    {
+        Queue::fake();
+
+        config([
+            'services.external_fulfillment.base_url' => 'https://api.datafyhub.com',
+            'services.external_fulfillment.endpoint' => '/api/v1/placeOrder',
+        ]);
+
+        Http::fake([
+            'https://api.datafyhub.com/api/v1/placeOrder' => Http::response([
+                'success' => false,
+                'error' => 'An order for 0240000000 is already processing. Please wait for it to be delivered, refunded, or cancelled.',
+            ], 409),
+        ]);
+
+        $vendor = Vendor::factory()->create([
+            'affiliate_vendor_id' => null,
+        ]);
+
+        $this->enableExternalFulfillmentForVendor($vendor);
+
+        $order = Order::create([
+            'recipient_phone_number' => '0240000000',
+            'mobile_money_number' => '0240000000',
+            'service_purchased' => 'TEST-SERVICE',
+            'amount_paid' => 10.00,
+            'vendor_id' => $vendor->id,
+            'status' => 'Processing',
+            'payment_status' => 'paid',
+            'payment_reference' => 'TEST-REF-EXT-409-MAX',
+            'payment_gateway' => 'test',
+        ]);
+
+        Order::whereKey($order->id)->update(['external_fulfillment_attempts' => 143]);
+
+        $job = new ProcessExternalFulfillment($order->id);
+        $job->handle();
+
+        $order->refresh();
+        $this->assertSame('failed', $order->external_fulfillment_status);
+        $this->assertStringContainsString('already processing', $order->external_fulfillment_last_error);
+
+        Queue::assertNotPushed(ProcessExternalFulfillment::class);
+    }
+
     public function test_affiliate_order_dispatches_external_fulfillment_for_owner_vendor_when_enabled(): void
     {
         Queue::fake();
