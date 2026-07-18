@@ -5,6 +5,11 @@ return [
     // Toggle via .env: CHECKOUT_COMING_SOON=true
     'checkout_coming_soon' => (bool) env('CHECKOUT_COMING_SOON', false),
 
+    // Vendor code of the platform's flagship store. Public entry points that
+    // are not tied to a specific vendor (homepage "Buy Now", the Results
+    // Checker link in the main navigation) send customers to this store.
+    'main_store_code' => env('STOREFRONT_MAIN_STORE_CODE', 'BUNDJXW6SR'),
+
     'default_category' => 'data',
     'categories' => [
         'data' => [
