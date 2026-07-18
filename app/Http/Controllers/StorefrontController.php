@@ -14,10 +14,12 @@ class StorefrontController extends Controller
 {
 	public function index()
 	{
-		return view('storefront.index');
+		return view('storefront.index', [
+			'mainStore' => \App\Support\MainStore::vendor(),
+		]);
 	}
 
-	public function showVendorStore(Vendor $vendor)
+	public function showVendorStore(Vendor $vendor, ?string $initialCategory = null)
 	{
 		// Load owned products
 		$vendor->load(['products' => function ($query) {
@@ -169,6 +171,10 @@ class StorefrontController extends Controller
 			'vendor' => $vendor,
 			'services' => $services,
 			'categories' => $categories,
+			// Category to preselect on load (e.g. 'results' for the
+			// /store/{vendor}/result-checkers entry point). Null lets the
+			// store fall back to the first category with services.
+			'initialCategory' => $initialCategory,
 			// Admin-controlled per-category open/closed flags for UX (server-side
 			// guards at the purchase endpoints are the real enforcement).
 			'serviceStatuses' => \App\Support\ServiceAvailability::statuses(),
@@ -180,7 +186,22 @@ class StorefrontController extends Controller
 
 	public function showResultCheckers(Vendor $vendor)
 	{
-		return $this->showVendorStore($vendor);
+		return $this->showVendorStore($vendor, 'results');
+	}
+
+	/**
+	 * Vendor-agnostic entry point: send the visitor to the flagship store's
+	 * result-checkers page, whichever vendor that resolves to here.
+	 */
+	public function resultCheckersEntry()
+	{
+		$vendor = \App\Support\MainStore::vendor();
+
+		if ($vendor) {
+			return redirect()->route('storefront.result-checkers', ['vendor' => $vendor->vendor_code]);
+		}
+
+		return redirect()->route('storefront.index');
 	}
 
 	private function decodeDescription(?string $value): array

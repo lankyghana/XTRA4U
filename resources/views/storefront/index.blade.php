@@ -30,8 +30,8 @@
                 
                 <!-- CTA Buttons -->
                 <div class="mt-10 flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-                    <x-button href="https://xtra4u.com/store/BUNDJXW6SR" 
-                              variant="primary" 
+                    <x-button href="{{ $mainStore ? route('storefront.vendor', ['vendor' => $mainStore->vendor_code]) : route('checkout.show') }}"
+                              variant="primary"
                               size="lg"
                               class="w-full sm:w-auto">
                         Buy Now
@@ -212,6 +212,91 @@
                         Usually within 5 minutes
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Results Checker Section -->
+<section class="py-16 lg:py-24 bg-white">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            <div class="text-center lg:text-left">
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-700">
+                    Exam Results
+                </span>
+                <h2 class="mt-4 text-3xl sm:text-4xl font-bold text-gray-900">
+                    Results Checker PINs, Delivered Instantly
+                </h2>
+                <p class="mt-4 text-lg text-gray-600">
+                    Buy a results checker card in seconds and get your serial number and PIN
+                    right away. Already bought one? Retrieve your PIN anytime using the phone
+                    number from your order.
+                </p>
+
+                <div class="mt-8 flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+                    <x-button href="{{ route('result-checkers.entry') }}"
+                              variant="primary"
+                              size="lg"
+                              class="w-full sm:w-auto">
+                        Buy a Results Checker
+                        <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                        </svg>
+                    </x-button>
+
+                    <x-button href="{{ route('result-checkers.status') }}"
+                              variant="outline"
+                              size="lg"
+                              class="w-full sm:w-auto">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+                        </svg>
+                        Retrieve My PIN
+                    </x-button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <x-card class="text-left">
+                    <div class="w-10 h-10 bg-brand-deep-blue rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                        </svg>
+                    </div>
+                    <h3 class="mt-4 font-semibold text-gray-900">Instant Delivery</h3>
+                    <p class="mt-2 text-sm text-gray-600">Your serial and PIN are issued the moment payment is confirmed.</p>
+                </x-card>
+
+                <x-card class="text-left">
+                    <div class="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                        </svg>
+                    </div>
+                    <h3 class="mt-4 font-semibold text-gray-900">Securely Stored</h3>
+                    <p class="mt-2 text-sm text-gray-600">PINs are encrypted end-to-end and only ever shown to you.</p>
+                </x-card>
+
+                <x-card class="text-left">
+                    <div class="w-10 h-10 bg-brand-bright-blue rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                    </div>
+                    <h3 class="mt-4 font-semibold text-gray-900">Retrieve Anytime</h3>
+                    <p class="mt-2 text-sm text-gray-600">Lost the SMS? Look your PIN up again with your phone number.</p>
+                </x-card>
+
+                <x-card class="text-left">
+                    <div class="w-10 h-10 bg-gray-800 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z"/>
+                        </svg>
+                    </div>
+                    <h3 class="mt-4 font-semibold text-gray-900">Buy in Bulk</h3>
+                    <p class="mt-2 text-sm text-gray-600">Quantity pricing for schools, cafés, and agents.</p>
+                </x-card>
             </div>
         </div>
     </div>

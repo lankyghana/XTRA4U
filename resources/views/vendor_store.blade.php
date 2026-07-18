@@ -20,6 +20,7 @@
         verifyRoute: '{{ route('checkout.verify') }}',
         vendorCode: '{{ $vendor->vendor_code ?? '' }}',
         vendorPhone: '{{ $vendor->phone_number ?? '' }}',
+        initialCategory: {!! json_encode($initialCategory ?? null) !!},
         resultCheckerOrderRoute: '{{ route('result-checkers.checkout', ['vendor' => $vendor->vendor_code ?? '']) }}'
     };
 </script>

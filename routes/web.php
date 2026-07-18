@@ -149,6 +149,10 @@ Route::get('/Marketplace', fn () => redirect()->route('checkout.show'));
 Route::get('/store/{vendor:vendor_code}', [StorefrontController::class, 'showVendorStore'])->name('storefront.vendor');
 
 // Result Checker Routes - Customer Facing
+// Vendor-agnostic entry point used by the main navigation and homepage; it
+// resolves the flagship store at request time so the link never 404s when
+// the configured vendor code is absent (local/staging databases).
+Route::get('/results-checkers', [StorefrontController::class, 'resultCheckersEntry'])->name('result-checkers.entry');
 Route::get('/store/{vendor:vendor_code}/result-checkers', [StorefrontController::class, 'showResultCheckers'])->name('storefront.result-checkers');
 Route::post('/store/{vendor:vendor_code}/result-checkers/checkout', [ResultCheckerCheckoutController::class, 'initiateCheckout'])
     ->middleware('throttle:20,1,rc-checkout') // 20 checkout initiations per minute
