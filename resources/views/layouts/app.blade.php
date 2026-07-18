@@ -51,6 +51,7 @@
                 loadingPackages: false,
                 orderRoute: opts.orderRoute || '',
                 resultCheckerOrderRoute: opts.resultCheckerOrderRoute || '',
+                initialCategory: opts.initialCategory || null,
 
                 // Getters
                 get filteredServices() {
@@ -105,15 +106,23 @@
                 // Initialization
                 init() {
                     this.selectedCategory = null;
-                    // Auto-select first available category after Alpine binds
+                    // Auto-select a category after Alpine binds: prefer the
+                    // server-requested one (e.g. 'results' when the store is
+                    // opened via /store/{vendor}/result-checkers), otherwise
+                    // the first category that actually has services.
                     this.$nextTick(() => {
-                        const firstAvailable = this.categories.find((cat) => {
+                        const hasServices = (cat) => {
                             const key = String(cat.value || '').toLowerCase().trim();
                             return (this.services || []).some((service) => {
                                 const sc = String(service.category || '').toLowerCase().trim();
                                 return sc === key;  // Exact match only
                             });
-                        });
+                        };
+                        const requested = String(this.initialCategory || '').toLowerCase().trim();
+                        const preferred = requested
+                            ? this.categories.find((cat) => String(cat.value || '').toLowerCase().trim() === requested && hasServices(cat))
+                            : null;
+                        const firstAvailable = preferred || this.categories.find(hasServices);
                         if (firstAvailable) {
                             this.selectCategory(firstAvailable);
                             // Optionally pre-select the first service under that category

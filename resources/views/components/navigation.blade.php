@@ -16,11 +16,19 @@
                 
                 <!-- Desktop Navigation -->
                 <div class="hidden md:ml-10 md:flex md:space-x-8">
-                    <a href="{{ route('storefront.index') }}" 
+                    <a href="{{ route('storefront.index') }}"
                        class="border-brand-deep-blue text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium hover:border-brand-green transition-colors">
                         Home
                     </a>
-                    <a href="{{ route('about') }}" 
+                    <a href="{{ route('result-checkers.entry') }}"
+                       class="border-transparent text-gray-500 hover:border-brand-bright-blue hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors">
+                        Results Checker
+                    </a>
+                    <a href="{{ route('result-checkers.status') }}"
+                       class="border-transparent text-gray-500 hover:border-brand-bright-blue hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors">
+                        Retrieve PIN
+                    </a>
+                    <a href="{{ route('about') }}"
                        class="border-transparent text-gray-500 hover:border-brand-bright-blue hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors">
                         About
                     </a>
@@ -96,12 +104,22 @@
         
         <!-- Navigation Links -->
         <div class="px-2 pt-4 pb-3 space-y-1">
-            <a href="{{ route('storefront.index') }}" 
+            <a href="{{ route('storefront.index') }}"
                @click="mobileMenuOpen = false"
                class="bg-blue-50 border-brand-deep-blue text-brand-deep-blue block pl-3 pr-4 py-2 border-l-4 text-base font-medium">
                 Home
             </a>
-            <a href="{{ route('about') }}" 
+            <a href="{{ route('result-checkers.entry') }}"
+               @click="mobileMenuOpen = false"
+               class="border-transparent text-gray-600 hover:bg-gray-50 hover:border-brand-bright-blue hover:text-gray-800 block pl-3 pr-4 py-2 border-l-4 text-base font-medium transition-colors">
+                Results Checker
+            </a>
+            <a href="{{ route('result-checkers.status') }}"
+               @click="mobileMenuOpen = false"
+               class="border-transparent text-gray-600 hover:bg-gray-50 hover:border-brand-bright-blue hover:text-gray-800 block pl-3 pr-4 py-2 border-l-4 text-base font-medium transition-colors">
+                Retrieve PIN
+            </a>
+            <a href="{{ route('about') }}"
                @click="mobileMenuOpen = false"
                class="border-transparent text-gray-600 hover:bg-gray-50 hover:border-brand-bright-blue hover:text-gray-800 block pl-3 pr-4 py-2 border-l-4 text-base font-medium transition-colors">
                 About
