@@ -15,7 +15,7 @@ You have used **{{ $context['threshold'] ?? $subscription->usage_percentage }}%*
 - **Remaining:** {{ number_format($subscription->remaining_sessions) }}
 
 @if ($subscription->remaining_sessions <= 0)
-Customers dialling `{{ $subscription->metadata['released_ussd_code'] ?? $subscription->ussd_code }}` can no longer reach your store. Renew or upgrade to restore service immediately.
+Customers dialling `{{ $subscription->metadata['released_ussd_code'] ?? $subscription->currentUssdCode() }}` can no longer reach your store. Renew or upgrade to restore service immediately.
 @else
 Once they run out, customers will no longer be able to dial through to your store.
 @endif

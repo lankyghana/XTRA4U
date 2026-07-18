@@ -7,7 +7,7 @@ Your **{{ $subscription->plan?->name }}** USSD plan is now active.
 
 {{-- Backticks are required: a USSD code is full of `*` and `#`, which Markdown
      would otherwise consume as emphasis and heading syntax. --}}
-**Your USSD code:** `{{ $subscription->ussd_code }}`
+**Your USSD code:** `{{ $subscription->currentUssdCode() }}`
 
 Share this code with your customers — dialling it takes them straight to your store.
 

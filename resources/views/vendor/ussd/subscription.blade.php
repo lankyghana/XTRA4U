@@ -74,7 +74,7 @@
                     <div class="lg:col-span-1">
                         <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Your USSD Code</p>
                         <p class="mt-2 text-2xl font-bold font-mono text-brand-deep-blue break-all">
-                            {{ $current->ussd_code ?? '—' }}
+                            {{ $current->currentUssdCode() ?? '—' }}
                         </p>
                         <p class="mt-1 text-xs text-gray-500">Share this with your customers.</p>
 

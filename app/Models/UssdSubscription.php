@@ -184,6 +184,27 @@ class UssdSubscription extends Model
     }
 
     /**
+     * The code as it should read *right now*. `ussd_code` is frozen at the
+     * base code that was configured when this subscription was activated, so
+     * an admin changing Admin → USSD Settings → Global USSD Base Code would
+     * otherwise leave every already-issued vendor code silently stale. This
+     * recomputes from the live setting instead, so the change cascades to
+     * every vendor immediately without needing a new purchase or renewal.
+     */
+    public function currentUssdCode(): ?string
+    {
+        if (! $this->ussd_code || ! $this->extension_code) {
+            return $this->ussd_code;
+        }
+
+        return self::buildUssdCode(
+            app(\App\Services\Ussd\UssdConfig::class)->baseCode(),
+            $this->extension_code,
+            $this->vendor_id,
+        );
+    }
+
+    /**
      * Thresholds crossed by current usage that have not yet been notified.
      *
      * @return array<int, int>
