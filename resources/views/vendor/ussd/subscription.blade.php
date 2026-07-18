@@ -375,40 +375,43 @@
                 return;
             }
 
-            // Redirect gateways (Paystack) return an authorization_url; inline
-            // MoMo gateways (BulkClix/Moolre) return null and push a phone prompt.
-            // InlinePaymentManager handles both: it embeds the URL when present
-            // and polls our status endpoint until the payment settles.
-            showMessage(
-                data.authorization_url
-                    ? 'Opening secure payment window…'
-                    : 'Payment prompt sent. Approve it on your phone to activate your plan.',
-                'info'
-            );
+            // Redirect gateways (Paystack) send the vendor's browser away to the
+            // gateway's own checkout page. Inline MoMo gateways (BulkClix/Moolre)
+            // never return an authorization_url — they push an approval prompt
+            // to the phone and we poll our status endpoint until it settles.
+            if (data.flow_type === 'inline') {
+                showMessage('Payment prompt sent. Approve it on your phone to activate your plan.', 'info');
 
-            const pollUrl = statusBase + '/' + encodeURIComponent(data.reference);
+                const pollUrl = statusBase + '/' + encodeURIComponent(data.reference);
 
-            window.InlinePaymentManager.open({
-                reference: data.reference,
-                authorization_url: data.authorization_url || null,
-                gateway_name: data.gateway_name || null,
-                flow_type: data.flow_type || 'inline',
-                no_redirect: true,
-                poll_url: pollUrl,
-            }, function (status) {
-                if (status === 'paid') {
-                    showMessage('Payment confirmed. Activating your subscription…', 'success');
-                    window.location.href = reloadUrl;
-                    return true; // suppress InlinePaymentManager's own redirect
-                }
-                if (status === 'failed') {
-                    setBusy(false);
-                    showMessage('The payment was not completed. Please try again.', 'error');
-                } else if (status === 'timeout') {
-                    setBusy(false);
-                    showMessage('We could not confirm the payment in time. If you approved it, refresh this page in a moment.', 'error');
-                }
-            });
+                window.InlinePaymentManager.open({
+                    reference: data.reference,
+                    authorization_url: null,
+                    gateway_name: data.gateway_name || null,
+                    flow_type: data.flow_type,
+                    no_redirect: true,
+                    poll_url: pollUrl,
+                }, function (status) {
+                    if (status === 'paid') {
+                        showMessage('Payment confirmed. Activating your subscription…', 'success');
+                        window.location.href = reloadUrl;
+                        return true; // suppress InlinePaymentManager's own redirect
+                    }
+                    if (status === 'failed') {
+                        setBusy(false);
+                        showMessage('The payment was not completed. Please try again.', 'error');
+                    } else if (status === 'timeout') {
+                        setBusy(false);
+                        showMessage('We could not confirm the payment in time. If you approved it, refresh this page in a moment.', 'error');
+                    }
+                });
+            } else if (data.authorization_url) {
+                showMessage('Redirecting to secure payment page…', 'info');
+                window.location.href = data.authorization_url;
+            } else {
+                setBusy(false);
+                showMessage('Unable to start the payment. Please try again.', 'error');
+            }
         }
 
         buttons.forEach(button => {

@@ -318,17 +318,23 @@ class UssdSubscriptionPurchaseTest extends TestCase
         $this->assertNotNull($subscription->ussd_code);
     }
 
-    public function test_paystack_pesewa_amounts_are_normalised_before_comparison(): void
+    public function test_paystack_amount_is_not_re_normalised(): void
     {
         $vendor = Vendor::factory()->create();
         $this->pendingSubscription($vendor, $this->starter(), 'ussd-ref-5', 'paystack');
 
-        // Paystack reports GHS 80.00 as 8000 pesewas.
-        $this->settles('ussd-ref-5', 8000);
+        // PaystackPaymentService::verifyPayment() already converts pesewas to GHS
+        // before PaymentService::checkPaymentStatus() ever returns it — the mock
+        // here stands in for that already-normalized value, matching the GHS
+        // 80.00 plan price exactly. Re-dividing this by 100 (the bug this guards
+        // against) would make it look like a 100x underpayment and reject a
+        // legitimate payment.
+        $this->settles('ussd-ref-5', 80.00);
 
         $this->hitCallback('ussd-ref-5');
 
-        $this->assertSame(UssdSubscription::STATUS_ACTIVE, UssdSubscription::firstOrFail()->status);
+        $subscription = UssdSubscription::firstOrFail();
+        $this->assertSame(UssdSubscription::STATUS_ACTIVE, $subscription->status);
     }
 
     public function test_unknown_reference_is_rejected(): void
