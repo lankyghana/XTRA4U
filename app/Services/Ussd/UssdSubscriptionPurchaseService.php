@@ -8,7 +8,6 @@ use App\Models\UssdSubscription;
 use App\Models\UssdSubscriptionEvent;
 use App\Models\Vendor;
 use App\Services\PaymentService;
-use App\Services\PaystackPaymentService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -174,7 +173,7 @@ class UssdSubscriptionPurchaseService
             return ['success' => false, 'message' => 'The payment has not been confirmed yet. If you approved it, it will activate automatically in a moment.'];
         }
 
-        $paidAmount = $this->normalizeAmount($verification, $subscription);
+        $paidAmount = $this->normalizeAmount($verification);
 
         // Never activate on an underpayment. Compare rounded to avoid float noise,
         // exactly as the wallet top-up callback does.
@@ -316,19 +315,13 @@ class UssdSubscriptionPurchaseService
     }
 
     /**
-     * Paystack reports amounts in pesewas; everything else reports major units.
+     * Every gateway's verifyPayment() (PaystackPaymentService included) already
+     * normalizes `data.amount` to major units (GHS) before it gets here — do not
+     * re-divide by 100, that silently under-reports Paystack payments 100x.
      */
-    private function normalizeAmount(array $verification, UssdSubscription $subscription): float
+    private function normalizeAmount(array $verification): float
     {
-        $raw = (float) (data_get($verification, 'data.amount') ?? 0);
-
-        $gateway = $subscription->payment_gateway ?? data_get($verification, 'data.gateway');
-
-        if ($gateway === 'paystack') {
-            return PaystackPaymentService::normalizeAmount($raw);
-        }
-
-        return $raw;
+        return (float) (data_get($verification, 'data.amount') ?? 0);
     }
 
     private function resolvePayerPhone(Vendor $vendor, array $options): ?string

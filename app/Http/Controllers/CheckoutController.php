@@ -8,7 +8,6 @@ use App\Models\ResellerProduct;
 use App\Models\NetworkService;
 use App\Models\PaymentGatewayConfig;
 use App\Services\PaymentService;
-use App\Services\PaystackPaymentService;
 use Illuminate\Support\Facades\Auth;
 use App\Services\GatewayManager;
 use Illuminate\Http\Request;
@@ -326,13 +325,11 @@ class CheckoutController extends Controller
 			]);
 		}
 
-		// Paystack returns amounts in kobo/pesewas (×100); normalizeAmount() handles the conversion.
+		// Every gateway's verifyPayment() already normalizes data.amount to major
+		// units (GHS) — including Paystack's, which converts from pesewas internally.
 		$amount = data_get($verification, 'data.amount');
 		if ($amount) {
-			$numericAmount = (float) $amount;
-			$order->amount_paid = ($order->payment_gateway ?? null) === 'paystack'
-				? PaystackPaymentService::normalizeAmount($numericAmount)
-				: $numericAmount;
+			$order->amount_paid = (float) $amount;
 		}
 
 		$this->paymentService->completeOrder($order);
