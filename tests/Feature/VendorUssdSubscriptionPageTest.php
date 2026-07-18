@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Setting;
 use App\Models\UssdPlan;
 use App\Models\UssdSubscription;
 use App\Models\Vendor;
@@ -76,6 +77,23 @@ class VendorUssdSubscriptionPageTest extends TestCase
 
         // Total 5,000 / used 1,000 / remaining 4,000 all rendered.
         $response->assertSee('5,000')->assertSee('1,000')->assertSee('4,000');
+    }
+
+    public function test_admin_changing_the_base_code_cascades_to_an_already_issued_subscription(): void
+    {
+        $vendor = Vendor::factory()->create();
+        $this->activeSubscription($vendor, $this->starter());
+
+        // Issued under the old base code — the stored `ussd_code` column is
+        // frozen at "*203*45*{id}#", but the page must reflect whatever the
+        // admin has configured *right now*, not what was true at issuance.
+        Setting::set('ussd_base_code', '*920*', 'ussd');
+
+        $this->actingAs($vendor, 'vendor')
+            ->get(route('vendor.ussd.subscription.index'))
+            ->assertOk()
+            ->assertSee("*920*45*{$vendor->id}#")
+            ->assertDontSee("*203*45*{$vendor->id}#");
     }
 
     public function test_exhausted_subscription_shows_a_renewal_warning(): void
