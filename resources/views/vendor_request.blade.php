@@ -159,7 +159,7 @@
                     <!-- Affiliate Vendor Code -->
                     <div>
                         <label for="affiliate_vendor_code" class="block text-sm font-medium text-gray-700 mb-2">
-                            Affiliate Vendor Code <span class="text-red-500">*</span>
+                            Affiliate Vendor Code <span class="text-gray-400 text-xs">(optional)</span>
                         </label>
                         <div class="relative">
                             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -173,8 +173,7 @@
                                    value="{{ old('affiliate_vendor_code') }}"
                                    class="pl-10 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue transition-colors py-3 uppercase"
                                    placeholder="e.g., DANI7X9K2L"
-                                   maxlength="10"
-                                   required>
+                                   maxlength="10">
                         </div>
                         <p class="mt-1 text-sm text-gray-500">Enter the vendor code of who referred you</p>
                     </div>

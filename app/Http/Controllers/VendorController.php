@@ -25,19 +25,22 @@ class VendorController extends Controller
             'email' => 'required|email|unique:vendors,email',
             'phone_number' => 'required|string|max:20',
             'password' => 'required|string|min:6',
-            'affiliate_vendor_code' => 'required|string|max:10',
+            'affiliate_vendor_code' => 'nullable|string|max:10',
         ]);
 
-        // Validate affiliate vendor code
-        $affiliateVendor = Vendor::where('vendor_code', strtoupper($validated['affiliate_vendor_code']))->first();
+        // Validate affiliate vendor code (optional)
+        $affiliateVendorId = null;
+        if (!empty($validated['affiliate_vendor_code'])) {
+            $affiliateVendor = Vendor::where('vendor_code', strtoupper($validated['affiliate_vendor_code']))->first();
 
-        if (!$affiliateVendor) {
-            return back()
-                ->withInput()
-                ->withErrors(['affiliate_vendor_code' => 'The affiliate vendor code does not exist. Please check and try again.']);
+            if (!$affiliateVendor) {
+                return back()
+                    ->withInput()
+                    ->withErrors(['affiliate_vendor_code' => 'The affiliate vendor code does not exist. Please check and try again.']);
+            }
+
+            $affiliateVendorId = $affiliateVendor->id;
         }
-
-        $affiliateVendorId = $affiliateVendor->id;
 
         $vendorCode = Vendor::generateUniqueCode($validated['name']);
 
