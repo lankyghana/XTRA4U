@@ -9,15 +9,6 @@ use Illuminate\Http\Request;
 
 class ServiceAvailabilityController extends Controller
 {
-    public function index()
-    {
-        $categoryConfig = config('storefront.categories', []);
-        $statuses = ServiceAvailability::statuses();
-        $message = ServiceAvailability::message();
-
-        return view('admin.settings.service-availability', compact('categoryConfig', 'statuses', 'message'));
-    }
-
     public function update(Request $request)
     {
         $categories = ServiceAvailability::categories();

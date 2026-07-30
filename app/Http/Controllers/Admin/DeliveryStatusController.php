@@ -9,15 +9,6 @@ use Illuminate\Http\Request;
 
 class DeliveryStatusController extends Controller
 {
-    public function index()
-    {
-        $active = DeliveryStatus::isActive();
-        $level = DeliveryStatus::level();
-        $message = DeliveryStatus::message();
-
-        return view('admin.settings.delivery-status', compact('active', 'level', 'message'));
-    }
-
     public function update(Request $request)
     {
         $validated = $request->validate([

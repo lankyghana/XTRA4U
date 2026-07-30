@@ -12,22 +12,6 @@ class VendorTierPromotionController extends Controller
 {
     public function __construct(private readonly VendorTierQualificationService $qualificationService) {}
 
-    public function index()
-    {
-        $eligible = Vendor::where('is_tier_eligible', true)
-            ->with(['tier', 'eligibleTier'])
-            ->latest('tier_qualified_at')
-            ->paginate(30);
-
-        // Attach performance snapshot for display
-        $eligible->getCollection()->transform(function (Vendor $vendor) {
-            $vendor->performance = $this->qualificationService->computePerformance($vendor);
-            return $vendor;
-        });
-
-        return view('admin.vendor-tier-promotions.index', compact('eligible'));
-    }
-
     public function approve(Request $request, Vendor $vendor)
     {
         $request->validate([

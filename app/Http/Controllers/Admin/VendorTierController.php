@@ -11,16 +11,6 @@ use Illuminate\Validation\Rule;
 
 class VendorTierController extends Controller
 {
-    public function index()
-    {
-        $tiers = VendorTier::withCount('vendors')
-            ->with('rules')
-            ->ordered()
-            ->get();
-
-        return view('admin.vendor-tiers.index', compact('tiers'));
-    }
-
     public function create()
     {
         $ruleKeys = VendorTierRule::supportedRuleKeys();
