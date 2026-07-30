@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Vendor;
+use App\Models\Setting;
 use App\Mail\VendorPasswordResetMail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -36,8 +37,13 @@ class VendorAuthController extends Controller
 		}
 
 		if (! $vendor->is_approved) {
+			$contactNumber = trim((string) Setting::get('vendor_approval_contact_number', ''));
+			$message = $contactNumber !== ''
+				? "Your vendor account has not been approved yet. Please contact admin on {$contactNumber} for approval."
+				: 'Your vendor account has not been approved yet. Please contact admin for approval.';
+
 			throw ValidationException::withMessages([
-				'email' => __('Your vendor account has not been approved yet.'),
+				'email' => __($message),
 			]);
 		}
 

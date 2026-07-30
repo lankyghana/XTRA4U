@@ -224,7 +224,7 @@
 
         <!-- Info Section -->
         <div class="mt-8 text-center text-sm text-gray-600">
-            <p>Your request will be reviewed within 24-48 hours. You'll receive an email once approved.</p>
+            <p>After submitting, please contact admin to have your request reviewed and approved.</p>
         </div>
     </div>
 </div>

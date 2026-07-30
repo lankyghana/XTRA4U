@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Setting;
 use App\Models\Vendor;
 use Closure;
 use Illuminate\Support\Facades\Auth;
@@ -21,9 +22,14 @@ class EnsureVendorApproved
         if (!$vendor->is_approved) {
             Auth::guard('vendor')->logout();
 
+            $contactNumber = trim((string) Setting::get('vendor_approval_contact_number', ''));
+            $message = $contactNumber !== ''
+                ? "Your vendor account is not approved. Please contact admin on {$contactNumber} for approval."
+                : 'Your vendor account is not approved. Please contact admin for approval.';
+
             return redirect()
                 ->route('vendor.login.form')
-                ->withErrors(['access' => 'Your vendor account is not approved.']);
+                ->withErrors(['access' => $message]);
         }
 
         return $next($request);

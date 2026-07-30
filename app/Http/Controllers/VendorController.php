@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Transaction;
 use App\Models\Vendor;
 use App\Models\AdminNotification;
+use App\Models\Setting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
@@ -57,7 +58,12 @@ class VendorController extends Controller
         // Notify admin about new vendor registration
         AdminNotification::notifyNewVendor($vendor);
 
-        return redirect()->route('vendor.request.form')->with('success', 'Request submitted! Await admin approval.');
+        $contactNumber = trim((string) Setting::get('vendor_approval_contact_number', ''));
+        $message = $contactNumber !== ''
+            ? "Request submitted! Please contact admin on {$contactNumber} for approval."
+            : 'Request submitted! Please contact admin for approval.';
+
+        return redirect()->route('vendor.request.form')->with('success', $message);
     }
 
     // Admin approves vendor
