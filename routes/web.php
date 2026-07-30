@@ -404,7 +404,8 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
     Route::post('vendors/{vendor}/reject', [AdminVendorController::class, 'reject'])->name('vendors.reject');
 	Route::post('vendors/{vendor}/disable-affiliate', [AdminVendorController::class, 'disableAffiliate'])->name('vendors.disable-affiliate');
 	Route::post('vendors/{vendor}/tier', [AdminVendorController::class, 'updateTier'])->name('vendors.update-tier');
-        Route::resource('orders', AdminOrderController::class)->only(['index', 'show']);
+        Route::resource('orders', AdminOrderController::class)->only(['index', 'show', 'update']);
+        Route::put('orders/{order}', [AdminOrderController::class, 'update'])->name('orders.update');
 	Route::post('orders/{order}/confirm-payment', [AdminOrderController::class, 'confirmPayment'])
 		->name('orders.confirm-payment');
         Route::resource('transactions', AdminTransactionController::class)->only(['index']);
@@ -435,13 +436,16 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
     Route::post('notifications/{notification}/read', [AdminController::class, 'markNotificationRead'])->name('notifications.read');
     Route::post('notifications/read-all', [AdminController::class, 'markAllNotificationsRead'])->name('notifications.read-all');
     
-    // Service Availability (open/close storefront service categories)
-    Route::get('settings/service-availability', [\App\Http\Controllers\Admin\ServiceAvailabilityController::class, 'index'])->name('settings.service-availability');
+    // Consolidated Settings page (service availability, delivery status, vendor approval,
+    // vendor tiers, tier promotions, tier history — all shown as tabs on one page).
+    Route::get('settings/service-availability', [\App\Http\Controllers\Admin\AdminSettingsController::class, 'index'])->name('settings.service-availability');
     Route::put('settings/service-availability', [\App\Http\Controllers\Admin\ServiceAvailabilityController::class, 'update'])->name('settings.service-availability.update');
 
-    // Delivery Status (broadcast a fast/slow delivery notice to vendors)
-    Route::get('settings/delivery-status', [\App\Http\Controllers\Admin\DeliveryStatusController::class, 'index'])->name('settings.delivery-status');
+    Route::get('settings/delivery-status', [\App\Http\Controllers\Admin\AdminSettingsController::class, 'index'])->name('settings.delivery-status');
     Route::put('settings/delivery-status', [\App\Http\Controllers\Admin\DeliveryStatusController::class, 'update'])->name('settings.delivery-status.update');
+
+    Route::get('settings/vendor-approval', [\App\Http\Controllers\Admin\AdminSettingsController::class, 'index'])->name('settings.vendor-approval');
+    Route::put('settings/vendor-approval', [\App\Http\Controllers\Admin\VendorApprovalSettingsController::class, 'update'])->name('settings.vendor-approval.update');
 
     // Email Settings
     Route::get('settings/email', [\App\Http\Controllers\Admin\EmailSettingsController::class, 'index'])->name('settings.email');
@@ -488,18 +492,20 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
     // Manual Queue Run Trigger (scheduler-bridge)
     Route::post('queue/run', [\App\Http\Controllers\Admin\ManualQueueRunController::class, 'run'])->name('queue.run');
 
-    // Vendor Tier Management
+    // Vendor Tier Management — index is folded into the consolidated Settings page above.
     Route::resource('vendor-tiers', \App\Http\Controllers\Admin\VendorTierController::class)
+        ->except(['index'])
         ->parameters(['vendor-tiers' => 'vendorTier']);
+    Route::get('vendor-tiers', [\App\Http\Controllers\Admin\AdminSettingsController::class, 'index'])->name('vendor-tiers.index');
     Route::post('vendor-tiers/reorder', [\App\Http\Controllers\Admin\VendorTierController::class, 'reorder'])->name('vendor-tiers.reorder');
 
     // Vendor Tier Promotion Queue
-    Route::get('vendor-tier-promotions', [\App\Http\Controllers\Admin\VendorTierPromotionController::class, 'index'])->name('vendor-tier-promotions.index');
+    Route::get('vendor-tier-promotions', [\App\Http\Controllers\Admin\AdminSettingsController::class, 'index'])->name('vendor-tier-promotions.index');
     Route::post('vendor-tier-promotions/{vendor}/approve', [\App\Http\Controllers\Admin\VendorTierPromotionController::class, 'approve'])->name('vendor-tier-promotions.approve');
     Route::post('vendor-tier-promotions/{vendor}/reject', [\App\Http\Controllers\Admin\VendorTierPromotionController::class, 'reject'])->name('vendor-tier-promotions.reject');
 
     // Vendor Tier History / Audit Log
-    Route::get('vendor-tier-history', [\App\Http\Controllers\Admin\VendorTierHistoryController::class, 'index'])->name('vendor-tier-history.index');
+    Route::get('vendor-tier-history', [\App\Http\Controllers\Admin\AdminSettingsController::class, 'index'])->name('vendor-tier-history.index');
 });
 Route::get('/vendor/product/create', [ProductController::class, 'create'])->name('product.create');
 Route::post('/vendor/product', [ProductController::class, 'store'])->name('product.store');
