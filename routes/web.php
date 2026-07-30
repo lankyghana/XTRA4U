@@ -405,7 +405,6 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
 	Route::post('vendors/{vendor}/disable-affiliate', [AdminVendorController::class, 'disableAffiliate'])->name('vendors.disable-affiliate');
 	Route::post('vendors/{vendor}/tier', [AdminVendorController::class, 'updateTier'])->name('vendors.update-tier');
         Route::resource('orders', AdminOrderController::class)->only(['index', 'show', 'update']);
-        Route::put('orders/{order}', [AdminOrderController::class, 'update'])->name('orders.update');
 	Route::post('orders/{order}/confirm-payment', [AdminOrderController::class, 'confirmPayment'])
 		->name('orders.confirm-payment');
         Route::resource('transactions', AdminTransactionController::class)->only(['index']);
