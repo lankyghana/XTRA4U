@@ -28,16 +28,19 @@ class AdminOrderController extends Controller
 	public function update(Request $request, Order $order)
 	{
 		$data = $request->validate([
-			'status' => ['required', 'in:Pending,Processing,Completed,Cancelled,Failed'],
+			'status' => ['required', 'in:Pending,Processing,Completed,Cancelled,Failed,Refunded,On Hold,Verifying'],
 		]);
 
 		$order->update([
 			'status' => $data['status'],
 		]);
 
+		// Map order status to an appropriate transaction payment_status.
+		// Refunded keeps a 'failed' payment status (payment reversed).
+		// On Hold and Verifying stay 'pending' until resolved.
 		$transactionStatus = match ($data['status']) {
 			'Completed' => 'completed',
-			'Cancelled', 'Failed' => 'failed',
+			'Cancelled', 'Failed', 'Refunded' => 'failed',
 			default => 'pending',
 		};
 
@@ -45,7 +48,7 @@ class AdminOrderController extends Controller
 			'payment_status' => $transactionStatus,
 		]);
 
-		return back()->with('success', 'Order status updated.');
+		return back()->with('success', 'Order status updated successfully.');
 	}
 
 	/**

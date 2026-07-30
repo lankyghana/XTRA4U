@@ -122,13 +122,15 @@ class OrderStatusController extends Controller
     protected function getStatusLabel(string $status): string
     {
         return match (strtolower($status)) {
-            'pending' => 'Pending',
-            'processing' => 'Processing',
-            'completed' => 'Completed',
+            'pending'           => 'Pending',
+            'processing'        => 'Processing',
+            'completed'         => 'Completed',
             'cancelled', 'canceled' => 'Cancelled',
-            'failed' => 'Failed',
-            'refunded' => 'Refunded',
-            default => ucfirst($status),
+            'failed'            => 'Failed',
+            'refunded'          => 'Refunded',
+            'on hold'           => 'On Hold',
+            'verifying'         => 'Verifying',
+            default             => ucfirst($status),
         };
     }
 
@@ -138,13 +140,15 @@ class OrderStatusController extends Controller
     protected function getStatusColor(string $status): array
     {
         return match (strtolower($status)) {
-            'pending' => ['bg' => 'bg-yellow-100', 'text' => 'text-yellow-800', 'dot' => 'bg-yellow-500'],
-            'processing' => ['bg' => 'bg-blue-100', 'text' => 'text-blue-800', 'dot' => 'bg-blue-500'],
-            'completed' => ['bg' => 'bg-green-100', 'text' => 'text-green-800', 'dot' => 'bg-green-500'],
-            'cancelled', 'canceled' => ['bg' => 'bg-red-100', 'text' => 'text-red-800', 'dot' => 'bg-red-500'],
-            'failed' => ['bg' => 'bg-red-100', 'text' => 'text-red-800', 'dot' => 'bg-red-500'],
-            'refunded' => ['bg' => 'bg-purple-100', 'text' => 'text-purple-800', 'dot' => 'bg-purple-500'],
-            default => ['bg' => 'bg-gray-100', 'text' => 'text-gray-800', 'dot' => 'bg-gray-500'],
+            'pending'           => ['bg' => 'bg-yellow-100', 'text' => 'text-yellow-800', 'dot' => 'bg-yellow-500'],
+            'processing'        => ['bg' => 'bg-blue-100',   'text' => 'text-blue-800',   'dot' => 'bg-blue-500'],
+            'completed'         => ['bg' => 'bg-green-100',  'text' => 'text-green-800',  'dot' => 'bg-green-500'],
+            'cancelled', 'canceled' => ['bg' => 'bg-red-100', 'text' => 'text-red-800',   'dot' => 'bg-red-500'],
+            'failed'            => ['bg' => 'bg-red-100',    'text' => 'text-red-800',    'dot' => 'bg-red-500'],
+            'refunded'          => ['bg' => 'bg-purple-100', 'text' => 'text-purple-800', 'dot' => 'bg-purple-500'],
+            'on hold'           => ['bg' => 'bg-orange-100', 'text' => 'text-orange-800', 'dot' => 'bg-orange-500'],
+            'verifying'         => ['bg' => 'bg-indigo-100', 'text' => 'text-indigo-800', 'dot' => 'bg-indigo-500'],
+            default             => ['bg' => 'bg-gray-100',   'text' => 'text-gray-800',   'dot' => 'bg-gray-500'],
         };
     }
 }
