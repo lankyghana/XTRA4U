@@ -2,8 +2,12 @@
 
 namespace App\Services;
 
+use App\Models\Order;
+use App\Models\Transaction;
 use App\Models\Vendor;
+use App\Models\VendorNotification;
 use App\Models\WalletLedger;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
@@ -134,6 +138,103 @@ class WalletService
             ]);
 
             return true;
+        });
+    }
+
+    /**
+     * Reverse the vendor earnings paid out for an order (e.g. when an admin marks
+     * it "Refunded"). Deducts every vendor who earned something from this order
+     * (owner, reseller, or any vendor in a multi-level affiliate chain), based on
+     * the `vendor_earning` already recorded per vendor in the `transactions` table.
+     *
+     * Idempotent: guarded by `orders.wallet_reversed_at`, so calling this more than
+     * once for the same order (e.g. admin toggles status Refunded -> Pending ->
+     * Refunded again) never double-deducts.
+     *
+     * All-or-nothing: if any involved vendor's wallet balance can't cover their
+     * share, no vendor is debited and a RuntimeException is thrown so the caller
+     * can abort the whole status change.
+     *
+     * @return array{already_reversed: bool, deductions: array<int, array{vendor_id: int, amount: float}>}
+     */
+    public function reverseOrderEarnings(Order $order, array $context = []): array
+    {
+        return DB::transaction(function () use ($order, $context) {
+            $lockedOrder = Order::whereKey($order->id)->lockForUpdate()->firstOrFail();
+
+            if ($lockedOrder->wallet_reversed_at !== null) {
+                return ['already_reversed' => true, 'deductions' => []];
+            }
+
+            $earningsByVendor = Transaction::where('order_id', $lockedOrder->id)
+                ->where('vendor_earning', '>', 0)
+                ->get()
+                ->groupBy('vendor_id')
+                ->map(fn ($rows) => round((float) $rows->sum('vendor_earning'), 2));
+
+            if ($earningsByVendor->isEmpty()) {
+                $lockedOrder->update(['wallet_reversed_at' => now()]);
+
+                return ['already_reversed' => false, 'deductions' => []];
+            }
+
+            // Lock every involved vendor row in a consistent (ascending id) order
+            // to avoid deadlocking against other concurrent wallet operations.
+            $vendorIds = $earningsByVendor->keys()->sort()->values();
+            $vendors = Vendor::whereIn('id', $vendorIds)->lockForUpdate()->get()->keyBy('id');
+
+            foreach ($vendorIds as $vendorId) {
+                $amount = $earningsByVendor[$vendorId];
+                $vendor = $vendors->get($vendorId);
+
+                if (! $vendor || (float) $vendor->wallet_balance < $amount) {
+                    $name = $vendor?->name ?? "#{$vendorId}";
+
+                    throw new \RuntimeException(
+                        "Cannot refund order #{$lockedOrder->id}: vendor {$name} has insufficient wallet balance to cover GHS ".number_format($amount, 2).'.'
+                    );
+                }
+            }
+
+            $deductions = [];
+
+            foreach ($vendorIds as $vendorId) {
+                $amount = $earningsByVendor[$vendorId];
+                $vendor = $vendors->get($vendorId);
+
+                $vendor->decrement('wallet_balance', $amount);
+                $vendor->refresh();
+
+                WalletLedger::create([
+                    'vendor_id' => $vendor->id,
+                    'type' => 'debit',
+                    'source' => 'order_refund',
+                    'amount' => $amount,
+                    'balance_after' => (float) $vendor->wallet_balance,
+                    'metadata' => array_merge($context, [
+                        'order_id' => $lockedOrder->id,
+                        'action' => 'order_refunded',
+                    ]),
+                ]);
+
+                VendorNotification::create([
+                    'vendor_id' => $vendor->id,
+                    'type' => VendorNotification::TYPE_ORDER_REFUNDED,
+                    'title' => 'Order Refunded',
+                    'message' => "Order #{$lockedOrder->id} was refunded. GHS ".number_format($amount, 2).' was deducted from your wallet.',
+                    'order_id' => $lockedOrder->id,
+                    'data' => [
+                        'order_id' => $lockedOrder->id,
+                        'amount' => $amount,
+                    ],
+                ]);
+
+                $deductions[] = ['vendor_id' => $vendor->id, 'amount' => $amount];
+            }
+
+            $lockedOrder->update(['wallet_reversed_at' => now()]);
+
+            return ['already_reversed' => false, 'deductions' => $deductions];
         });
     }
 

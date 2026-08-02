@@ -5,7 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Order;
 use App\Models\Transaction;
 use App\Services\PaymentService;
+use App\Services\WalletService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class AdminOrderController extends Controller
@@ -25,22 +28,48 @@ class AdminOrderController extends Controller
         return view('admin.order_show', compact('order'));
     }
 
-	public function update(Request $request, Order $order)
+	public function update(Request $request, Order $order, WalletService $walletService)
 	{
 		$data = $request->validate([
 			'status' => ['required', 'in:Pending,Processing,Completed,Cancelled,Failed,Refunded,On Hold,Verifying'],
 		]);
+
+		if ($data['status'] === 'Refunded') {
+			try {
+				DB::transaction(function () use ($order, $walletService, $request) {
+					$walletService->reverseOrderEarnings($order, [
+						'admin_id' => Auth::guard('admin')->id(),
+						'ip_address' => $request->ip(),
+						'previous_status' => $order->status,
+					]);
+
+					$order->update(['status' => 'Refunded']);
+
+					Transaction::where('order_id', $order->id)->update([
+						'payment_status' => 'failed',
+					]);
+				});
+			} catch (\Throwable $e) {
+				Log::error('Order refund failed', [
+					'order_id' => $order->id,
+					'error' => $e->getMessage(),
+				]);
+
+				return back()->with('error', $e->getMessage());
+			}
+
+			return back()->with('success', 'Order marked as refunded and vendor wallet(s) adjusted.');
+		}
 
 		$order->update([
 			'status' => $data['status'],
 		]);
 
 		// Map order status to an appropriate transaction payment_status.
-		// Refunded keeps a 'failed' payment status (payment reversed).
 		// On Hold and Verifying stay 'pending' until resolved.
 		$transactionStatus = match ($data['status']) {
 			'Completed' => 'completed',
-			'Cancelled', 'Failed', 'Refunded' => 'failed',
+			'Cancelled', 'Failed' => 'failed',
 			default => 'pending',
 		};
 
