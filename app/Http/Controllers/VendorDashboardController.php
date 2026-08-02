@@ -617,12 +617,13 @@ class VendorDashboardController extends Controller
         }
 
         $request->validate([
-            'status' => ['required', 'in:Pending,Processing,Completed,Cancelled'],
+            'status' => ['required', 'in:Pending,Processing,Verifying,On Hold,Completed,Cancelled'],
         ]);
 
-        // Don't allow changing status from Completed or Cancelled
-        if ($order->status === 'Completed' || $order->status === 'Cancelled') {
-            return back()->with('error', 'Cannot modify a completed or cancelled order.');
+        // Don't allow changing status from Completed, Cancelled, or Refunded.
+        // Refunded is admin-only (financial reversal) and treated as terminal, same as Completed/Cancelled.
+        if (in_array($order->status, ['Completed', 'Cancelled', 'Refunded'], true)) {
+            return back()->with('error', 'Cannot modify a completed, cancelled, or refunded order.');
         }
 
         $previousStatus = $order->status;

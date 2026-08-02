@@ -151,8 +151,14 @@
                                                 <x-badge variant="completed">Completed</x-badge>
                                             @elseif($order->status === 'Processing')
                                                 <x-badge variant="processing">Processing</x-badge>
+                                            @elseif($order->status === 'Verifying')
+                                                <x-badge variant="processing">Verifying</x-badge>
+                                            @elseif($order->status === 'On Hold')
+                                                <x-badge variant="default">On Hold</x-badge>
                                             @elseif($order->status === 'Cancelled')
                                                 <x-badge variant="warning">Cancelled</x-badge>
+                                            @elseif($order->status === 'Refunded')
+                                                <x-badge variant="warning">Refunded</x-badge>
                                             @else
                                                 <x-badge variant="pending">Pending</x-badge>
                                             @endif
@@ -179,9 +185,11 @@
                                                 <select name="status" 
                                                     onchange="this.form.submit()" 
                                                     class="text-sm border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500 px-3 py-2 font-medium shadow-sm"
-                                                    {{ $order->status === 'Completed' || $order->status === 'Cancelled' || $isExternallyProcessingOrDone ? 'disabled' : '' }}>
+                                                    {{ $order->status === 'Completed' || $order->status === 'Cancelled' || $order->status === 'Refunded' || $isExternallyProcessingOrDone ? 'disabled' : '' }}>
                                                     <option value="Pending" {{ $order->status === 'Pending' ? 'selected' : '' }}>Pending</option>
                                                     <option value="Processing" {{ $order->status === 'Processing' ? 'selected' : '' }}>Processing</option>
+                                                    <option value="Verifying" {{ $order->status === 'Verifying' ? 'selected' : '' }}>Verifying</option>
+                                                    <option value="On Hold" {{ $order->status === 'On Hold' ? 'selected' : '' }}>On Hold</option>
                                                     <option value="Completed" {{ $order->status === 'Completed' ? 'selected' : '' }}>Completed</option>
                                                     <option value="Cancelled" {{ $order->status === 'Cancelled' ? 'selected' : '' }}>Cancelled</option>
                                                 </select>

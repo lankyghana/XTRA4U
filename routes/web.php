@@ -194,6 +194,7 @@ Route::get('/vendor/request', [VendorController::class, 'showRequestForm'])->nam
 Route::get('/vendor/request/create', [VendorRequestController::class, 'create'])->name('vendor.request.create');
 Route::post('/vendor/request', [VendorRequestController::class, 'store'])->name('vendor.request.store');
 Route::post('/vendor/request/submit', [VendorController::class, 'submitRequest'])->name('vendor.request.submit');
+Route::get('/vendor/request/pending', [VendorController::class, 'requestPending'])->name('vendor.request.pending');
 Route::get('/vendor/login', [VendorAuthController::class, 'showLoginForm'])->name('vendor.login.form');
 Route::post('/vendor/login', [VendorAuthController::class, 'login'])->name('vendor.login');
 Route::post('/vendor/logout', [VendorAuthController::class, 'logout'])->name('vendor.logout');
