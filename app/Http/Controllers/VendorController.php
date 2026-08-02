@@ -6,6 +6,7 @@ use App\Models\Transaction;
 use App\Models\Vendor;
 use App\Models\AdminNotification;
 use App\Models\Setting;
+use App\Support\WhatsAppLink;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
@@ -58,12 +59,24 @@ class VendorController extends Controller
         // Notify admin about new vendor registration
         AdminNotification::notifyNewVendor($vendor);
 
-        $contactNumber = trim((string) Setting::get('vendor_approval_contact_number', ''));
-        $message = $contactNumber !== ''
-            ? "Request submitted! Please contact admin on {$contactNumber} for approval."
-            : 'Request submitted! Please contact admin for approval.';
+        return redirect()->route('vendor.request.pending', ['name' => $vendor->name]);
+    }
 
-        return redirect()->route('vendor.request.form')->with('success', $message);
+    // Confirmation page shown after a vendor submits a registration request
+    public function requestPending(Request $request)
+    {
+        $contactNumber = trim((string) Setting::get('vendor_approval_contact_number', ''));
+        $vendorName = $request->query('name');
+
+        $whatsappMessage = $vendorName
+            ? "Hi, I'm {$vendorName}. I just submitted a vendor registration request on XTRA4U and would like to get approved."
+            : "Hi, I just submitted a vendor registration request on XTRA4U and would like to get approved.";
+
+        return view('vendor_request_pending', [
+            'contactNumber' => $contactNumber,
+            'whatsappUrl' => WhatsAppLink::url($contactNumber, $whatsappMessage),
+            'vendorName' => $vendorName,
+        ]);
     }
 
     // Admin approves vendor

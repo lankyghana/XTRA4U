@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Vendor;
 use App\Models\Setting;
+use App\Support\WhatsAppLink;
 use App\Mail\VendorPasswordResetMail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -41,6 +42,15 @@ class VendorAuthController extends Controller
 			$message = $contactNumber !== ''
 				? "Your vendor account has not been approved yet. Please contact admin on {$contactNumber} for approval."
 				: 'Your vendor account has not been approved yet. Please contact admin for approval.';
+
+			$whatsappUrl = WhatsAppLink::url(
+				$contactNumber,
+				"Hi, I'm {$vendor->name}. My vendor account on XTRA4U has not been approved yet. Could you help approve it?"
+			);
+
+			if ($whatsappUrl) {
+				session()->flash('vendor_whatsapp_url', $whatsappUrl);
+			}
 
 			throw ValidationException::withMessages([
 				'email' => __($message),

@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\Setting;
 use App\Models\Vendor;
+use App\Support\WhatsAppLink;
 use Closure;
 use Illuminate\Support\Facades\Auth;
 
@@ -27,9 +28,15 @@ class EnsureVendorApproved
                 ? "Your vendor account is not approved. Please contact admin on {$contactNumber} for approval."
                 : 'Your vendor account is not approved. Please contact admin for approval.';
 
+            $whatsappUrl = WhatsAppLink::url(
+                $contactNumber,
+                "Hi, I'm {$vendor->name}. My vendor account on XTRA4U has not been approved yet. Could you help approve it?"
+            );
+
             return redirect()
                 ->route('vendor.login.form')
-                ->withErrors(['access' => $message]);
+                ->withErrors(['access' => $message])
+                ->with('vendor_whatsapp_url', $whatsappUrl);
         }
 
         return $next($request);
