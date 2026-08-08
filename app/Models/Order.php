@@ -53,6 +53,8 @@ class Order extends Model
         'external_fulfillment_attempts' => 'integer',
         'external_fulfillment_last_attempt_at' => 'datetime',
         'external_fulfillment_completed_at' => 'datetime',
+        'external_fulfillment_delivered_at' => 'datetime',
+        'external_fulfillment_last_status_check_at' => 'datetime',
     ];
 
     public function vendor(): BelongsTo

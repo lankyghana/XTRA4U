@@ -161,10 +161,15 @@ Route::match(['GET', 'POST'], '/result-checkers/payment/callback/{order}', [Resu
 Route::post('/result-checkers/payment/webhook', [ResultCheckerPaymentCallbackController::class, 'webhook'])
     ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
     ->name('result-checkers.payment.webhook');
-Route::post('/webhooks/gigshub', [\App\Http\Controllers\Webhooks\GigshubWebhookController::class, 'handle'])->name('api.webhooks.gigshub');
+// Delivery callbacks complete real orders, so they are throttled against
+// brute-forcing provider references.
+Route::post('/webhooks/gigshub', [\App\Http\Controllers\Webhooks\GigshubWebhookController::class, 'handle'])
+    ->middleware('throttle:120,1,gigshub-webhook')
+    ->name('api.webhooks.gigshub');
 Route::post('/webhooks/gigshub/balance-low', [\App\Http\Controllers\Webhooks\GigshubLowBalanceWebhookController::class, 'handle'])->name('webhooks.gigshub.balance-low');
 Route::post('/webhooks/skdataplug', [\App\Http\Controllers\Webhooks\SkdataplugWebhookController::class, 'handle'])
     ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
+    ->middleware('throttle:120,1,skdataplug-webhook')
     ->name('api.webhooks.skdataplug');
 Route::post('/webhooks/paystack', [\App\Http\Controllers\Webhooks\PaystackWebhookController::class, 'handle'])
     ->name('webhooks.paystack');
@@ -221,8 +226,9 @@ Route::middleware(['vendor.approved'])
 
         // Vendor Order Fulfillment (internal-only, additive)
         Route::get('fulfillment', [VendorFulfillmentController::class, 'index'])->name('fulfillment.index');
-        Route::get('fulfillment/download/{network}', [VendorFulfillmentController::class, 'download'])->name('fulfillment.download');
-        Route::post('fulfillment/complete/{network}', [VendorFulfillmentController::class, 'complete'])->name('fulfillment.complete');
+        // {network} allows slashes: network names are admin-defined free text (e.g. "AirtelTigo/AT").
+        Route::get('fulfillment/download/{network}', [VendorFulfillmentController::class, 'download'])->name('fulfillment.download')->where('network', '.+');
+        Route::post('fulfillment/complete/{network}', [VendorFulfillmentController::class, 'complete'])->name('fulfillment.complete')->where('network', '.+');
         Route::post('fulfillment/resend-failed-api', [VendorFulfillmentController::class, 'resendAllFailedApiOrders'])->name('fulfillment.resend-failed-api');
         
         Route::get('analytics', [VendorDashboardController::class, 'analytics'])

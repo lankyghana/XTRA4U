@@ -238,8 +238,7 @@ class VendorFulfillmentController extends Controller
 
         $this->ensureFulfillmentSchemaReady();
 
-        $network = $this->normalizeNetwork($network);
-        $this->assertNetworkAllowed($vendor, $network);
+        $network = $this->resolveAllowedNetwork($vendor, $this->normalizeNetwork($network));
 
         if ($network === self::EXTERNAL_API_NETWORK) {
             return back()->with('status', 'External API orders are not downloadable. Use the External API section to mark them completed after you confirm delivery.');
@@ -294,8 +293,7 @@ class VendorFulfillmentController extends Controller
 
         $this->ensureFulfillmentSchemaReady();
 
-        $network = $this->normalizeNetwork($network);
-        $this->assertNetworkAllowed($vendor, $network);
+        $network = $this->resolveAllowedNetwork($vendor, $this->normalizeNetwork($network));
 
         if ($network === self::EXTERNAL_API_NETWORK) {
             $confirmed = (string) $request->input('confirm_external_api_completed', '0');
@@ -482,11 +480,6 @@ class VendorFulfillmentController extends Controller
             return self::EXTERNAL_API_NETWORK;
         }
 
-        // Common normalization
-        if (strcasecmp($network, 'airtel-tigo') === 0) {
-            return 'AirtelTigo';
-        }
-
         return $network;
     }
 
@@ -507,12 +500,50 @@ class VendorFulfillmentController extends Controller
         };
     }
 
-    private function assertNetworkAllowed(Vendor $vendor, string $network): void
+    /**
+     * Resolve the requested network to the exact string this vendor's data is
+     * stored under, or 404 when it is not one of their networks.
+     *
+     * Network names come from admin-managed `network_services` rows and from
+     * product metadata, so the same network can be stored as "AirtelTigo",
+     * "AIRTELTIGO", "Airtel-Tigo" or even "AIRTELTIGO " (stray whitespace).
+     * Matching on the exact string alone 404s the download for every spelling
+     * except the one the defaults happen to use, so fall back to a forgiving
+     * comparison and then keep querying with the stored spelling.
+     */
+    private function resolveAllowedNetwork(Vendor $vendor, string $network): string
     {
         $allowed = $this->resolveNetworksForVendor($vendor);
 
-        // If we have any known networks (defaults always exist), require membership.
-        abort_unless(in_array($network, $allowed, true), 404);
+        if (in_array($network, $allowed, true)) {
+            return $network;
+        }
+
+        $needle = $this->networkComparisonKey($network);
+
+        if ($needle !== '') {
+            // Scan names that came from the database before the hardcoded
+            // defaults, so a stored "AIRTELTIGO " is not shadowed by the
+            // default "AirtelTigo" (which no order would ever match).
+            $defaults = array_values(array_intersect($allowed, self::DEFAULT_NETWORKS));
+            $candidates = array_merge(array_values(array_diff($allowed, self::DEFAULT_NETWORKS)), $defaults);
+
+            foreach ($candidates as $candidate) {
+                if ($this->networkComparisonKey((string) $candidate) === $needle) {
+                    return (string) $candidate;
+                }
+            }
+        }
+
+        abort(404);
+    }
+
+    /**
+     * Casing/punctuation/whitespace-insensitive key used to match network names.
+     */
+    private function networkComparisonKey(string $network): string
+    {
+        return (string) preg_replace('/[^a-z0-9]/', '', strtolower($network));
     }
 
     private function processingNetworksFromOrders(Vendor $vendor): array

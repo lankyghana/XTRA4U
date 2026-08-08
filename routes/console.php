@@ -483,3 +483,19 @@ Schedule::call(function () {
         Log::error('Scheduled USSD session pruning failed', ['error' => $e->getMessage()]);
     }
 })->dailyAt('03:30')->name('ussd:prune-sessions')->withoutOverlapping();
+
+// ---------------------------------------------------------------------------
+// External fulfillment status sync
+// ---------------------------------------------------------------------------
+// Safety net behind the provider webhooks: polls providers that expose a status
+// endpoint (GigsHub, SKDataPlug) so an order whose webhook was missed still gets
+// completed instead of sitting in Processing until someone notices. Providers
+// throttle themselves via external_fulfillment.polling.min_recheck_minutes, so
+// running every ten minutes does not mean re-checking every order that often.
+Schedule::call(function () {
+    try {
+        Artisan::call('xtra4u:sync-external-fulfillment');
+    } catch (\Throwable $e) {
+        Log::error('Scheduled external fulfillment status sync failed', ['error' => $e->getMessage()]);
+    }
+})->everyTenMinutes()->name('external-fulfillment:sync-status')->withoutOverlapping();
