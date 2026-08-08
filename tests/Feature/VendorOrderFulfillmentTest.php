@@ -2,11 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Models\NetworkService;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Transaction;
 use App\Models\Vendor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class VendorOrderFulfillmentTest extends TestCase
@@ -375,5 +378,84 @@ class VendorOrderFulfillmentTest extends TestCase
 
         $order->refresh();
         $this->assertNotNull($order->downloaded_at);
+    }
+
+    public static function networkNameVariants(): array
+    {
+        return [
+            'canonical' => ['AirtelTigo'],
+            'uppercase' => ['AIRTELTIGO'],
+            'trailing whitespace' => ['AIRTELTIGO '],
+            'hyphenated' => ['Airtel-Tigo'],
+            'spaced' => ['Airtel Tigo'],
+            'contains a slash' => ['AirtelTigo/AT'],
+        ];
+    }
+
+    #[DataProvider('networkNameVariants')]
+    public function test_download_works_for_any_spelling_of_a_network_name(string $networkName): void
+    {
+        $vendor = Vendor::factory()->create(['is_approved' => true]);
+
+        NetworkService::create([
+            'name' => $networkName,
+            'slug' => Str::slug($networkName),
+            'category' => 'data',
+            'service_type' => 'data',
+            'is_active' => true,
+        ]);
+
+        $product = Product::create([
+            'vendor_id' => $vendor->id,
+            'name' => 'AirtelTigo Data',
+            'description' => json_encode(['network' => $networkName, 'size' => '1 GB']),
+            'price' => 8.00,
+            'is_active' => true,
+            'is_resellable' => false,
+            'min_base_price' => 8.00,
+        ]);
+
+        $order = Order::create([
+            'recipient_phone_number' => '0277777777',
+            'mobile_money_number' => '0277777777',
+            'service_purchased' => 'AirtelTigo Data',
+            'amount_paid' => 8.00,
+            'vendor_id' => $vendor->id,
+            'vendor_service_id' => $product->id,
+            'status' => 'Processing',
+            'payment_status' => 'paid',
+        ]);
+
+        Transaction::create([
+            'order_id' => $order->id,
+            'vendor_id' => $vendor->id,
+            'recipient_phone' => $order->recipient_phone_number,
+            'amount' => 8.00,
+            'commission_amount' => 0.16,
+            'vendor_earning' => 7.84,
+            'payment_status' => 'successful',
+            'timestamp' => now(),
+            'payment_type' => 'order',
+        ]);
+
+        $this->actingAs($vendor, 'vendor');
+
+        $response = $this->get(route('vendor.fulfillment.download', ['network' => $networkName]));
+
+        $response->assertOk();
+        $this->assertStringContainsString('0277777777', $response->getContent());
+
+        $order->refresh();
+        $this->assertNotNull($order->downloaded_at);
+    }
+
+    public function test_download_still_rejects_a_network_the_vendor_has_no_orders_for(): void
+    {
+        $vendor = Vendor::factory()->create(['is_approved' => true]);
+
+        $this->actingAs($vendor, 'vendor');
+
+        $this->get(route('vendor.fulfillment.download', ['network' => 'Glo']))
+            ->assertNotFound();
     }
 }
