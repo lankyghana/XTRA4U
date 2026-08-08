@@ -5,13 +5,14 @@ namespace App\Services\ExternalFulfillment\Providers;
 use App\Models\Order;
 use App\Models\Product;
 use App\Services\ExternalFulfillment\Contracts\ExternalFulfillmentClient;
+use App\Services\ExternalFulfillment\Contracts\SupportsStatusPolling;
 use App\Services\ExternalFulfillment\ExternalFulfillmentConfig;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
-class GigshubClient implements ExternalFulfillmentClient
+class GigshubClient implements ExternalFulfillmentClient, SupportsStatusPolling
 {
     public function __construct(private ExternalFulfillmentConfig $config)
     {
@@ -242,6 +243,34 @@ class GigshubClient implements ExternalFulfillmentClient
                 'raw' => $body,
             ];
         }
+    }
+
+    /**
+     * Adapts the GigsHub status response to the polling contract.
+     *
+     * GigsHub nests the record under `order`; the status field has been seen as
+     * both `status` and `orderStatus`, so both are accepted.
+     */
+    public function fetchRemoteStatus(string $remoteReference): array
+    {
+        $response = $this->getOrderStatus($remoteReference);
+
+        if (! ($response['success'] ?? false)) {
+            return [
+                'success' => false,
+                'status' => null,
+                'message' => $response['message'] ?? 'Status lookup failed.',
+            ];
+        }
+
+        $status = data_get($response, 'order.status')
+            ?? data_get($response, 'order.orderStatus')
+            ?? data_get($response, 'raw.status');
+
+        return [
+            'success' => true,
+            'status' => is_scalar($status) && trim((string) $status) !== '' ? (string) $status : null,
+        ];
     }
 
     public function getBulkOrderStatus(array $identifiers): array

@@ -95,6 +95,11 @@ return [
         'base_url' => env('GIGSHUB_BASE_URL'),
         'api_key' => env('GIGSHUB_API_KEY'),
         'timeout' => env('GIGSHUB_TIMEOUT', 30),
+        // Optional shared secret for the delivery webhook. When set, callbacks
+        // must present it as X-Gigshub-Signature (HMAC-SHA256 of the raw body)
+        // or X-Webhook-Secret. Left unset the webhook stays open, matching how
+        // it has always behaved.
+        'webhook_secret' => env('GIGSHUB_WEBHOOK_SECRET'),
     ],
 
     'skdataplug' => [

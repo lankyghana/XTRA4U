@@ -5,6 +5,7 @@ namespace App\Services\ExternalFulfillment\Providers;
 use App\Models\Order;
 use App\Models\Product;
 use App\Services\ExternalFulfillment\Contracts\ExternalFulfillmentClient;
+use App\Services\ExternalFulfillment\Contracts\SupportsStatusPolling;
 use App\Services\ExternalFulfillment\ExternalFulfillmentConfig;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -23,7 +24,7 @@ use Illuminate\Support\Facades\Log;
  *   GET  /api/v1/status/{order_id}/  — check order status
  *   POST /api/v1/callback/           — register webhook callback URL
  */
-class SkdataplugClient implements ExternalFulfillmentClient
+class SkdataplugClient implements ExternalFulfillmentClient, SupportsStatusPolling
 {
     /** Base URL with trailing slash stripped. */
     private string $baseUrl;
@@ -240,6 +241,29 @@ class SkdataplugClient implements ExternalFulfillmentClient
                 'raw'     => $body,
             ];
         }
+    }
+
+    /**
+     * Adapts the SKDataPlug status response to the polling contract.
+     */
+    public function fetchRemoteStatus(string $remoteReference): array
+    {
+        $response = $this->getOrderStatus($remoteReference);
+
+        if (! ($response['success'] ?? false)) {
+            return [
+                'success' => false,
+                'status'  => null,
+                'message' => $response['message'] ?? 'Status lookup failed.',
+            ];
+        }
+
+        $status = $response['status'] ?? null;
+
+        return [
+            'success' => true,
+            'status'  => is_scalar($status) && trim((string) $status) !== '' ? (string) $status : null,
+        ];
     }
 
     /**
