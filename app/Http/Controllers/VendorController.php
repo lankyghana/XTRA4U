@@ -109,9 +109,9 @@ class VendorController extends Controller
             return redirect()->route('vendor.request.form')->withErrors(['access' => 'Access denied.']);
         }
 
-        // Sales summary: total sales (sum of amount_paid from completed orders only)
+        // Sales summary: total sales (sum of amount_paid from orders, excluding refunded/cancelled/failed)
         $totalSales = $vendor->orders()
-            ->whereNotIn('status', ['Cancelled', 'Failed'])
+            ->whereNotIn('status', ['Cancelled', 'Failed', 'Refunded'])
             ->sum('amount_paid');
 
         // Earnings summary: after 2% commission (sum of vendor_earning from successful transactions)
@@ -119,10 +119,10 @@ class VendorController extends Controller
             ->whereIn('payment_status', ['completed', 'successful'])
             ->sum('vendor_earning');
 
-        // Order list: paid orders only
+        // Order list: paid orders only (Refunded orders hidden from vendor side)
         $orders = $vendor->orders()
             ->whereIn('payment_status', ['paid', 'completed'])
-            ->whereIn('status', ['Processing', 'Completed'])
+            ->whereNotIn('status', ['Refunded'])
             ->with('service')
             ->latest()
             ->get();
