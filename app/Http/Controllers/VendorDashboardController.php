@@ -153,6 +153,9 @@ class VendorDashboardController extends Controller
         return response()->json([
             'sales' => number_format($stats['sales'] + $afaStats['sales'] + $rcStats['sales'], 2),
             'earnings' => number_format($stats['earnings'] + $afaStats['earnings'] + $rcStats['earnings'], 2),
+            // Matches the commission figure index() computes for the same filter
+            // (transaction-service commissions only, same as the initial page load).
+            'commissions' => number_format($stats['commissions'], 2),
             'filter' => $filter,
         ]);
     }
