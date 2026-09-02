@@ -1,181 +1,227 @@
+{{--
+    order-status/index.blade.php
+
+    Public order-status lookup (route: GET /order-status). Visual redesign
+    only — the `orderStatusChecker()` Alpine component at the bottom of
+    this file (routes, fetch calls, polling) is unchanged; only the
+    markup/classes around it were rewritten to the storefront's `x4`
+    design system. Status colours/labels are server-driven (from
+    OrderStatusController) and arrive as literal Tailwind class strings in
+    the JSON payload, so those bindings are also left exactly as they were.
+--}}
 @extends('layouts.app')
 
 @section('title', 'Check Order Status - XTRA4U')
 @section('description', 'Track your order status in real-time. Enter your recipient phone number to see the status of your orders.')
 
-@section('content')
-<div class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 py-12" x-data="orderStatusChecker()">
-    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-        
-        <!-- Header -->
-        <div class="text-center mb-10">
-            <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-brand-deep-blue to-brand-green rounded-full mb-4">
-                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
-                </svg>
-            </div>
-            <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">Check Order Status</h1>
-            <p class="mt-3 text-lg text-gray-600">Enter the recipient phone number used during purchase to track your order.</p>
-        </div>
+{{-- Scope the storefront design system to this page only. --}}
+@section('body-class', 'x4')
 
-        <!-- Search Form -->
-        <div class="bg-white rounded-2xl shadow-xl p-6 sm:p-8 mb-8">
-            <form @submit.prevent="checkStatus" class="space-y-4">
-                <div>
-                    <label for="phone" class="block text-sm font-medium text-gray-700 mb-2">Recipient Phone Number</label>
-                    <div class="relative">
-                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
-                            </svg>
-                        </div>
-                        <input 
-                            type="tel" 
-                            id="phone" 
+@php
+    // Same flagship-store fallback the marketplace homepage uses for its
+    // "Buy Now" entry points — this page isn't tied to any one vendor.
+    $mainStoreVendor = \App\Support\MainStore::vendor();
+    $shopUrl = $mainStoreVendor
+        ? route('storefront.vendor', ['vendor' => $mainStoreVendor->vendor_code])
+        : route('checkout.show');
+@endphp
+
+@section('site-header')
+    <x-storefront.header :shop-url="$shopUrl" />
+@endsection
+
+@section('site-footer')
+    <x-storefront.footer :shop-url="$shopUrl" />
+@endsection
+
+@section('content')
+<div class="x4-page" style="padding-top: 64px;">
+    <section class="relative overflow-hidden" style="background: #fff; min-height: calc(100vh - 64px);">
+        <div class="x4-hero-wash absolute inset-0" aria-hidden="true" style="pointer-events: none;"></div>
+
+        <div class="relative max-w-3xl mx-auto px-5" style="padding-top: 56px; padding-bottom: 72px;" x-data="orderStatusChecker()">
+
+            {{-- ============================================================
+                 Header
+                 ============================================================ --}}
+            <x-storefront.reveal from="up" class="text-center mb-9">
+                <div
+                    class="mx-auto mb-5 flex items-center justify-center"
+                    style="width: 64px; height: 64px; border-radius: var(--x4-r-lg); background-color: var(--x4-violet);"
+                >
+                    <x-storefront.icon name="clock" class="w-7 h-7" style="color: #fff;" />
+                </div>
+
+                <h1 class="x4-display-xl mb-3" style="color: var(--x4-ink-strong);">Check Order Status</h1>
+                <p class="x4-body-lg" style="color: var(--x4-ink-body);">
+                    Enter the recipient phone number used during purchase to track your order.
+                </p>
+            </x-storefront.reveal>
+
+            {{-- ============================================================
+                 Search form
+                 ============================================================ --}}
+            <x-storefront.reveal :delay="60">
+            <div class="x4-panel mb-6" style="padding: 24px;">
+                <form @submit.prevent="checkStatus">
+                    <label for="phone" class="x4-caption block mb-2" style="color: var(--x4-ink-sec); font-weight: 500;">Recipient Phone Number</label>
+                    <div class="relative mb-4">
+                        <x-storefront.icon
+                            name="phone"
+                            class="w-4 h-4 absolute"
+                            style="left: 14px; top: 50%; transform: translateY(-50%); color: var(--x4-ink-mute); pointer-events: none;"
+                        />
+                        <input
+                            type="tel"
+                            id="phone"
                             x-model="phone"
                             placeholder="e.g., 0244123456"
                             inputmode="tel"
                             autocomplete="tel"
-                            class="block w-full pl-12 pr-4 py-4 text-lg border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue transition-colors"
                             required
+                            class="x4-input"
+                            style="padding-left: 38px; padding-top: 13px; padding-bottom: 13px; font-size: 16px;"
                         >
                     </div>
-                </div>
-                
-                <button 
-                    type="submit" 
-                    :disabled="loading"
-                    class="w-full flex items-center justify-center px-6 py-4 bg-gradient-to-r from-brand-deep-blue to-brand-green text-white font-semibold text-lg rounded-xl hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-deep-blue transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    <template x-if="loading">
-                        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                    </template>
-                    <span x-text="loading ? 'Checking...' : 'Check Status'"></span>
-                </button>
-            </form>
-        </div>
 
-        <!-- Error Message -->
-        <template x-if="error">
-            <div class="bg-red-50 border border-red-200 rounded-xl p-4 mb-8">
-                <div class="flex items-center">
-                    <svg class="h-5 w-5 text-red-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                    </svg>
-                    <p class="text-red-700" x-text="error"></p>
-                </div>
+                    <button
+                        type="submit"
+                        :disabled="loading"
+                        class="x4-btn x4-btn-primary w-full"
+                        style="padding: 13px 22px;"
+                    >
+                        <template x-if="loading">
+                            <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </template>
+                        <span x-text="loading ? 'Checking…' : 'Check Status'"></span>
+                    </button>
+                </form>
             </div>
-        </template>
+            </x-storefront.reveal>
 
-        <!-- No Orders Found -->
-        <template x-if="searched && orders.length === 0 && !error">
-            <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-6 text-center">
-                <svg class="mx-auto h-12 w-12 text-yellow-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-                <h3 class="text-lg font-semibold text-yellow-800">No Orders Found</h3>
-                <p class="mt-1 text-yellow-700">We couldn't find any orders for this phone number. Please check and try again.</p>
-            </div>
-        </template>
-
-        <!-- Orders List -->
-        <template x-if="orders.length > 0">
-            <div class="space-y-4">
-                <div class="flex items-center justify-between mb-4">
-                    <h2 class="text-xl font-semibold text-gray-900">Your Orders</h2>
-                    <span class="text-sm text-gray-500" x-text="`${orders.length} order(s) found`"></span>
-                </div>
-                
-                <template x-for="order in orders" :key="order.id">
-                    <div class="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow overflow-hidden">
-                        <!-- Order Header -->
-                        <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                            <div>
-                                <span class="text-sm text-gray-500">Order Reference</span>
-                                <p class="font-mono font-semibold text-gray-900" x-text="order.reference"></p>
-                            </div>
-                            <div class="flex items-center" :class="order.status_color.bg + ' ' + order.status_color.text + ' px-3 py-1.5 rounded-full'">
-                                <span class="w-2 h-2 rounded-full mr-2" :class="order.status_color.dot"></span>
-                                <span class="text-sm font-semibold" x-text="order.status_label"></span>
-                            </div>
-                        </div>
-                        
-                        <!-- Order Details -->
-                        <div class="px-6 py-4">
-                            <div class="grid grid-cols-2 gap-4">
-                                <div>
-                                    <span class="text-xs text-gray-500 uppercase tracking-wide">Service</span>
-                                    <p class="font-medium text-gray-900 truncate" x-text="order.service"></p>
-                                </div>
-                                <div>
-                                    <span class="text-xs text-gray-500 uppercase tracking-wide">Amount</span>
-                                    <p class="font-semibold text-gray-900">GH₵ <span x-text="order.amount"></span></p>
-                                </div>
-                                <div>
-                                    <span class="text-xs text-gray-500 uppercase tracking-wide">Vendor</span>
-                                    <p class="font-medium text-gray-900" x-text="order.vendor_name"></p>
-                                </div>
-                                <div>
-                                    <span class="text-xs text-gray-500 uppercase tracking-wide">Date</span>
-                                    <p class="font-medium text-gray-900" x-text="order.date"></p>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Order Footer -->
-                        <div class="px-6 py-3 bg-gray-50 flex items-center justify-between text-sm">
-                            <span class="text-gray-500">
-                                <svg class="inline-block w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                </svg>
-                                <span x-text="order.time"></span>
-                            </span>
-                            <span class="text-gray-500">
-                                Last updated: <span x-text="order.updated_at" class="font-medium"></span>
-                            </span>
-                        </div>
+            {{-- ============================================================
+                 Error
+                 ============================================================ --}}
+            <template x-if="error">
+                <div class="mb-6" style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: var(--x4-r-lg); padding: 16px 18px;">
+                    <div class="flex items-center gap-3">
+                        <x-storefront.icon name="close" class="w-4 h-4 flex-shrink-0" style="color: #dc2626;" />
+                        <p class="x4-body-md" style="color: #991b1b;" x-text="error"></p>
                     </div>
-                </template>
-            </div>
-        </template>
+                </div>
+            </template>
 
-        <!-- Status Legend -->
-        <div class="mt-10 bg-white rounded-xl shadow p-6">
-            <h3 class="text-sm font-semibold text-gray-900 uppercase tracking-wide mb-4">Status Guide</h3>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div class="flex items-center">
-                    <span class="w-3 h-3 rounded-full bg-yellow-500 mr-2"></span>
-                    <span class="text-sm text-gray-600">Pending</span>
+            {{-- ============================================================
+                 No orders found
+                 ============================================================ --}}
+            <template x-if="searched && orders.length === 0 && !error">
+                <div class="text-center mb-6" style="background-color: #fffbeb; border: 1px solid #fde68a; border-radius: var(--x4-r-lg); padding: 28px 20px;">
+                    <div class="mx-auto mb-3 flex items-center justify-center" style="width: 44px; height: 44px; border-radius: 9999px; background-color: #fef3c7;">
+                        <x-storefront.icon name="close" class="w-5 h-5" style="color: #b45309;" />
+                    </div>
+                    <h3 class="x4-heading-md mb-1" style="color: #92400e;">No Orders Found</h3>
+                    <p class="x4-body-md" style="color: #92400e;">We couldn't find any orders for this phone number. Please check and try again.</p>
                 </div>
-                <div class="flex items-center">
-                    <span class="w-3 h-3 rounded-full bg-blue-500 mr-2"></span>
-                    <span class="text-sm text-gray-600">Processing</span>
+            </template>
+
+            {{-- ============================================================
+                 Orders list
+                 ============================================================ --}}
+            <template x-if="orders.length > 0">
+                <div class="mb-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="x4-heading-md" style="color: var(--x4-ink);">Your Orders</h2>
+                        <span class="x4-caption" style="color: var(--x4-ink-mute);" x-text="`${orders.length} order(s) found`"></span>
+                    </div>
+
+                    <div class="space-y-3">
+                        <template x-for="order in orders" :key="order.id">
+                            <div class="x4-panel" style="overflow: hidden;">
+                                <div class="flex items-center justify-between gap-3" style="padding: 16px 20px; border-bottom: 1px solid var(--x4-hairline);">
+                                    <div>
+                                        <span class="x4-micro-cap" style="color: var(--x4-ink-mute);">Order Reference</span>
+                                        <p class="x4-tnum" style="font-size: 14px; font-weight: 500; color: var(--x4-ink);" x-text="order.reference"></p>
+                                    </div>
+                                    <div class="inline-flex items-center flex-shrink-0" :class="order.status_color.bg + ' ' + order.status_color.text" style="padding: 5px 12px; border-radius: var(--x4-r-pill);">
+                                        <span class="w-1.5 h-1.5 rounded-full mr-2" :class="order.status_color.dot"></span>
+                                        <span class="x4-caption" style="font-weight: 500;" x-text="order.status_label"></span>
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-2 gap-4" style="padding: 16px 20px;">
+                                    <div>
+                                        <span class="x4-micro-cap" style="color: var(--x4-ink-mute);">Service</span>
+                                        <p class="x4-caption truncate" style="font-weight: 500; color: var(--x4-ink); margin-top: 2px;" x-text="order.service"></p>
+                                    </div>
+                                    <div>
+                                        <span class="x4-micro-cap" style="color: var(--x4-ink-mute);">Amount</span>
+                                        <p class="x4-caption x4-tnum" style="font-weight: 500; color: var(--x4-ink); margin-top: 2px;">GH₵ <span x-text="order.amount"></span></p>
+                                    </div>
+                                    <div>
+                                        <span class="x4-micro-cap" style="color: var(--x4-ink-mute);">Vendor</span>
+                                        <p class="x4-caption" style="font-weight: 500; color: var(--x4-ink); margin-top: 2px;" x-text="order.vendor_name"></p>
+                                    </div>
+                                    <div>
+                                        <span class="x4-micro-cap" style="color: var(--x4-ink-mute);">Date</span>
+                                        <p class="x4-caption" style="font-weight: 500; color: var(--x4-ink); margin-top: 2px;" x-text="order.date"></p>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center justify-between gap-3" style="padding: 12px 20px; background-color: var(--x4-canvas-soft); border-top: 1px solid var(--x4-hairline);">
+                                    <span class="x4-caption flex items-center gap-1.5" style="color: var(--x4-ink-mute);">
+                                        <x-storefront.icon name="clock" class="w-3.5 h-3.5" />
+                                        <span x-text="order.time"></span>
+                                    </span>
+                                    <span class="x4-caption" style="color: var(--x4-ink-mute);">
+                                        Updated <span style="font-weight: 500; color: var(--x4-ink-sec);" x-text="order.updated_at"></span>
+                                    </span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
                 </div>
-                <div class="flex items-center">
-                    <span class="w-3 h-3 rounded-full bg-green-500 mr-2"></span>
-                    <span class="text-sm text-gray-600">Completed</span>
+            </template>
+
+            {{-- ============================================================
+                 Status legend
+                 ============================================================ --}}
+            <x-storefront.reveal :delay="100">
+            <div class="x4-panel mb-8" style="padding: 20px 24px;">
+                <p class="x4-micro-cap mb-4" style="color: var(--x4-ink-mute);">Status Guide</p>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    @foreach ([
+                        ['label' => 'Pending', 'dot' => '#eab308'],
+                        ['label' => 'Processing', 'dot' => '#3b82f6'],
+                        ['label' => 'Completed', 'dot' => '#22c55e'],
+                        ['label' => 'Cancelled', 'dot' => '#ef4444'],
+                    ] as $status)
+                        <div class="flex items-center gap-2">
+                            <span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 9999px; background-color: {{ $status['dot'] }}; flex-shrink: 0;"></span>
+                            <span class="x4-caption" style="color: var(--x4-ink-sec);">{{ $status['label'] }}</span>
+                        </div>
+                    @endforeach
                 </div>
-                <div class="flex items-center">
-                    <span class="w-3 h-3 rounded-full bg-red-500 mr-2"></span>
-                    <span class="text-sm text-gray-600">Cancelled</span>
-                </div>
+            </div>
+            </x-storefront.reveal>
+
+            {{-- ============================================================
+                 Back to home
+                 ============================================================ --}}
+            <div class="text-center">
+                <a href="{{ route('storefront.index') }}" class="x4-caption x4-link x4-link-accent inline-flex items-center gap-2" style="color: var(--x4-ink-mute); font-weight: 500;">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                    </svg>
+                    Back to Home
+                </a>
             </div>
         </div>
-
-        <!-- Back to Home -->
-        <div class="mt-8 text-center">
-            <a href="{{ route('storefront.index') }}" class="inline-flex items-center text-brand-deep-blue hover:text-brand-bright-blue font-medium transition-colors">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-                </svg>
-                Back to Home
-            </a>
-        </div>
-    </div>
+    </section>
 </div>
+@endsection
 
 @push('scripts')
 <script>
@@ -279,4 +325,3 @@ function orderStatusChecker() {
 }
 </script>
 @endpush
-@endsection
