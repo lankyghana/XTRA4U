@@ -9,6 +9,7 @@ use App\Models\VendorTier;
 use App\Models\VendorTierHistory;
 use App\Services\VendorTierQualificationService;
 use App\Support\DeliveryStatus;
+use App\Support\PlatformServiceVendor;
 use App\Support\ServiceAvailability;
 use Illuminate\Http\Request;
 
@@ -37,6 +38,10 @@ class AdminSettingsController extends Controller
 
         $vendorApprovalSettings = Setting::getGroup('vendor_approval');
 
+        $platformServiceAssignments = PlatformServiceVendor::assignments();
+        $platformServiceVendorChoices = collect(PlatformServiceVendor::categories())
+            ->mapWithKeys(fn (string $category) => [$category => PlatformServiceVendor::eligibleVendors($category)]);
+
         $tiers = VendorTier::withCount('vendors')
             ->with('rules')
             ->ordered()
@@ -62,6 +67,7 @@ class AdminSettingsController extends Controller
             'categoryConfig', 'statuses', 'availabilityMessage', 'openCount', 'totalCount',
             'deliveryActive', 'deliveryLevel', 'deliveryMessage',
             'vendorApprovalSettings',
+            'platformServiceAssignments', 'platformServiceVendorChoices',
             'tiers',
             'eligible',
             'histories',
@@ -73,6 +79,7 @@ class AdminSettingsController extends Controller
         return match (true) {
             $request->routeIs('admin.settings.delivery-status') => 'delivery-status',
             $request->routeIs('admin.settings.vendor-approval') => 'vendor-approval',
+            $request->routeIs('admin.settings.platform-service-vendors') => 'platform-service-vendors',
             $request->routeIs('admin.vendor-tiers.index') => 'vendor-tiers',
             $request->routeIs('admin.vendor-tier-promotions.index') => 'vendor-tier-promotions',
             $request->routeIs('admin.vendor-tier-history.index') => 'vendor-tier-history',
