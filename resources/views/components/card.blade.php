@@ -36,7 +36,7 @@ $roundedClasses = [
 // Variant-specific styling
 $variantClasses = [
     'default' => '',
-    'metric' => 'border-l-4 border-brand-deep-blue bg-gradient-to-r from-white to-blue-50/30',
+    'metric' => 'border-l-4 border-brand-violet bg-gradient-to-r from-white to-violet-50/30',
     'product' => 'hover:shadow-lg transition-all duration-200 hover:-translate-y-1',
     'feature' => 'text-center hover:shadow-md transition-all duration-200',
     'checkout' => 'max-w-2xl mx-auto shadow-lg border-gray-100',

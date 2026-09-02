@@ -18,7 +18,9 @@
         'pending' => 'bg-yellow-50 text-yellow-700 border border-yellow-200', 
         'failed' => 'bg-red-50 text-red-700 border border-red-200',
         'warning' => 'bg-red-50 text-red-700 border border-red-200',
-        'processing' => 'bg-blue-50 text-brand-deep-blue border border-blue-200',
+        // Brand accent moved from deep-blue to violet; "processing" is the one
+        // badge state that carries the brand color rather than a status color.
+        'processing' => 'bg-brand-violet-soft text-brand-violet-deep border border-violet-200',
     ];
     
     $classes = $baseClasses . ' ' . $sizeClasses[$size] . ' ' . $variantClasses[$variant];
@@ -38,7 +40,7 @@
             <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
         </svg>
     @elseif ($variant === 'processing')
-        <svg class="w-4 h-4 mr-1 text-brand-deep-blue animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg class="w-4 h-4 mr-1 text-brand-violet animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>

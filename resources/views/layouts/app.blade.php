@@ -10,7 +10,7 @@
     
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.bunny.net">
-    <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.bunny.net/css?family=inter:300,400,500,600,700&display=swap" rel="stylesheet" />
     
     <!-- Vite Assets -->
     @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -526,9 +526,16 @@
     
     @stack('styles')
 </head>
-<body class="h-full bg-gray-50 antialiased" x-data="{ mobileMenuOpen: false }">
+<body class="h-full bg-gray-50 antialiased @yield('body-class')" x-data="{ mobileMenuOpen: false }">
     <!-- Header/Navigation -->
-    @include('components.navigation')
+    {{-- A page may supply its own chrome by defining the `site-header` /
+         `site-footer` sections (the marketplace homepage does). Pages that
+         define neither keep the shared navigation and footer unchanged. --}}
+    @hasSection('site-header')
+        @yield('site-header')
+    @else
+        @include('components.navigation')
+    @endif
     
     <!-- Main Content -->
     <main class="min-h-screen">
@@ -549,7 +556,11 @@
     </main>
     
     <!-- Footer -->
-    @include('components.footer')
+    @hasSection('site-footer')
+        @yield('site-footer')
+    @else
+        @include('components.footer')
+    @endif
     
     <!-- WhatsApp Channel Widget -->
     @include('components.whatsapp-widget')
