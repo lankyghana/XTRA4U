@@ -1,171 +1,172 @@
+{{--
+    pages/privacy.blade.php
+
+    Static legal page (route: GET /privacy, closure-bound in web.php).
+    Visual redesign only — every sentence of the policy text is preserved
+    verbatim; only markup/classes changed.
+--}}
 @extends('layouts.app')
 
 @section('title', 'Privacy Policy - XTRA4U')
 @section('description', 'Privacy Policy for XTRA4U - Learn how we collect, use, and protect your personal information.')
 
-@section('content')
-<!-- Hero Section -->
-<section class="relative bg-gradient-to-br from-brand-deep-blue to-blue-800 overflow-hidden">
-    <div class="absolute inset-0">
-        <div class="absolute inset-0 bg-gradient-to-br from-brand-deep-blue/90 to-blue-900/90"></div>
-        <div class="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full translate-x-32 -translate-y-32"></div>
-        <div class="absolute bottom-0 left-0 w-64 h-64 bg-white/5 rounded-full -translate-x-16 translate-y-16"></div>
-    </div>
-    
-    <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 lg:py-20">
-        <div class="text-center">
-            <div class="inline-flex items-center justify-center w-16 h-16 bg-white/10 rounded-2xl mb-6">
-                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                </svg>
-            </div>
-            <h1 class="text-4xl sm:text-5xl font-bold text-white leading-tight">
-                Privacy Policy
-            </h1>
-            <p class="mt-4 text-lg text-blue-100">
-                Last updated: {{ date('F j, Y') }}
-            </p>
-        </div>
-    </div>
-</section>
+{{-- Scope the storefront design system to this page only. --}}
+@section('body-class', 'x4')
 
-<!-- Content Section -->
-<section class="py-16 lg:py-24 bg-white">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="prose prose-lg max-w-none">
-            
-            <!-- Introduction -->
-            <div class="bg-blue-50 rounded-2xl p-8 mb-10 border border-blue-100">
-                <p class="text-lg text-gray-700 leading-relaxed m-0">
-                    At <span class="font-semibold text-brand-deep-blue">Xtra4U</span>, we value your privacy and are committed to protecting your personal information.
+@php
+    $mainStoreVendor = \App\Support\MainStore::vendor();
+    $shopUrl = $mainStoreVendor
+        ? route('storefront.vendor', ['vendor' => $mainStoreVendor->vendor_code])
+        : route('checkout.show');
+@endphp
+
+@section('site-header')
+    <x-storefront.header :shop-url="$shopUrl" />
+@endsection
+
+@section('site-footer')
+    <x-storefront.footer :shop-url="$shopUrl" />
+@endsection
+
+@section('content')
+<div class="x4-page" style="padding-top: 64px;">
+
+    {{-- ============================================================
+         Hero
+         ============================================================ --}}
+    <section class="relative overflow-hidden" style="background: #fff;">
+        <div class="x4-hero-wash absolute inset-0" aria-hidden="true" style="pointer-events: none;"></div>
+
+        <div class="relative max-w-3xl mx-auto px-5 text-center" style="padding-top: 56px; padding-bottom: 48px;">
+            <x-storefront.reveal from="up">
+                <div class="mx-auto mb-5 flex items-center justify-center" style="width: 60px; height: 60px; border-radius: var(--x4-r-lg); background-color: var(--x4-violet);">
+                    <x-storefront.icon name="lock" class="w-6 h-6" style="color: #fff;" />
+                </div>
+
+                <h1 class="x4-display-xl mb-3" style="color: var(--x4-ink-strong);">Privacy Policy</h1>
+                <p class="x4-caption" style="color: var(--x4-ink-mute);">Last updated: {{ date('F j, Y') }}</p>
+            </x-storefront.reveal>
+        </div>
+    </section>
+
+    {{-- ============================================================
+         Content
+         ============================================================ --}}
+    <section style="background-color: var(--x4-canvas-soft); padding: 8px 0 72px;">
+        <div class="max-w-3xl mx-auto px-5 space-y-5">
+
+            <x-storefront.reveal>
+            <div style="background-color: var(--x4-violet-soft); border-radius: var(--x4-r-lg); padding: 24px;">
+                <p class="x4-body-lg" style="color: var(--x4-primary-deep);">
+                    At <strong style="font-weight: 500;">XTRA4U</strong>, we value your privacy and are committed to protecting your personal information.
                 </p>
             </div>
+            </x-storefront.reveal>
 
-            <!-- Information We Collect -->
-            <div class="mb-10">
-                <h2 class="text-2xl font-bold text-gray-900 mb-4 flex items-center">
-                    <span class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-4">
-                        <svg class="w-5 h-5 text-brand-deep-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                        </svg>
+            {{-- Information We Collect --}}
+            <x-storefront.reveal :delay="60">
+            <div class="x4-panel" style="padding: 28px;">
+                <div class="flex items-center gap-3 mb-4">
+                    <span class="x4-service-icon" style="width: 40px; height: 40px;">
+                        <x-storefront.icon name="document" class="w-5 h-5" />
                     </span>
-                    Information We Collect
-                </h2>
-                <p class="text-gray-600 mb-4">We may collect the following information:</p>
-                <ul class="space-y-3">
-                    <li class="flex items-start">
-                        <svg class="w-5 h-5 text-brand-deep-blue mt-1 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                        </svg>
-                        <span class="text-gray-700">Name, phone number, and email address</span>
-                    </li>
-                    <li class="flex items-start">
-                        <svg class="w-5 h-5 text-brand-deep-blue mt-1 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                        </svg>
-                        <span class="text-gray-700">Account and transaction details</span>
-                    </li>
-                    <li class="flex items-start">
-                        <svg class="w-5 h-5 text-brand-deep-blue mt-1 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                        </svg>
-                        <span class="text-gray-700">Login and usage data</span>
-                    </li>
+                    <h2 class="x4-heading-lg" style="color: var(--x4-ink);">Information We Collect</h2>
+                </div>
+                <p class="x4-body-md mb-4" style="color: var(--x4-ink-sec);">We may collect the following information:</p>
+                <ul class="space-y-2.5">
+                    @foreach ([
+                        'Name, phone number, and email address',
+                        'Account and transaction details',
+                        'Login and usage data',
+                    ] as $item)
+                        <li class="flex items-start gap-2.5">
+                            <x-storefront.icon name="check" class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: var(--x4-violet);" />
+                            <span class="x4-body-md" style="color: var(--x4-ink-sec);">{{ $item }}</span>
+                        </li>
+                    @endforeach
                 </ul>
             </div>
+            </x-storefront.reveal>
 
-            <!-- How We Use Your Information -->
-            <div class="mb-10">
-                <h2 class="text-2xl font-bold text-gray-900 mb-4 flex items-center">
-                    <span class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mr-4">
-                        <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
-                        </svg>
+            {{-- How We Use Your Information --}}
+            <x-storefront.reveal :delay="90">
+            <div class="x4-panel" style="padding: 28px;">
+                <div class="flex items-center gap-3 mb-4">
+                    <span class="x4-service-icon" style="width: 40px; height: 40px; background-color: #16a34a; box-shadow: 0 4px 12px rgba(22,163,74,0.3);">
+                        <x-storefront.icon name="shield" class="w-5 h-5" />
                     </span>
-                    How We Use Your Information
-                </h2>
-                <p class="text-gray-600 mb-4">Your information is used to:</p>
-                <ul class="space-y-3">
-                    <li class="flex items-start">
-                        <svg class="w-5 h-5 text-green-600 mt-1 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                        </svg>
-                        <span class="text-gray-700">Provide and improve our services</span>
-                    </li>
-                    <li class="flex items-start">
-                        <svg class="w-5 h-5 text-green-600 mt-1 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                        </svg>
-                        <span class="text-gray-700">Process transactions securely</span>
-                    </li>
-                    <li class="flex items-start">
-                        <svg class="w-5 h-5 text-green-600 mt-1 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                        </svg>
-                        <span class="text-gray-700">Communicate important updates and support</span>
-                    </li>
-                    <li class="flex items-start">
-                        <svg class="w-5 h-5 text-green-600 mt-1 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                        </svg>
-                        <span class="text-gray-700">Manage reseller and vendor accounts</span>
-                    </li>
+                    <h2 class="x4-heading-lg" style="color: var(--x4-ink);">How We Use Your Information</h2>
+                </div>
+                <p class="x4-body-md mb-4" style="color: var(--x4-ink-sec);">Your information is used to:</p>
+                <ul class="space-y-2.5">
+                    @foreach ([
+                        'Provide and improve our services',
+                        'Process transactions securely',
+                        'Communicate important updates and support',
+                        'Manage reseller and vendor accounts',
+                    ] as $item)
+                        <li class="flex items-start gap-2.5">
+                            <x-storefront.icon name="check" class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: #16a34a;" />
+                            <span class="x4-body-md" style="color: var(--x4-ink-sec);">{{ $item }}</span>
+                        </li>
+                    @endforeach
                 </ul>
             </div>
+            </x-storefront.reveal>
 
-            <!-- Data Protection -->
-            <div class="mb-10 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-8 border border-blue-100">
-                <h2 class="text-2xl font-bold text-gray-900 mb-4 flex items-center">
-                    <span class="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center mr-4">
-                        <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
-                        </svg>
+            {{-- Data Protection --}}
+            <x-storefront.reveal :delay="120">
+            <div style="background-color: var(--x4-canvas); border: 1px solid var(--x4-hairline); border-radius: var(--x4-r-lg); padding: 28px;">
+                <div class="flex items-center gap-3 mb-3">
+                    <span class="x4-service-icon" style="width: 40px; height: 40px; background-color: #4f46e5; box-shadow: 0 4px 12px rgba(79,70,229,0.3);">
+                        <x-storefront.icon name="lock" class="w-5 h-5" />
                     </span>
-                    Data Protection
-                </h2>
-                <p class="text-gray-700 leading-relaxed m-0">
+                    <h2 class="x4-heading-lg" style="color: var(--x4-ink);">Data Protection</h2>
+                </div>
+                <p class="x4-body-md" style="color: var(--x4-ink-sec);">
                     We take appropriate security measures to protect your data against unauthorized access, alteration, or disclosure.
                 </p>
             </div>
+            </x-storefront.reveal>
 
-            <!-- Third Parties -->
-            <div class="mb-10">
-                <h2 class="text-2xl font-bold text-gray-900 mb-4 flex items-center">
-                    <span class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mr-4">
-                        <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
-                        </svg>
+            {{-- Third Parties --}}
+            <x-storefront.reveal :delay="150">
+            <div class="x4-panel" style="padding: 28px;">
+                <div class="flex items-center gap-3 mb-3">
+                    <span class="x4-service-icon" style="width: 40px; height: 40px; background-color: #9333ea; box-shadow: 0 4px 12px rgba(147,51,234,0.3);">
+                        <x-storefront.icon name="users" class="w-5 h-5" />
                     </span>
-                    Third Parties
-                </h2>
-                <p class="text-gray-700 leading-relaxed">
-                    Xtra4U does not sell or share your personal information with third parties, except where required by law or necessary to deliver our services.
+                    <h2 class="x4-heading-lg" style="color: var(--x4-ink);">Third Parties</h2>
+                </div>
+                <p class="x4-body-md" style="color: var(--x4-ink-sec);">
+                    XTRA4U does not sell or share your personal information with third parties, except where required by law or necessary to deliver our services.
                 </p>
             </div>
+            </x-storefront.reveal>
 
-            <!-- Agreement -->
-            <div class="bg-gray-50 rounded-2xl p-8 border border-gray-200">
-                <p class="text-gray-700 leading-relaxed m-0 text-center">
-                    By using Xtra4U, you agree to the collection and use of your information as described in this policy.
+            {{-- Agreement --}}
+            <x-storefront.reveal :delay="180">
+            <div class="text-center" style="background-color: var(--x4-canvas-soft); border: 1px solid var(--x4-hairline); border-radius: var(--x4-r-lg); padding: 24px;">
+                <p class="x4-body-md" style="color: var(--x4-ink-sec);">
+                    By using XTRA4U, you agree to the collection and use of your information as described in this policy.
                 </p>
             </div>
-
+            </x-storefront.reveal>
         </div>
-    </div>
-</section>
+    </section>
 
-<!-- Back to Home CTA -->
-<section class="bg-gray-50 border-t border-gray-200">
-    <div class="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-        <div class="text-center">
-            <a href="{{ route('storefront.index') }}" 
-               class="inline-flex items-center px-6 py-3 bg-brand-deep-blue text-white font-medium rounded-lg hover:bg-blue-700 transition-colors">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+    {{-- ============================================================
+         Back to Home
+         ============================================================ --}}
+    <section style="background-color: var(--x4-canvas); border-top: 1px solid var(--x4-hairline); padding: 40px 0;">
+        <div class="max-w-3xl mx-auto px-5 text-center">
+            <x-storefront.btn :href="route('storefront.index')" variant="primary">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
                 </svg>
                 Back to Home
-            </a>
+            </x-storefront.btn>
         </div>
-    </div>
-</section>
+    </section>
+</div>
 @endsection

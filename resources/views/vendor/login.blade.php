@@ -1,226 +1,191 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('favicon-32x32.png') }}">
-    <title>Vendor Login - XTRA4U</title>
-    <meta name="description" content="Secure login portal for XTRA4U vendors">
-    @vite(['resources/css/app.css', 'resources/js/app.js'])
-</head>
-<body class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
-    <!-- Simple Header -->
-    <header class="bg-white shadow-sm">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center h-16">
-                <!-- Logo -->
-                <a href="{{ route('storefront.index') }}" class="flex items-center">
-                    <div class="w-8 h-8 bg-brand-deep-blue rounded-lg flex items-center justify-center">
-                        <span class="text-white font-bold text-sm">X4U</span>
-                    </div>
-                    <span class="ml-2 text-xl font-bold text-gray-900">XTRA4U</span>
-                </a>
-                
-                <!-- Back to Home -->
-                <a href="{{ route('storefront.index') }}" 
-                   class="inline-flex items-center text-sm font-medium text-gray-600 hover:text-brand-deep-blue transition-colors">
-                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-                    </svg>
-                    Back to Home
-                </a>
-            </div>
-        </div>
-    </header>
+{{--
+    vendor/login.blade.php
 
-    <div class="min-h-[calc(100vh-4rem)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-        <div class="max-w-md w-full space-y-8">
-            <!-- Header Section -->
-            <div class="text-center">
-                <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-brand-deep-blue to-brand-green rounded-full mb-4">
-                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+    Vendor sign-in (route: GET /vendor/login, VendorAuthController@showLoginForm).
+    Converted from a standalone HTML document to the shared layout so it
+    picks up the same `x4` design system as the rest of the storefront
+    journey. Every functional piece is preserved exactly:
+      - form action/method/@csrf, field names (email, password, remember)
+      - the password-visibility toggle script and its element ids
+        (toggle_password_visibility, password, icon_eye, icon_eye_off)
+      - the `session('vendor_whatsapp_url')` support CTA
+        VendorAuthController flashes when an unapproved vendor tries to log in
+      - every route() call
+--}}
+@extends('layouts.app')
+
+@section('title', 'Vendor Login - XTRA4U')
+@section('description', 'Secure login portal for XTRA4U vendors')
+
+{{-- Scope the storefront design system to this page only. --}}
+@section('body-class', 'x4')
+
+@php
+    $mainStoreVendor = \App\Support\MainStore::vendor();
+    $shopUrl = $mainStoreVendor
+        ? route('storefront.vendor', ['vendor' => $mainStoreVendor->vendor_code])
+        : route('checkout.show');
+@endphp
+
+@section('site-header')
+    <x-storefront.header :shop-url="$shopUrl" />
+@endsection
+
+@section('site-footer')
+    <x-storefront.footer :shop-url="$shopUrl" />
+@endsection
+
+@section('content')
+<div class="x4-page" style="padding-top: 64px;">
+    <section class="relative overflow-hidden" style="background: #fff; min-height: calc(100vh - 64px);">
+        <div class="x4-hero-wash absolute inset-0" aria-hidden="true" style="pointer-events: none;"></div>
+
+        <div class="relative max-w-md mx-auto px-5" style="padding-top: 56px; padding-bottom: 72px;">
+
+            <x-storefront.reveal from="up" class="text-center mb-8">
+                <div class="mx-auto mb-5 flex items-center justify-center" style="width: 64px; height: 64px; border-radius: 9999px; background-color: var(--x4-violet);">
+                    <svg class="w-7 h-7" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                     </svg>
                 </div>
-                <h1 class="text-3xl font-bold text-gray-900 mb-2">Vendor Portal</h1>
-                <p class="text-lg text-gray-600">Sign in to manage your store and orders</p>
-            </div>
+                <h1 class="x4-display-lg mb-2" style="color: var(--x4-ink-strong);">Vendor Portal</h1>
+                <p class="x4-body-md" style="color: var(--x4-ink-body);">Sign in to manage your store and orders</p>
+            </x-storefront.reveal>
 
-            <!-- Form Card -->
-            <div class="bg-white rounded-2xl shadow-xl overflow-hidden">
-                <div class="px-6 py-8 sm:px-10">
-                    @if ($errors->any())
-                        <div class="mb-6 bg-red-50 border-l-4 border-red-500 rounded-lg p-4">
-                            <div class="flex">
-                                <div class="flex-shrink-0">
-                                    <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
-                                    </svg>
-                                </div>
-                                <div class="ml-3">
-                                    <h3 class="text-sm font-medium text-red-800 mb-2">Please correct the following errors:</h3>
-                                    <ul class="list-disc list-inside text-sm text-red-700 space-y-1">
-                                        @foreach ($errors->all() as $error)
-                                            <li>{{ $error }}</li>
-                                        @endforeach
-                                    </ul>
+            <x-storefront.reveal :delay="60">
+            <div class="x4-panel" style="padding: 28px;">
+                @if ($errors->any())
+                    <div class="mb-6" style="background-color: #fef2f2; border-left: 3px solid #dc2626; border-radius: var(--x4-r-md); padding: 16px;">
+                        <div class="flex items-start gap-3">
+                            <x-storefront.icon name="close" class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: #dc2626;" />
+                            <div>
+                                <p class="x4-caption mb-2" style="color: #991b1b; font-weight: 500;">Please correct the following errors:</p>
+                                <ul class="space-y-1">
+                                    @foreach ($errors->all() as $error)
+                                        <li class="x4-caption" style="color: #b91c1c; list-style: disc; margin-left: 16px;">{{ $error }}</li>
+                                    @endforeach
+                                </ul>
 
-                                    @if (session('vendor_whatsapp_url'))
-                                        <a href="{{ session('vendor_whatsapp_url') }}"
-                                           target="_blank"
-                                           rel="noopener noreferrer"
-                                           class="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-[#25D366] text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-[#1ebe57] transition-colors">
-                                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.472-.148-.67.15-.198.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-                                                <path d="M12.001 2C6.478 2 2 6.477 2 12c0 1.99.583 3.845 1.588 5.401L2 22l4.735-1.556A9.953 9.953 0 0012.001 22C17.523 22 22 17.523 22 12S17.523 2 12.001 2zm0 18.148a8.09 8.09 0 01-4.129-1.132l-.296-.176-3.06.921.949-2.965-.194-.306A8.087 8.087 0 013.913 12c0-4.462 3.63-8.088 8.088-8.088 4.457 0 8.087 3.626 8.087 8.088 0 4.462-3.63 8.148-8.087 8.148z"/>
-                                            </svg>
-                                            Chat on WhatsApp
-                                        </a>
-                                    @endif
-                                </div>
+                                @if (session('vendor_whatsapp_url'))
+                                    <a href="{{ session('vendor_whatsapp_url') }}"
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       class="mt-3 inline-flex items-center gap-2"
+                                       style="padding: 8px 16px; background-color: #22c55e; color: #fff; font-size: 13px; font-weight: 500; border-radius: var(--x4-r-md);"
+                                    >
+                                        <x-storefront.icon name="whatsapp" class="w-4 h-4" />
+                                        Chat on WhatsApp
+                                    </a>
+                                @endif
                             </div>
                         </div>
-                    @endif
+                    </div>
+                @endif
 
-                    <form method="POST" action="{{ route('vendor.login') }}" class="space-y-6">
-                        @csrf
-                        
-                        <!-- Email -->
-                        <div>
-                            <label for="email" class="block text-sm font-medium text-gray-700 mb-2">
-                                Email Address <span class="text-red-500">*</span>
-                            </label>
-                            <div class="relative">
-                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"/>
-                                    </svg>
-                                </div>
-                                <input type="email" 
-                                       name="email" 
-                                       id="email" 
-                                       value="{{ old('email') }}"
-                                       class="pl-10 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue transition-colors py-3" 
-                                       placeholder="your@email.com"
-                                       required 
-                                       autofocus>
-                            </div>
+                <form method="POST" action="{{ route('vendor.login') }}">
+                    @csrf
+
+                    <div class="mb-4">
+                        <label for="email" class="x4-caption block mb-1.5" style="color: var(--x4-ink-sec); font-weight: 500;">Email Address <span style="color: #dc2626;">*</span></label>
+                        <div class="relative">
+                            <x-storefront.icon name="mail" class="w-4 h-4 absolute" style="left: 14px; top: 50%; transform: translateY(-50%); color: var(--x4-ink-mute); pointer-events: none;" />
+                            <input
+                                type="email" name="email" id="email"
+                                value="{{ old('email') }}"
+                                required autofocus
+                                placeholder="your@email.com"
+                                class="x4-input"
+                                style="padding-left: 38px;"
+                            >
                         </div>
+                    </div>
 
-                        <!-- Password -->
-                        <div>
-                            <label for="password" class="block text-sm font-medium text-gray-700 mb-2">
-                                Password <span class="text-red-500">*</span>
-                            </label>
-                            <div class="relative">
-                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
-                                    </svg>
-                                </div>
-                                <input type="password" 
-                                       name="password" 
-                                       id="password" 
-                                       class="pl-10 pr-10 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue transition-colors py-3" 
-                                       placeholder="Enter your password"
-                                       required>
-
-                                <button
-                                    type="button"
-                                    id="toggle_password_visibility"
-                                    class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-gray-700"
-                                    aria-label="Show password"
-                                >
-                                    <svg id="icon_eye" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    </svg>
-                                    <svg id="icon_eye_off" class="h-5 w-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a9.956 9.956 0 012.223-3.592m3.086-2.29A9.956 9.956 0 0112 5c4.478 0 8.268 2.943 9.542 7a9.963 9.963 0 01-4.124 5.303M15 12a3 3 0 00-3-3m0 0a2.99 2.99 0 00-2.12.879M12 9v0m0 6a3 3 0 01-3-3" />
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3l18 18" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Remember Me -->
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center">
-                                <input type="checkbox" 
-                                       name="remember" 
-                                       id="remember" 
-                                       class="h-4 w-4 text-brand-deep-blue focus:ring-brand-deep-blue border-gray-300 rounded">
-                                <label for="remember" class="ml-2 block text-sm text-gray-700">
-                                    Remember me
-                                </label>
-                            </div>
-                            <div class="text-sm">
-                                <a href="{{ route('vendor.password.forgot') }}" 
-                                   class="font-medium text-brand-deep-blue hover:text-brand-bright-blue transition-colors">
-                                    Forgot password?
-                                </a>
-                            </div>
-                        </div>
-
-                        <!-- Submit Button -->
-                        <div class="pt-2">
-                            <button type="submit" 
-                                    class="w-full flex justify-center items-center px-6 py-3.5 bg-gradient-to-r from-brand-deep-blue to-brand-green text-white font-semibold rounded-lg shadow-md hover:shadow-lg transform hover:scale-[1.02] transition-all duration-200">
-                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/>
+                    <div class="mb-4">
+                        <label for="password" class="x4-caption block mb-1.5" style="color: var(--x4-ink-sec); font-weight: 500;">Password <span style="color: #dc2626;">*</span></label>
+                        <div class="relative">
+                            <x-storefront.icon name="lock" class="w-4 h-4 absolute" style="left: 14px; top: 50%; transform: translateY(-50%); color: var(--x4-ink-mute); pointer-events: none;" />
+                            <input
+                                type="password" name="password" id="password"
+                                required
+                                placeholder="Enter your password"
+                                class="x4-input"
+                                style="padding-left: 38px; padding-right: 38px;"
+                            >
+                            <button
+                                type="button"
+                                id="toggle_password_visibility"
+                                class="absolute"
+                                style="right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--x4-ink-mute); display: flex;"
+                                aria-label="Show password"
+                            >
+                                <svg id="icon_eye" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                    <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                 </svg>
-                                Sign In to Vendor Portal
+                                <svg id="icon_eye_off" class="w-4 h-4 hidden" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a9.956 9.956 0 012.223-3.592m3.086-2.29A9.956 9.956 0 0112 5c4.478 0 8.268 2.943 9.542 7a9.963 9.963 0 01-4.124 5.303M15 12a3 3 0 00-3-3m0 0a2.99 2.99 0 00-2.12.879M12 9v0m0 6a3 3 0 01-3-3" />
+                                    <path d="M3 3l18 18" />
+                                </svg>
                             </button>
                         </div>
-                    </form>
-
-                    <!-- Footer Note -->
-                    <div class="mt-6 text-center">
-                        <p class="text-sm text-gray-600">
-                            Don't have an account? 
-                            <a href="{{ route('vendor.request.form') }}" class="font-medium text-brand-deep-blue hover:text-brand-bright-blue transition-colors">
-                                Apply to become a vendor
-                            </a>
-                        </p>
                     </div>
-                </div>
-            </div>
 
-            <!-- Back to Home -->
-            <div class="text-center">
-                <a href="{{ route('storefront.index') }}" class="inline-flex items-center text-sm text-gray-600 hover:text-gray-900 transition-colors">
-                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                    <div class="flex items-center justify-between mb-6">
+                        <label class="flex items-center gap-2 x4-caption" style="color: var(--x4-ink-sec); cursor: pointer;">
+                            <input type="checkbox" name="remember" id="remember" style="accent-color: var(--x4-violet); width: 16px; height: 16px;">
+                            Remember me
+                        </label>
+                        <a href="{{ route('vendor.password.forgot') }}" class="x4-caption x4-link x4-link-accent" style="color: var(--x4-violet); font-weight: 500;">
+                            Forgot password?
+                        </a>
+                    </div>
+
+                    <button type="submit" class="x4-btn x4-btn-primary w-full" style="padding: 13px 22px;">
+                        Sign In to Vendor Portal
+                    </button>
+                </form>
+
+                <p class="x4-caption text-center mt-6" style="color: var(--x4-ink-mute);">
+                    Don't have an account?
+                    <a href="{{ route('vendor.request.form') }}" class="x4-link x4-link-accent" style="color: var(--x4-violet); font-weight: 500;">Apply to become a vendor</a>
+                </p>
+            </div>
+            </x-storefront.reveal>
+
+            <div class="text-center mt-6">
+                <a href="{{ route('storefront.index') }}" class="x4-caption x4-link x4-link-accent inline-flex items-center gap-2" style="color: var(--x4-ink-mute); font-weight: 500;">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
                     </svg>
                     Back to homepage
                 </a>
             </div>
         </div>
-    </div>
+    </section>
+</div>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const toggle = document.getElementById('toggle_password_visibility');
-            const password = document.getElementById('password');
-            const eye = document.getElementById('icon_eye');
-            const eyeOff = document.getElementById('icon_eye_off');
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const toggle = document.getElementById('toggle_password_visibility');
+        const password = document.getElementById('password');
+        const eye = document.getElementById('icon_eye');
+        const eyeOff = document.getElementById('icon_eye_off');
 
-            if (!toggle || !password || !eye || !eyeOff) return;
+        if (!toggle || !password || !eye || !eyeOff) return;
 
-            const setVisible = (visible) => {
-                password.type = visible ? 'text' : 'password';
-                eye.classList.toggle('hidden', visible);
-                eyeOff.classList.toggle('hidden', !visible);
-                toggle.setAttribute('aria-label', visible ? 'Hide password' : 'Show password');
-            };
+        const setVisible = (visible) => {
+            password.type = visible ? 'text' : 'password';
+            eye.classList.toggle('hidden', visible);
+            eyeOff.classList.toggle('hidden', !visible);
+            toggle.setAttribute('aria-label', visible ? 'Hide password' : 'Show password');
+        };
 
-            // default: hidden
-            setVisible(false);
+        // default: hidden
+        setVisible(false);
 
-            toggle.addEventListener('click', function () {
-                setVisible(password.type === 'password');
-            });
+        toggle.addEventListener('click', function () {
+            setVisible(password.type === 'password');
         });
-    </script>
-</body>
-</html>
+    });
+</script>
+@endsection
