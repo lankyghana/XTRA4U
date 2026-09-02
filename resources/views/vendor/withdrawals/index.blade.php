@@ -53,7 +53,7 @@
 
                             <div class="mt-6 flex items-center justify-end gap-3">
                                 <button type="button" data-close-modal class="px-4 py-2 rounded-lg border bg-white">Cancel</button>
-                                <button id="modal-topup-confirm" type="button" class="px-4 py-2 rounded-lg bg-purple-600 text-white">Confirm & Pay</button>
+                                <button id="modal-topup-confirm" type="button" class="px-4 py-2 rounded-lg bg-brand-violet text-white">Confirm & Pay</button>
                             </div>
 
                             <p id="modal-topup-feedback" class="mt-3 text-sm text-red-600" aria-live="polite"></p>
@@ -77,7 +77,7 @@
                         <div class="mx-auto mb-5" style="width:80px;height:80px;position:relative;">
                             <svg viewBox="0 0 80 80" class="absolute inset-0" style="width:80px;height:80px;">
                                 <circle cx="40" cy="40" r="36" fill="none" stroke="#e9d5ff" stroke-width="7"/>
-                                <circle id="success-ring" cx="40" cy="40" r="36" fill="none" stroke="#7c3aed" stroke-width="7"
+                                <circle id="success-ring" cx="40" cy="40" r="36" fill="none" stroke="#533afd" stroke-width="7"
                                         stroke-linecap="round"
                                         stroke-dasharray="226" stroke-dashoffset="226"
                                         style="transform:rotate(-90deg);transform-origin:center;transition:stroke-dashoffset 0.7s cubic-bezier(.4,0,.2,1) 0.15s;"/>
@@ -85,24 +85,24 @@
                             <!-- Checkmark icon -->
                             <div id="success-check" class="absolute inset-0 flex items-center justify-center"
                                  style="opacity:0;transform:scale(0.5);transition:opacity 0.3s ease 0.6s,transform 0.3s cubic-bezier(.34,1.56,.64,1) 0.6s;">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width:36px;height:36px;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="#533afd" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width:36px;height:36px;">
                                     <polyline points="20 6 9 17 4 12"/>
                                 </svg>
                             </div>
                         </div>
 
-                        <p class="text-sm font-semibold tracking-widest text-purple-500 uppercase mb-1">Deposit Successful</p>
+                        <p class="text-sm font-semibold tracking-widest text-violet-500 uppercase mb-1">Deposit Successful</p>
                         <h2 class="text-3xl font-extrabold text-gray-900 mb-1" id="success-amount-display">GHS 0.00</h2>
                         <p class="text-sm text-gray-500 mb-5">has been added to your wallet</p>
 
-                        <div class="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl px-5 py-4 mb-6 border border-purple-100">
-                            <p class="text-xs text-purple-600 font-medium mb-1">New Top-Up Balance</p>
-                            <p class="text-xl font-bold text-purple-900" id="success-balance-display">GHS —</p>
+                        <div class="bg-gradient-to-r from-violet-50 to-indigo-50 rounded-xl px-5 py-4 mb-6 border border-violet-100">
+                            <p class="text-xs text-violet-600 font-medium mb-1">New Top-Up Balance</p>
+                            <p class="text-xl font-bold text-violet-900" id="success-balance-display">GHS —</p>
                         </div>
 
                         <div class="flex flex-col gap-2">
                             <button id="deposit-success-close" type="button"
-                                class="w-full rounded-xl bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white font-semibold py-3 transition-colors">
+                                class="w-full rounded-xl bg-brand-violet hover:bg-brand-violet-deep active:bg-brand-violet-press text-white font-semibold py-3 transition-colors">
                                 Great, thanks! 🎉
                             </button>
                             <button type="button" onclick="window.location.href='?tab=topups'" 
@@ -130,7 +130,7 @@
                         canvas.width = window.innerWidth;
                         canvas.height = window.innerHeight;
                         const ctx = canvas.getContext('2d');
-                        const colors = ['#7c3aed','#a78bfa','#f472b6','#34d399','#fbbf24','#60a5fa','#f87171'];
+                        const colors = ['#533afd','#a78bfa','#f472b6','#34d399','#fbbf24','#60a5fa','#f87171'];
                         const pieces = Array.from({length: 90}, () => ({
                             x: Math.random() * canvas.width,
                             y: Math.random() * canvas.height * 0.3 - canvas.height * 0.2,
@@ -224,8 +224,8 @@
 
                         <div class="mt-4 md:mt-0 flex items-center gap-3">
                     <div class="flex items-center gap-2">
-                        <a id="quick-topups" href="?tab=topups" class="px-4 py-2 rounded-full text-sm font-medium {{ $activeTab === 'topups' ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 border border-gray-200 shadow-sm hover:shadow-md' }}">Top Ups</a>
-                        <a id="quick-withdrawals" href="?tab=withdrawals" class="px-4 py-2 rounded-full text-sm font-medium {{ $activeTab === 'withdrawals' ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 border border-gray-200 shadow-sm hover:shadow-md' }}">Withdrawals</a>
+                        <a id="quick-topups" href="?tab=topups" class="px-4 py-2 rounded-full text-sm font-medium {{ $activeTab === 'topups' ? 'bg-brand-violet text-white' : 'bg-white text-gray-700 border border-gray-200 shadow-sm hover:shadow-md' }}">Top Ups</a>
+                        <a id="quick-withdrawals" href="?tab=withdrawals" class="px-4 py-2 rounded-full text-sm font-medium {{ $activeTab === 'withdrawals' ? 'bg-brand-violet text-white' : 'bg-white text-gray-700 border border-gray-200 shadow-sm hover:shadow-md' }}">Withdrawals</a>
                     </div>
 
                     <a href="#history" class="text-sm text-gray-600 hidden md:inline">View History</a>
@@ -242,62 +242,62 @@
                 @endphp
 
                 <!-- Available Top-Ups Balance -->
-                <div class="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
+                <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
                     <div class="px-6 py-5">
-                        <p class="text-sm text-white font-medium">Available Top-Ups Balance</p>
-                        <p id="topups-balance" class="text-2xl font-bold text-white mt-2">GHS {{ number_format($totalTopups ?? 0, 2) }}</p>
-                        <p class="text-xs text-white mt-2">Unspent wallet top-ups (non-withdrawable).</p>
+                        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Available Top-Ups Balance</p>
+                        <p id="topups-balance" class="text-2xl font-bold text-gray-900 mt-2">GHS {{ number_format($totalTopups ?? 0, 2) }}</p>
+                        <p class="text-xs text-gray-400 mt-2">Unspent wallet top-ups (non-withdrawable).</p>
                     </div>
                 </div>
 
                 <!-- Total Top-Ups Spent -->
-                <div class="bg-gradient-to-br from-pink-500 to-pink-600 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
+                <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
                     <div class="px-6 py-5">
-                        <p class="text-sm text-white font-medium">Total Top-Ups Spent</p>
-                        <p class="text-2xl font-bold text-white mt-2">GHS {{ number_format($topupsSpent ?? 0, 2) }}</p>
-                        <p class="text-xs text-white mt-2">Amount used from top-ups to place orders.</p>
+                        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Total Top-Ups Spent</p>
+                        <p class="text-2xl font-bold text-gray-900 mt-2">GHS {{ number_format($topupsSpent ?? 0, 2) }}</p>
+                        <p class="text-xs text-gray-400 mt-2">Amount used from top-ups to place orders.</p>
                     </div>
                 </div>
 
                 <!-- Total Top-Up Orders Placed -->
-                <div class="bg-gradient-to-br from-green-400 to-emerald-500 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
+                <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
                     <div class="px-6 py-5">
-                        <p class="text-sm text-white font-medium">Top-Up Orders Placed</p>
-                        <p class="text-2xl font-bold text-white mt-2">{{ $topupOrdersCount ?? 0 }} {{ \Illuminate\Support\Str::plural('order', $topupOrdersCount ?? 0) }}</p>
-                        <p class="text-xs text-white mt-2">Total value: GHS {{ number_format($topupOrdersTotal ?? 0, 2) }}</p>
+                        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Top-Up Orders Placed</p>
+                        <p class="text-2xl font-bold text-gray-900 mt-2">{{ $topupOrdersCount ?? 0 }} {{ \Illuminate\Support\Str::plural('order', $topupOrdersCount ?? 0) }}</p>
+                        <p class="text-xs text-gray-400 mt-2">Total value: GHS {{ number_format($topupOrdersTotal ?? 0, 2) }}</p>
                     </div>
                 </div>
             @else
                 <!-- Withdrawable Balance Card -->
-                <div class="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
+                <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
                     <div class="px-6 py-5">
-                        <p class="text-sm text-white font-medium">Withdrawable Balance</p>
-                        <p id="withdrawable-balance" class="text-2xl font-bold text-white mt-2">GHS {{ number_format($withdrawableBalance, 2) }}</p>
-                        <p class="text-xs text-white mt-2">Available wallet balance.</p>
+                        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Withdrawable Balance</p>
+                        <p id="withdrawable-balance" class="text-2xl font-bold text-gray-900 mt-2">GHS {{ number_format($withdrawableBalance, 2) }}</p>
+                        <p class="text-xs text-gray-400 mt-2">Available wallet balance.</p>
                     </div>
                 </div>
 
                 <!-- Processing Requests Card -->
-                <div class="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
+                <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
                     <div class="px-6 py-5">
-                        <p class="text-sm text-white font-medium">Processing Requests</p>
-                        <p class="text-2xl font-bold text-white mt-2">GHS {{ number_format($pendingTotal, 2) }}</p>
-                        <p class="text-xs text-white mt-2">Being processed automatically.</p>
+                        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Processing Requests</p>
+                        <p class="text-2xl font-bold text-gray-900 mt-2">GHS {{ number_format($pendingTotal, 2) }}</p>
+                        <p class="text-xs text-gray-400 mt-2">Being processed automatically.</p>
                     </div>
                 </div>
 
                 <!-- Approved To Date Card (display-only) -->
-                <div class="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-200">
+                <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
                     <div class="px-6 py-5">
-                        <p class="text-sm text-white font-medium">Approved To Date</p>
-                        <p id="approved-total" class="text-2xl font-bold text-white mt-2">GHS {{ number_format($approvedTotal ?? 0.0, 2) }}</p>
-                        <p class="text-xs text-white mt-2">Total paid out successfully.</p>
+                        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Approved To Date</p>
+                        <p id="approved-total" class="text-2xl font-bold text-gray-900 mt-2">GHS {{ number_format($approvedTotal ?? 0.0, 2) }}</p>
+                        <p class="text-xs text-gray-400 mt-2">Total paid out successfully.</p>
                     </div>
                 </div>
             @endif
         </div>
 
-        <div class="bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl shadow-lg border border-purple-100">
+        <div class="bg-white rounded-xl border border-gray-200">
             <div class="px-6 py-6">
                 @if ($activeTab === 'topups')
                     <div id="panel-topups" class="mb-4 w-full max-w-full overflow-x-hidden box-border">
@@ -322,7 +322,7 @@
                                     <form id="wallet-topup-form" class="w-full" onsubmit="return false;">
                                         <label for="wallet-topup-amount" class="block text-sm font-medium text-gray-700">Amount (GHS)</label>
                                         <div class="mt-2">
-                                            <input aria-label="Top up amount" type="number" step="0.01" min="1" name="amount" id="wallet-topup-amount" inputmode="decimal" placeholder="50.00" class="w-full rounded-lg border border-gray-300 px-4 py-3 focus:ring-2 focus:ring-purple-200 focus:border-purple-500 box-border" />
+                                            <input aria-label="Top up amount" type="number" step="0.01" min="1" name="amount" id="wallet-topup-amount" inputmode="decimal" placeholder="50.00" class="w-full rounded-lg border border-gray-300 px-4 py-3 focus:ring-2 focus:ring-violet-200 focus:border-violet-500 box-border" />
                                         </div>
 
                                         <!-- Quick amount chips -->
@@ -335,12 +335,12 @@
                                         <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                                             <div>
                                                 <label for="wallet-topup-phone" class="block text-sm font-medium text-gray-700">MoMo number</label>
-                                                <input id="wallet-topup-phone" aria-label="Payer MoMo number" type="tel" name="payer_phone" placeholder="e.g. 0244123456" class="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 focus:ring-2 focus:ring-purple-200 focus:border-purple-500" />
+                                                <input id="wallet-topup-phone" aria-label="Payer MoMo number" type="tel" name="payer_phone" placeholder="e.g. 0244123456" class="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 focus:ring-2 focus:ring-violet-200 focus:border-violet-500" />
                                                 <p class="text-xs text-gray-400 mt-1">Enter the number that will approve the payment prompt.</p>
                                             </div>
                                             <div>
                                                 <label for="wallet-topup-network" class="block text-sm font-medium text-gray-700">Network</label>
-                                                <select id="wallet-topup-network" name="network" class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-3 focus:ring-2 focus:ring-purple-200 focus:border-purple-500">
+                                                <select id="wallet-topup-network" name="network" class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-3 focus:ring-2 focus:ring-violet-200 focus:border-violet-500">
                                                     <option value="">Auto-detect network</option>
                                                     <option value="MTN">MTN</option>
                                                     <option value="TELECEL">TELECEL (Vodafone)</option>
@@ -351,7 +351,7 @@
                                         </div>
 
                                         <div class="mt-4 flex items-center justify-end">
-                                            <button type="button" id="wallet-topup-submit" class="w-full sm:w-auto rounded-lg bg-purple-600 text-white px-4 py-3 inline-flex items-center justify-center disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap">
+                                            <button type="button" id="wallet-topup-submit" class="w-full sm:w-auto rounded-lg bg-brand-violet text-white px-4 py-3 inline-flex items-center justify-center disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap">
                                                 <svg id="wallet-topup-button-spinner" class="w-4 h-4 animate-spin hidden mr-2" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
                                                 <span id="wallet-topup-button-text">Top Up Wallet</span>
                                             </button>
@@ -464,7 +464,7 @@
                                                     const summary = await refreshWalletSummary(false);
                                                     amountInput.value = '';
                                                     if (gatewayHidden) gatewayHidden.value = '';
-                                                    gatewayButtons.forEach(b => b.classList.remove('ring','ring-2','ring-purple-400'));
+                                                    gatewayButtons.forEach(b => b.classList.remove('ring','ring-2','ring-violet-400'));
                                                     showDepositSuccessModal(amount, summary?.topupBalance);
                                                 } else if (status === 'failed') {
                                                     showMessage('Top-up failed. Please try again or contact support.', 'error');
@@ -492,7 +492,7 @@
                                                 const summary = await refreshWalletSummary(false);
                                                 amountInput.value = '';
                                                 if (gatewayHidden) gatewayHidden.value = '';
-                                                gatewayButtons.forEach(b => b.classList.remove('ring','ring-2','ring-purple-400'));
+                                                gatewayButtons.forEach(b => b.classList.remove('ring','ring-2','ring-violet-400'));
                                                 showDepositSuccessModal(amount, summary?.topupBalance);
                                             }
                                             setLoading(false);
@@ -553,7 +553,7 @@
                                                     const summary = await refreshWalletSummary(false);
                                                     amountInput.value = '';
                                                     if (gatewayHidden) gatewayHidden.value = '';
-                                                    gatewayButtons.forEach(b => b.classList.remove('ring','ring-2','ring-purple-400'));
+                                                    gatewayButtons.forEach(b => b.classList.remove('ring','ring-2','ring-violet-400'));
                                                     showDepositSuccessModal(amount, summary?.topupBalance);
                                                     return;
                                                 }
@@ -582,8 +582,8 @@
                                 // Gateway selection highlighting (if gateways present)
                                 gatewayButtons.forEach(b => {
                                     b.addEventListener('click', () => {
-                                        gatewayButtons.forEach(x => x.classList.remove('ring','ring-2','ring-purple-400'));
-                                        b.classList.add('ring','ring-2','ring-purple-400');
+                                        gatewayButtons.forEach(x => x.classList.remove('ring','ring-2','ring-violet-400'));
+                                        b.classList.add('ring','ring-2','ring-violet-400');
                                         if (gatewayHidden) gatewayHidden.value = b.dataset.key;
                                     });
                                 });
@@ -728,7 +728,7 @@
                                     name="momo_number"
                                     id="momo_number"
                                     value="{{ old('momo_number') }}"
-                                    class="block w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500"
+                                    class="block w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500"
                                     placeholder="0241234567"
                                     pattern="0[235][0-9]{8}"
                                     maxlength="10"
@@ -785,7 +785,7 @@
                             <label for="momo_account_type_select" class="block text-sm font-medium text-gray-700 mb-2">Account Type (optional)</label>
                             <select
                                 id="momo_account_type_select"
-                                class="block w-full px-4 py-3 rounded-lg border border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500"
+                                class="block w-full px-4 py-3 rounded-lg border border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500"
                                 {{ $withdrawableBalance <= 0 ? 'disabled' : '' }}
                             >
                                 <option value="subscriber" {{ old('momo_account_type', 'subscriber') === 'subscriber' ? 'selected' : '' }}>Subscriber</option>
@@ -813,7 +813,7 @@
                                     name="withdraw_amount"
                                     id="withdraw_amount"
                                     value="{{ old('withdraw_amount') }}"
-                                    class="block w-full pl-8 pr-4 py-3 rounded-lg border border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500"
+                                    class="block w-full pl-8 pr-4 py-3 rounded-lg border border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500"
                                     placeholder="250.00"
                                     required
                                     {{ $withdrawableBalance <= 0 ? 'disabled' : '' }}
@@ -833,7 +833,7 @@
                             id="notes"
                             name="notes"
                             rows="2"
-                            class="block w-full rounded-lg border border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 px-4 py-3"
+                            class="block w-full rounded-lg border border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 px-4 py-3"
                             placeholder="Any additional instructions..."
                         >{{ old('notes') }}</textarea>
                         @error('notes')
@@ -843,7 +843,7 @@
 
                     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-2 border-t border-gray-200">
                         <p class="text-sm text-gray-600">
-                            Available balance: <strong class="text-purple-600">GHS {{ number_format($withdrawableBalance, 2) }}</strong>
+                            Available balance: <strong class="text-violet-600">GHS {{ number_format($withdrawableBalance, 2) }}</strong>
                         </p>
                         <x-button type="submit" variant="primary" class="justify-center" :disabled="$withdrawableBalance <= 0">
                             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -857,7 +857,7 @@
         </div>
         @endif
 
-        <div class="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg border border-gray-200">
+        <div class="bg-white rounded-xl border border-gray-200">
             <div class="px-6 py-6">
                 <div class="flex items-center justify-between mb-6">
                     <div>

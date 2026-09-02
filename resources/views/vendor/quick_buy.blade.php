@@ -1,7 +1,17 @@
-@extends('layouts.app')
+@extends('layouts.vendor')
 
-@section('title', 'Quick Buy - Vendor Storefront')
+@section('title', 'Quick Buy - XTRA4U')
 
+{{--
+    Visual redesign only — the entire quickBuy() Alpine component (all
+    three <script> blocks below, and its x-data='quickBuy(@json(...))'
+    attribute, matched elsewhere by `[x-data^="quickBuy("]`), the purchase
+    form's action/hidden inputs/field names, and every route() call are
+    byte-for-byte unchanged. Now wrapped in <x-vendor-layout> so this page
+    shares the sidebar/topbar with the rest of the vendor dashboard instead
+    of rendering as a standalone storefront-style page — $vendor was
+    already passed by the controller, so no backend change was needed.
+--}}
 @section('content')
 @php
     // group products by their category for the quick buy UI
@@ -67,67 +77,62 @@
     $categories = $globalCategories->concat($vendorExtras)->values();
 @endphp
 
-<div class="w-full max-w-full md:max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10" x-data='quickBuy(@json($catalog), @json($categories))'>
-    {{-- Hero section --}}
-    <div class="w-full">
-        <div class="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b border-gray-100">
-            <div class="bg-white rounded-2xl shadow-sm p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div class="flex-1">
-                <p class="text-xs uppercase tracking-[0.35em] text-purple-500">Quick Buy (Wallet)</p>
-                <h1 class="mt-1 text-2xl sm:text-3xl font-semibold text-gray-900">Fast wallet-only orders</h1>
-                <p class="text-sm text-gray-500 mt-2">Base price + 2% platform fee • Internal vendor flow</p>
-            </div>
+<x-vendor-layout :vendor="$vendor" title="Quick Buy" subtitle="Fast wallet-only orders — base price + 2% platform fee" active="dashboard">
+<div class="w-full" x-data='quickBuy(@json($catalog), @json($categories))'>
+    {{-- Header: wallet balance --}}
+    <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+        <div class="flex-1">
+            <p class="text-xs font-semibold text-brand-violet uppercase tracking-wide">Quick Buy (Wallet)</p>
+            <p class="text-sm text-gray-500 mt-1">Internal vendor flow — not shown to customers.</p>
+        </div>
 
-            <div class="flex-shrink-0 w-full md:w-auto">
-                <div class="w-full sm:max-w-xs">
-                    <div class="rounded-2xl px-4 py-3 bg-white border shadow-sm">
-                        <div class="flex items-center justify-between gap-4">
-                            <div>
-                                <p class="text-xs text-gray-500">Available Wallet Balance</p>
-                                <p class="text-2xl font-bold mt-1 transition-colors duration-200" :class="balanceColorClass()" x-text="formatPrice(vendorBalance)">GHS 0.00</p>
-                                <p class="text-xs text-gray-400 mt-1">Used only for wallet orders</p>
-                            </div>
-                            <div class="text-right">
-                                <p class="text-xs text-gray-400">Status</p>
-                                <div class="mt-1 text-sm font-semibold" :class="balanceColorClass(true)"> <span x-text="balanceLabel()">—</span></div>
-                            </div>
+        <div class="flex-shrink-0 w-full md:w-auto">
+            <div class="w-full sm:max-w-xs">
+                <div class="rounded-xl px-4 py-3 bg-gray-50 border border-gray-100">
+                    <div class="flex items-center justify-between gap-4">
+                        <div>
+                            <p class="text-xs text-gray-500">Available Wallet Balance</p>
+                            <p class="text-2xl font-bold mt-1 transition-colors duration-200" :class="balanceColorClass()" x-text="formatPrice(vendorBalance)">GHS 0.00</p>
+                            <p class="text-xs text-gray-400 mt-1">Used only for wallet orders</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xs text-gray-400">Status</p>
+                            <div class="mt-1 text-sm font-semibold" :class="balanceColorClass(true)"> <span x-text="balanceLabel()">—</span></div>
                         </div>
                     </div>
-                    <div class="mt-3 flex items-center justify-end gap-3">
-                        <a href="{{ route('vendor.withdrawals.index', ['tab' => 'topups']) }}" class="text-sm font-semibold text-purple-600 topup-open">Top up wallet</a>
-                    </div>
+                </div>
+                <div class="mt-3 flex items-center justify-end gap-3">
+                    <a href="{{ route('vendor.withdrawals.index', ['tab' => 'topups']) }}" class="text-sm font-semibold text-brand-violet topup-open">Top up wallet</a>
                 </div>
             </div>
-            </div>
         </div>
-        <div aria-hidden="true" class="h-1 md:h-2"></div>
     </div>
 
     {{-- Track order card --}}
-    <div class="mt-4" x-data="{ open: false }">
-        <button type="button" @click="open = !open" class="w-full flex items-center justify-between bg-purple-50 border border-purple-100 rounded-3xl px-5 py-3 text-sm font-medium text-purple-800">
+    <div class="mb-4" x-data="{ open: false }">
+        <button type="button" @click="open = !open" class="w-full flex items-center justify-between bg-violet-50 border border-violet-100 rounded-xl px-5 py-3 text-sm font-medium text-brand-violet-deep">
             <div class="flex items-center gap-3">
-                <span class="inline-flex items-center justify-center w-8 h-8 rounded-2xl bg-white text-purple-600">🔔</span>
+                <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white text-brand-violet">🔔</span>
                 <span>Track Your Order</span>
             </div>
             <svg class="w-4 h-4 transition-transform" :class="open ? 'rotate-180' : ''" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.084l3.71-3.854a.75.75 0 111.08 1.04l-4.25 4.417a.75.75 0 01-1.08 0L5.25 8.27a.75.75 0 01-.02-1.06z" clip-rule="evenodd"/></svg>
         </button>
-        <div x-show="open" x-collapse x-cloak class="mt-3 bg-white border border-purple-100 rounded-3xl p-5 shadow-sm">
+        <div x-show="open" x-collapse x-cloak class="mt-3 bg-white border border-gray-100 rounded-xl p-5 shadow-sm">
             <p class="text-sm text-gray-600">Need to confirm a client’s delivery? Use the public tracker or visit the Orders tab in your dashboard.</p>
             <div class="mt-4 flex flex-wrap gap-3 text-sm">
-                <a href="{{ route('order.status') }}" class="inline-flex items-center gap-2 rounded-2xl bg-purple-600 text-white px-4 py-2 font-medium">Open Tracker →</a>
-                <a href="{{ route('vendor.orders.index') }}" class="inline-flex items-center gap-2 rounded-2xl border border-gray-200 px-4 py-2 text-gray-700">Vendor Orders</a>
+                <a href="{{ route('order.status') }}" class="inline-flex items-center gap-2 rounded-lg bg-brand-violet text-white px-4 py-2 font-medium hover:bg-brand-violet-deep transition-colors">Open Tracker →</a>
+                <a href="{{ route('vendor.orders.index') }}" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">Vendor Orders</a>
             </div>
         </div>
     </div>
 
     {{-- Category selector: compact mobile scroller and full desktop grid --}}
-    <div class="mt-3 block lg:hidden">
-        <div class="bg-white rounded-2xl p-4 shadow-sm">
+    <div class="mb-4 block lg:hidden">
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
             <div class="overflow-x-auto no-scrollbar -mx-3 px-3">
                 <div class="flex gap-3 items-center">
                     <template x-for="(category, index) in categories" :key="category.value">
-                        <button type="button" @click="selectCategory(index)" :class="index === categoryIndex ? 'bg-purple-50 border-purple-300 text-purple-700' : 'bg-white border-gray-100 text-gray-700'" class="flex-shrink-0 rounded-full border px-5 py-2.5 text-sm font-semibold whitespace-nowrap min-h-[44px]">
+                        <button type="button" @click="selectCategory(index)" :class="index === categoryIndex ? 'bg-violet-50 border-violet-300 text-brand-violet-deep' : 'bg-white border-gray-100 text-gray-700'" class="flex-shrink-0 rounded-full border px-5 py-2.5 text-sm font-semibold whitespace-nowrap min-h-[44px]">
                             <span x-text="category.label"></span>
                         </button>
                     </template>
@@ -137,12 +142,12 @@
     </div>
 
     {{-- full grid for lg+ screens --}}
-    <div class="mt-4 hidden lg:block bg-white border border-gray-100 rounded-3xl shadow-sm p-6">
+    <div class="mb-4 hidden lg:block bg-white border border-gray-100 rounded-xl shadow-sm p-6">
         <p class="text-xs uppercase tracking-wide text-gray-500">Category Selector</p>
-        <h2 class="text-2xl font-semibold text-gray-900 mt-1">Choose a category</h2>
+        <h2 class="text-xl font-bold text-gray-900 mt-1">Choose a category</h2>
         <div class="mt-6 grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             <template x-for="(category, index) in categories" :key="category.value">
-                <button type="button" class="w-full rounded-3xl border px-4 py-4 text-left font-medium text-gray-700 transition" :class="index === categoryIndex ? 'bg-purple-50 border-purple-300 text-purple-700 shadow' : 'border-gray-100 hover:border-purple-100 hover:text-purple-600'" @click="selectCategory(index)">
+                <button type="button" class="w-full rounded-xl border px-4 py-4 text-left font-medium text-gray-700 transition" :class="index === categoryIndex ? 'bg-violet-50 border-violet-300 text-brand-violet-deep shadow-sm' : 'border-gray-100 hover:border-violet-100 hover:text-brand-violet'" @click="selectCategory(index)">
                     <span x-text="category.label"></span>
                     <p class="mt-2 text-xs text-gray-400">&nbsp;</p>
                 </button>
@@ -151,12 +156,12 @@
     </div>
 
     {{-- Product + checkout columns --}}
-    <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div class="lg:col-span-2 space-y-4 w-full">
             <div class="flex items-center justify-between">
                 <div>
                     <p class="text-xs uppercase tracking-wide text-gray-500">Products</p>
-                    <h3 class="text-xl font-semibold text-gray-900" x-text="selectedCategory()?.label"></h3>
+                    <h3 class="text-xl font-bold text-gray-900" x-text="selectedCategory()?.label"></h3>
                     <p class="text-xs text-gray-500 mt-1" x-show="selectedCategory()">Choose a service first to see matching products.</p>
                 </div>
                 <div class="flex items-center gap-4">
@@ -165,11 +170,11 @@
             </div>
 
             {{-- Service chooser --}}
-            <div class="bg-white border border-gray-100 rounded-3xl shadow-sm p-4" x-show="selectedCategory()" x-cloak>
+            <div class="bg-white border border-gray-100 rounded-xl shadow-sm p-4" x-show="selectedCategory()" x-cloak>
                 <p class="text-xs uppercase tracking-wide text-gray-500">Choose Service</p>
                 <div class="mt-3 space-y-3">
                     <template x-for="service in servicesForSelectedCategory()" :key="service.value">
-                        <button type="button" @click="selectService(service.value)" :class="serviceSelected(service.value) ? 'border-purple-400 bg-purple-50 text-purple-800 shadow-sm' : 'border-gray-200 bg-white text-gray-800 hover:border-purple-100'" class="w-full rounded-2xl border px-4 py-3 text-left font-medium flex items-center gap-3">
+                        <button type="button" @click="selectService(service.value)" :class="serviceSelected(service.value) ? 'border-violet-400 bg-violet-50 text-brand-violet-deep shadow-sm' : 'border-gray-200 bg-white text-gray-800 hover:border-violet-100'" class="w-full rounded-xl border px-4 py-3 text-left font-medium flex items-center gap-3">
                             <img :src="service.logo || '/images/default-provider.png'" alt="" class="w-12 h-12 rounded-md object-cover">
                             <span class="text-lg" x-text="service.label"></span>
                         </button>
@@ -182,20 +187,20 @@
 
             <div class="space-y-3">
                 <template x-if="!serviceFilter">
-                    <div class="text-center text-gray-500 border border-dashed border-gray-200 rounded-3xl py-10">Select a service to view products.</div>
+                    <div class="text-center text-gray-500 border border-dashed border-gray-200 rounded-xl py-10">Select a service to view products.</div>
                 </template>
                 <template x-if="serviceFilter && filteredProducts().length === 0">
-                    <div class="text-center text-gray-500 border border-dashed border-gray-200 rounded-3xl py-10">No products yet under this service.</div>
+                    <div class="text-center text-gray-500 border border-dashed border-gray-200 rounded-xl py-10">No products yet under this service.</div>
                 </template>
 
                 <template x-if="packageLocked && selectedProduct()">
                     <div class="flex flex-col gap-3">
                         <div class="flex items-center justify-between">
                             <h4 class="text-sm font-semibold text-gray-700">Selected package</h4>
-                            <button type="button" class="text-sm font-medium text-purple-700 hover:text-purple-800" @click="unlockPackageSelection()">Change package</button>
+                            <button type="button" class="text-sm font-medium text-brand-violet-deep hover:text-brand-violet-deep" @click="unlockPackageSelection()">Change package</button>
                         </div>
                         <div>
-                            <button type="button" role="button" aria-pressed="true" class="w-full text-left bg-purple-50 border border-purple-300 rounded-2xl p-5 shadow-sm flex flex-col gap-3 focus:outline-none focus:ring-4 focus:ring-purple-100">
+                            <button type="button" role="button" aria-pressed="true" class="w-full text-left bg-violet-50 border border-violet-300 rounded-xl p-5 shadow-sm flex flex-col gap-3 focus:outline-none focus:ring-4 focus:ring-violet-100">
                                 <div class="flex items-start gap-4">
                                     <img :src="selectedProduct().logo || '/images/default-provider.png'" alt="" class="w-12 h-12 rounded-md object-cover flex-shrink-0">
                                     <div class="flex-1 flex justify-between items-start">
@@ -207,7 +212,7 @@
                                             <div class="text-sm text-gray-500 mt-1" x-text="sizeLabel(selectedProduct())"></div>
                                         </div>
                                         <div class="text-right ml-4">
-                                            <div class="text-lg font-bold text-purple-600" x-text="formatPrice(selectedProduct().base_price)"></div>
+                                            <div class="text-lg font-bold text-brand-violet" x-text="formatPrice(selectedProduct().base_price)"></div>
                                             <div class="text-sm text-green-600 mt-1" x-text="selectedProduct().validity || ''"></div>
                                         </div>
                                     </div>
@@ -221,7 +226,7 @@
                     <div class="space-y-3">
                         <template x-for="product in filteredProducts()" :key="product.id">
                             <div>
-                                <button type="button" role="button" :aria-pressed="String(productId) === String(product.id) ? 'true' : 'false'" class="w-full text-left bg-white border rounded-2xl p-5 shadow-sm hover:shadow-md transition flex flex-col gap-3 focus:outline-none focus:ring-4 focus:ring-purple-100" :class="String(productId) === String(product.id) ? 'border-purple-400 ring-2 ring-purple-200 bg-purple-50' : 'border-gray-100'" @click="selectProduct(product.id)">
+                                <button type="button" role="button" :aria-pressed="String(productId) === String(product.id) ? 'true' : 'false'" class="w-full text-left bg-white border rounded-xl p-5 shadow-sm hover:shadow-md transition flex flex-col gap-3 focus:outline-none focus:ring-4 focus:ring-violet-100" :class="String(productId) === String(product.id) ? 'border-violet-400 ring-2 ring-violet-200 bg-violet-50' : 'border-gray-100'" @click="selectProduct(product.id)">
                                     <div class="flex items-start gap-4">
                                         <img :src="product.logo || '/images/default-provider.png'" alt="" class="w-12 h-12 rounded-md object-cover flex-shrink-0">
                                         <div class="flex-1 flex justify-between items-start">
@@ -233,7 +238,7 @@
                                                 <div class="text-sm text-gray-500 mt-1" x-text="sizeLabel(product)"></div>
                                             </div>
                                             <div class="text-right ml-4">
-                                                <div class="text-lg font-bold text-purple-600" x-text="formatPrice(product.base_price)"></div>
+                                                <div class="text-lg font-bold text-brand-violet" x-text="formatPrice(product.base_price)"></div>
                                                 <div class="text-sm text-green-600 mt-1" x-text="product.validity || ''"></div>
                                             </div>
                                         </div>
@@ -246,12 +251,12 @@
             </div>
         </div>
 
-        <aside x-cloak x-show="productId" x-transition.opacity.duration.200ms class="bg-white border border-gray-100 rounded-3xl shadow-sm p-6 order-last lg:order-none w-full lg:sticky lg:top-20">
+        <aside x-cloak x-show="productId" x-transition.opacity.duration.200ms class="bg-white border border-gray-100 rounded-xl shadow-sm p-6 order-last lg:order-none w-full lg:sticky lg:top-20">
             <p class="text-xs uppercase tracking-wide text-gray-500">Wallet Checkout</p>
-            <h3 class="text-2xl font-semibold text-gray-900 mt-2">Quick Buy order</h3>
+            <h3 class="text-xl font-bold text-gray-900 mt-2">Quick Buy order</h3>
             <p class="text-sm text-gray-500 mt-2">Wallet-only purchases debit the base price plus 2% platform fee.</p>
 
-            <div class="mt-6 bg-gray-50 rounded-2xl p-4 text-sm text-gray-700">
+            <div class="mt-6 bg-gray-50 rounded-xl p-4 text-sm text-gray-700">
                 <div class="grid grid-cols-2 gap-2 items-center">
                     <div>
                         <p class="text-xs text-gray-500">Selected product</p>
@@ -259,7 +264,7 @@
                     </div>
                     <div class="text-right">
                         <p class="text-xs text-gray-500">Base</p>
-                        <p class="font-semibold text-purple-600" x-text="formatPrice(selectedBasePrice())">GHS 0.00</p>
+                        <p class="font-semibold text-brand-violet" x-text="formatPrice(selectedBasePrice())">GHS 0.00</p>
                     </div>
                 </div>
 
@@ -283,19 +288,19 @@
 
                 <div>
                     <label for="recipient_phone" class="text-sm font-medium text-gray-700">Recipient phone</label>
-                    <input id="recipient_phone" aria-label="Recipient phone number" type="tel" name="recipient_phone_number" x-model="recipient" required placeholder="e.g. 0244 123 456" class="mt-2 w-full rounded-2xl border border-gray-200 focus:ring-2 focus:ring-purple-500 px-3 py-3 text-sm" />
+                    <input id="recipient_phone" aria-label="Recipient phone number" type="tel" name="recipient_phone_number" x-model="recipient" required placeholder="e.g. 0244 123 456" class="mt-2 w-full rounded-2xl border border-gray-200 focus:ring-2 focus:ring-violet-500 px-3 py-3 text-sm" />
                     <p class="mt-2 text-xs text-gray-500">This is the number that will receive the bundle.</p>
                 </div>
 
                 <div x-cloak x-show="paymentMethod !== 'wallet'" x-transition>
                     <label class="text-sm font-medium text-gray-700">Payer MoMo number</label>
-                    <input type="tel" name="mobile_money_number" x-model="momo" placeholder="Same or alternate MoMo" class="mt-2 w-full rounded-2xl border border-gray-200 focus:ring-2 focus:ring-purple-500 px-3 py-3 text-sm" />
+                    <input type="tel" name="mobile_money_number" x-model="momo" placeholder="Same or alternate MoMo" class="mt-2 w-full rounded-2xl border border-gray-200 focus:ring-2 focus:ring-violet-500 px-3 py-3 text-sm" />
                 </div>
 
                 <div class="flex gap-2 items-center">
                     <label class="text-sm font-medium text-gray-700 mr-2">Payment</label>
                     <div class="flex gap-2">
-                        <button type="button" @click.prevent="paymentMethod='wallet'" :class="paymentMethod==='wallet' ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 border'" class="px-3 py-2 rounded-2xl border">Wallet</button>                    </div>
+                        <button type="button" @click.prevent="paymentMethod='wallet'" :class="paymentMethod==='wallet' ? 'bg-brand-violet text-white' : 'bg-white text-gray-700 border'" class="px-3 py-2 rounded-2xl border">Wallet</button>                    </div>
                 </div>
 
                 <div class="rounded-2xl border border-blue-100 bg-blue-50 text-blue-800 text-sm p-4">
@@ -309,28 +314,19 @@
                     </div>
                 </div>
 
-                <button type="submit" class="w-full rounded-2xl bg-purple-600 text-white font-semibold py-4 hover:bg-purple-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-3 text-lg" :disabled="!canPlaceOrder() || submitting" aria-disabled="{{ 'false' }}">
+                <button type="submit" class="w-full rounded-2xl bg-brand-violet text-white font-semibold py-4 hover:bg-brand-violet-deep disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-3 text-lg" :disabled="!canPlaceOrder() || submitting" aria-disabled="{{ 'false' }}">
                     <svg x-show="submitting" class="w-5 h-5 animate-spin text-white" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.2" stroke-width="4"/><path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>
                     <span x-text="submitting ? 'Processing…' : (productId ? (paymentMethod === 'wallet' ? 'Place wallet order' : 'Proceed to payment') : 'Select a product')">Select a product</span>
                 </button>
                 <div class="mt-2 text-sm" x-show="paymentMethod === 'wallet' && selectedTotalCharge() > vendorBalance">
                     <span class="text-red-600">Insufficient balance.</span>
-                    <a href="{{ route('vendor.withdrawals.index', ['tab' => 'topups']) }}" class="text-purple-600 font-semibold ml-2">Top up wallet</a>
+                    <a href="{{ route('vendor.withdrawals.index', ['tab' => 'topups']) }}" class="text-brand-violet font-semibold ml-2">Top up wallet</a>
                 </div>
             </form>
-
-            
         </aside>
     </div>
-
-    <div class="mt-10 flex items-center justify-between text-xs text-gray-400">
-        <a href="{{ route('vendor.dashboard') }}" class="inline-flex items-center gap-2 text-purple-600 font-medium">
-            <svg class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.293 15.707a1 1 0 010-1.414L15.586 11H4a1 1 0 110-2h11.586l-3.293-3.293a1 1 0 111.414-1.414l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
-            Back to dashboard
-        </a>
-        <span>XTRA4U Vendor Experience</span>
-    </div>
 </div>
+</x-vendor-layout>
 
 <script>
 document.addEventListener('alpine:init', () => {

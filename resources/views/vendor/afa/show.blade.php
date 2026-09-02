@@ -6,7 +6,7 @@
 <x-vendor-layout :vendor="$vendor" title="AFA Registration" subtitle="Registration #{{ $registration->reference }}" active="afa">
     <div class="space-y-6">
         @if(session('success'))
-            <div class="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg shadow-md">
+            <div class="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-xl">
                 <div class="flex items-center">
                     <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
@@ -17,7 +17,7 @@
         @endif
 
         <!-- Back Button -->
-        <a href="{{ route('vendor.afa.index') }}" class="inline-flex items-center text-gray-600 hover:text-brand-deep-blue transition-colors">
+        <a href="{{ route('vendor.afa.index') }}" class="inline-flex items-center text-gray-600 hover:text-brand-violet transition-colors">
             <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
             </svg>
@@ -26,17 +26,17 @@
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- Main Details Card -->
-            <div class="lg:col-span-2 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-                <div class="bg-gradient-to-r from-green-500 to-green-600 px-6 py-4">
+            <div class="lg:col-span-2 bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100">
                     <div class="flex items-center justify-between">
                         <div>
-                            <h2 class="text-xl font-bold text-white">{{ $registration->full_name }}</h2>
+                            <h2 class="text-lg font-semibold text-gray-900">{{ $registration->full_name }}</h2>
                             <div class="flex items-center gap-2 mt-1">
-                                <p class="text-green-100 font-mono">{{ $registration->reference }}</p>
+                                <p class="text-sm text-gray-500 font-mono">{{ $registration->reference }}</p>
                                 @if($registration->reseller_vendor_id)
                                     @if($registration->reseller_vendor_id == $vendor->id)
                                         {{-- Current vendor is the reseller --}}
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-white/30 text-white">
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-brand-violet-soft text-brand-violet-deep">
                                             <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
                                             </svg>
@@ -44,7 +44,7 @@
                                         </span>
                                     @else
                                         {{-- Current vendor is the provider --}}
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-white/30 text-white">
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-brand-violet-soft text-brand-violet-deep">
                                             <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
                                             </svg>
@@ -52,7 +52,7 @@
                                         </span>
                                     @endif
                                 @else
-                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-white/30 text-white">
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
                                         <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                                         </svg>
@@ -61,7 +61,7 @@
                                 @endif
                             </div>
                         </div>
-                        <span id="afa-header-status-badge" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-white/20 text-white backdrop-blur-sm">
+                        <span id="afa-header-status-badge" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-brand-violet-soft text-brand-violet-deep">
                             {{ $registration->status_label }}
                         </span>
                     </div>
@@ -163,7 +163,7 @@
                                     @csrf
                                     @method('PATCH')
                                     
-                                    <select name="status" class="w-full border-gray-300 rounded-lg focus:ring-brand-bright-blue focus:border-brand-bright-blue">
+                                    <select name="status" class="w-full border-gray-300 rounded-lg focus:ring-brand-violet-deep focus:border-brand-violet-deep">
                                         <option value="">Change Status</option>
                                         @if($registration->status === 'pending')
                                             <option value="processing">Mark as Processing</option>
@@ -176,13 +176,13 @@
                                         @endif
                                     </select>
                                     
-                                    <button type="submit" class="w-full px-4 py-2 bg-brand-deep-blue text-white font-medium rounded-lg hover:bg-brand-bright-blue transition-colors">
+                                    <button type="submit" class="w-full px-4 py-2 bg-brand-violet text-white font-medium rounded-lg hover:bg-brand-violet-deep transition-colors">
                                         Update Status
                                     </button>
                                 </form>
                             @elseif($isResellerViewer)
                                 {{-- Reseller view: live-polling read-only status panel --}}
-                                <div class="rounded-lg border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-4" id="reseller-status-panel">
+                                <div class="rounded-lg border border-blue-200 bg-blue-50 p-4" id="reseller-status-panel">
                                     <div class="flex items-start gap-3">
                                         <div class="flex-shrink-0 mt-0.5">
                                             <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -262,7 +262,7 @@
                                                         '<p class="text-xs text-red-600 mt-0.5">This order has been rejected by the main provider.</p>' +
                                                     '</div>' +
                                                 '</div>';
-                                            panel.className = 'rounded-lg border border-red-200 bg-gradient-to-br from-red-50 to-pink-50 p-4';
+                                            panel.className = 'rounded-lg border border-red-200 bg-red-50 p-4';
                                         } else {
                                             ts.textContent = 'Final status: ' + label;
                                         }
@@ -303,7 +303,7 @@
                                 })();
                                 </script>
                             @else
-                                <div class="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-lg p-4">
+                                <div class="bg-amber-50 border border-amber-200 rounded-lg p-4">
                                     <div class="flex items-start">
                                         <svg class="w-5 h-5 text-amber-600 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
@@ -338,7 +338,7 @@
                             @if($registration->reseller_earning > 0)
                             <div class="flex justify-between py-2 border-b border-gray-100">
                                 <span class="text-gray-500">Affiliate Earning</span>
-                                <span class="font-medium text-purple-600">GH₵ {{ number_format($registration->reseller_earning, 2) }}</span>
+                                <span class="font-medium text-brand-violet">GH₵ {{ number_format($registration->reseller_earning, 2) }}</span>
                             </div>
                             @endif
                             <div class="flex justify-between py-2 border-b border-gray-100">
@@ -400,7 +400,7 @@
                 </div>
 
                 <!-- WhatsApp Contact -->
-                <div class="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border border-green-200 p-6">
+                <div class="bg-green-50 rounded-xl border border-green-200 p-6">
                     <h3 class="text-lg font-semibold text-gray-900 mb-2">Contact Customer</h3>
                     <p class="text-sm text-gray-600 mb-4">Send a message to the customer on WhatsApp.</p>
                     <a 

@@ -6,7 +6,7 @@
 <x-vendor-layout :vendor="$vendor" title="AFA Registrations" subtitle="Manage AFA registration orders" active="afa">
     <div class="space-y-6">
         @if(session('success'))
-            <div class="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg shadow-md">
+            <div class="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-xl">
                 <div class="flex items-center">
                     <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
@@ -17,7 +17,7 @@
         @endif
         
         @if(session('error'))
-            <div class="bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg shadow-md">
+            <div class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-xl">
                 <div class="flex items-center">
                     <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
@@ -30,27 +30,27 @@
         <!-- Navigation Tabs -->
         <div class="flex flex-wrap gap-2 border-b border-gray-200 pb-2">
             <a href="{{ route('vendor.afa.index') }}" 
-               class="px-4 py-2 text-sm font-medium {{ !request('status') ? 'text-brand-deep-blue bg-blue-50 rounded-lg' : 'text-gray-600 hover:text-brand-deep-blue' }}">
+               class="px-4 py-2 text-sm font-medium {{ !request('status') ? 'text-brand-violet bg-blue-50 rounded-lg' : 'text-gray-600 hover:text-brand-violet' }}">
                 All
             </a>
             <a href="{{ route('vendor.afa.index', ['status' => 'pending']) }}" 
-               class="px-4 py-2 text-sm font-medium {{ request('status') === 'pending' ? 'text-brand-deep-blue bg-blue-50 rounded-lg' : 'text-gray-600 hover:text-brand-deep-blue' }}">
+               class="px-4 py-2 text-sm font-medium {{ request('status') === 'pending' ? 'text-brand-violet bg-blue-50 rounded-lg' : 'text-gray-600 hover:text-brand-violet' }}">
                 Pending
             </a>
             <a href="{{ route('vendor.afa.index', ['status' => 'processing']) }}" 
-               class="px-4 py-2 text-sm font-medium {{ request('status') === 'processing' ? 'text-brand-deep-blue bg-blue-50 rounded-lg' : 'text-gray-600 hover:text-brand-deep-blue' }}">
+               class="px-4 py-2 text-sm font-medium {{ request('status') === 'processing' ? 'text-brand-violet bg-blue-50 rounded-lg' : 'text-gray-600 hover:text-brand-violet' }}">
                 Processing
             </a>
             <a href="{{ route('vendor.afa.index', ['status' => 'approved']) }}" 
-               class="px-4 py-2 text-sm font-medium {{ request('status') === 'approved' ? 'text-brand-deep-blue bg-blue-50 rounded-lg' : 'text-gray-600 hover:text-brand-deep-blue' }}">
+               class="px-4 py-2 text-sm font-medium {{ request('status') === 'approved' ? 'text-brand-violet bg-blue-50 rounded-lg' : 'text-gray-600 hover:text-brand-violet' }}">
                 Approved
             </a>
             <a href="{{ route('vendor.afa.index', ['status' => 'completed']) }}" 
-               class="px-4 py-2 text-sm font-medium {{ request('status') === 'completed' ? 'text-brand-deep-blue bg-blue-50 rounded-lg' : 'text-gray-600 hover:text-brand-deep-blue' }}">
+               class="px-4 py-2 text-sm font-medium {{ request('status') === 'completed' ? 'text-brand-violet bg-blue-50 rounded-lg' : 'text-gray-600 hover:text-brand-violet' }}">
                 Completed
             </a>
             <a href="{{ route('vendor.afa.settings') }}" 
-               class="ml-auto px-4 py-2 text-sm font-medium text-gray-600 hover:text-brand-deep-blue flex items-center">
+               class="ml-auto px-4 py-2 text-sm font-medium text-gray-600 hover:text-brand-violet flex items-center">
                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
@@ -60,7 +60,7 @@
         </div>
         
         <!-- Registrations Table -->
-        <div class="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg border border-gray-200">
+        <div class="bg-white rounded-xl border border-gray-200">
             <div class="px-6 py-6">
                 <div class="flex items-center justify-between mb-6">
                     <div>
@@ -68,8 +68,8 @@
                         <p class="text-sm text-gray-600">Customer registrations submitted through your storefront.</p>
                     </div>
                     <p class="text-sm text-gray-500">
-                        Showing <span class="font-semibold text-brand-deep-blue">{{ $registrations->count() }}</span> of 
-                        <span class="font-semibold text-brand-deep-blue">{{ $registrations->total() }}</span> registrations
+                        Showing <span class="font-semibold text-brand-violet">{{ $registrations->count() }}</span> of 
+                        <span class="font-semibold text-brand-violet">{{ $registrations->total() }}</span> registrations
                     </p>
                 </div>
 
@@ -83,7 +83,7 @@
                     @endif
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gradient-to-r from-gray-50 to-slate-100">
+                            <thead class="bg-gray-50">
                                 <tr>
                                     <th class="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Reference</th>
                                     <th class="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Customer</th>
@@ -97,7 +97,7 @@
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200">
                                 @forelse ($registrations as $reg)
-                                    <tr class="hover:bg-gradient-to-r hover:from-green-50 hover:to-blue-50 transition-all duration-200">
+                                    <tr class="hover:bg-violet-50/40 transition-colors duration-150">
                                         <td class="px-4 py-4 text-sm">
                                             <div class="flex flex-col gap-1">
                                                 <span class="font-mono font-semibold text-gray-900">{{ $reg->reference }}</span>
@@ -106,7 +106,7 @@
                                                         {{-- Registration sold through reseller --}}
                                                         @if($reg->reseller_vendor_id == $vendor->id)
                                                             {{-- Current vendor is the reseller --}}
-                                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-brand-violet-soft text-brand-violet-deep">
                                                                 <svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
                                                                 </svg>
@@ -120,7 +120,7 @@
                                                                 </svg>
                                                                 Provider
                                                             </span>
-                                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-50 text-purple-600">
+                                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-brand-violet-soft text-brand-violet">
                                                                 via Reseller
                                                             </span>
                                                         @endif
@@ -176,7 +176,7 @@
                                                             @method('PATCH')
                                                             <select name="status" 
                                                                     onchange="this.form.submit()" 
-                                                                    class="text-xs border-gray-300 rounded-lg focus:ring-brand-bright-blue focus:border-brand-bright-blue px-2 py-1 font-medium shadow-sm">
+                                                                    class="text-xs border-gray-300 rounded-lg focus:ring-brand-violet-deep focus:border-brand-violet-deep px-2 py-1 font-medium shadow-sm">
                                                                 <option value="">Change</option>
                                                                 @if($reg->status === 'pending')
                                                                     <option value="processing">Processing</option>

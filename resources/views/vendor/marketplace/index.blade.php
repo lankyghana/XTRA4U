@@ -5,10 +5,10 @@
 
 @section('content')
 <x-vendor-layout :vendor="$vendor" title="Product Marketplace" subtitle="Browse and resell products" active="marketplace">
-    <div class="min-h-screen bg-gradient-to-br from-slate-50 via-white to-purple-50 py-8">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div>
+        <div class="max-w-7xl mx-auto">
             <!-- Header -->
-            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
+            <div class="bg-white rounded-xl border border-gray-200 p-6 mb-8">
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
                         <h1 class="text-2xl font-bold text-gray-900">
@@ -16,14 +16,14 @@
                         </h1>
                         <p class="text-gray-500 mt-1">
                             @if(isset($affiliateParent))
-                                Browse products from <span class="font-medium text-purple-600">{{ $affiliateParent->name }}</span>
+                                Browse products from <span class="font-medium text-brand-violet">{{ $affiliateParent->name }}</span>
                             @else
                                 Connect to an affiliate parent to browse products
                             @endif
                         </p>
                     </div>
-                    <a href="{{ route('vendor.reseller.index') }}" 
-                       class="inline-flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white text-base font-semibold rounded-xl hover:from-purple-700 hover:to-purple-800 transition-all shadow-lg shadow-purple-200 hover:shadow-xl hover:shadow-purple-300">
+                    <a href="{{ route('vendor.reseller.index') }}"
+                       class="inline-flex items-center gap-3 px-6 py-3 bg-brand-violet text-white text-base font-semibold rounded-xl hover:bg-brand-violet-deep transition-colors shadow-sm">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
                         </svg>
@@ -52,7 +52,7 @@
 
             @if(!isset($affiliateParent))
                 <!-- No Affiliate Parent State -->
-                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
+                <div class="bg-white rounded-xl border border-gray-200 p-12 text-center">
                     <div class="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6">
                         <svg class="w-10 h-10 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
@@ -63,7 +63,7 @@
                         You need to connect to an affiliate parent vendor to access the marketplace and resell their products.
                     </p>
                     <a href="{{ route('vendor.affiliates.index') }}" 
-                       class="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 text-white font-medium rounded-xl hover:bg-purple-700 transition-colors">
+                       class="inline-flex items-center gap-2 px-6 py-3 bg-brand-violet text-white font-medium rounded-xl hover:bg-brand-violet-deep transition-colors">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
                         </svg>
@@ -72,7 +72,7 @@
                 </div>
             @elseif($products->isEmpty())
                 <!-- No Products State -->
-                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
+                <div class="bg-white rounded-xl border border-gray-200 p-12 text-center">
                     <div class="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
                         <svg class="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
@@ -113,7 +113,7 @@
                             $basePrice = $product->resell_base_price ?? ($product->min_base_price ?? $product->price);
                         @endphp
 
-                        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md hover:border-purple-200 transition-all duration-200 group">
+                        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md hover:border-brand-violet transition-all duration-200 group">
                             <!-- Product Header with Network Logo -->
                             <div class="p-5 border-b border-gray-100">
                                 <div class="flex items-start gap-4">
@@ -122,7 +122,7 @@
                                         @if($logoUrl)
                                             <img src="{{ $logoUrl }}" alt="{{ $network }}" class="w-14 h-14 rounded-xl object-cover shadow-sm">
                                         @else
-                                            <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shadow-sm">
+                                            <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-brand-violet to-brand-violet-deep flex items-center justify-center shadow-sm">
                                                 <span class="text-white font-bold text-lg">{{ strtoupper(substr($network, 0, 2)) }}</span>
                                             </div>
                                         @endif
@@ -136,7 +136,7 @@
                                                 <span class="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded-full">{{ $tag }}</span>
                                             @endif
                                         </div>
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 capitalize">
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-violet-soft text-brand-violet-deep capitalize">
                                             {{ $category }}
                                         </span>
                                     </div>
@@ -180,7 +180,7 @@
                                 <!-- Price -->
                                 <div class="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-xl mb-4">
                                     <span class="text-sm text-gray-500">Base Price</span>
-                                    <span class="text-xl font-bold text-purple-600">₵{{ number_format($basePrice, 2) }}</span>
+                                    <span class="text-xl font-bold text-brand-violet">₵{{ number_format($basePrice, 2) }}</span>
                                 </div>
 
                                 <!-- Action Button -->
@@ -194,7 +194,7 @@
                                 @else
                                     <button 
                                         onclick="openAddModal({{ $product->id }}, '{{ addslashes($product->name) }}', {{ $basePrice }}, '{{ addslashes($network) }}', '{{ $logoUrl ?? '' }}')"
-                                        class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white font-medium rounded-xl hover:bg-purple-700 transition-colors group-hover:shadow-md">
+                                        class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-brand-violet text-white font-medium rounded-xl hover:bg-brand-violet-deep transition-colors group-hover:shadow-md">
                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                                         </svg>
@@ -218,7 +218,7 @@
     <div id="addModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
             <!-- Modal Header -->
-            <div class="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-purple-50 to-blue-50">
+            <div class="px-6 py-5 border-b border-gray-100 bg-gray-50">
                 <h3 class="text-xl font-bold text-gray-900">Add to Your Catalog</h3>
                 <p class="text-sm text-gray-500 mt-1">Set your markup price to start reselling</p>
             </div>
@@ -240,9 +240,9 @@
                     </div>
 
                     <!-- Base Price Display -->
-                    <div class="flex items-center justify-between p-4 bg-purple-50 rounded-xl mb-6">
-                        <span class="text-sm text-purple-700">Base Price (Owner receives)</span>
-                        <span id="modal_base_price" class="text-lg font-bold text-purple-700"></span>
+                    <div class="flex items-center justify-between p-4 bg-brand-violet-soft rounded-xl mb-6">
+                        <span class="text-sm text-brand-violet-deep">Base Price (Owner receives)</span>
+                        <span id="modal_base_price" class="text-lg font-bold text-brand-violet-deep"></span>
                     </div>
 
                     <!-- Markup Input -->
@@ -261,7 +261,7 @@
                                 required
                                 placeholder="0.00"
                                 oninput="calculateSellingPrice()"
-                                class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-lg">
+                                class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-violet focus:border-brand-violet text-lg">
                         </div>
                     </div>
 
@@ -298,7 +298,7 @@
                     </button>
                     <button 
                         type="submit"
-                        class="flex-1 px-5 py-3 bg-purple-600 text-white font-medium rounded-xl hover:bg-purple-700 transition-colors">
+                        class="flex-1 px-5 py-3 bg-brand-violet text-white font-medium rounded-xl hover:bg-brand-violet-deep transition-colors">
                         Add Product
                     </button>
                 </div>
@@ -329,7 +329,7 @@
             } else {
                 const initials = networkName.substring(0, 2).toUpperCase();
                 const div = document.createElement('div');
-                div.className = 'w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center';
+                div.className = 'w-12 h-12 rounded-xl bg-gradient-to-br from-brand-violet to-brand-violet-deep flex items-center justify-center';
                 const span = document.createElement('span');
                 span.className = 'text-white font-bold';
                 span.textContent = initials;
