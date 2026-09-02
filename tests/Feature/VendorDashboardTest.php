@@ -215,7 +215,10 @@ class VendorDashboardTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertSee('AFA-DASH-0001', false);
-        $response->assertSee('0247000000', false);
+        // Recipient phone is intentionally no longer a Recent Orders column on the
+        // dashboard overview (approved column set: Order/Service/Amount/Status/Date/
+        // Action — recipient detail lives on the full Orders page instead).
+        $response->assertSee('AFA Registration', false);
         $response->assertSee('GHS 120.00', false);
     }
 }

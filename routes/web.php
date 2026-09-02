@@ -148,6 +148,18 @@ Route::get('/Marketplace', fn () => redirect()->route('checkout.show'));
 
 Route::get('/store/{vendor:vendor_code}', [StorefrontController::class, 'showVendorStore'])->name('storefront.vendor');
 
+// Official XTRA4U service pages (homepage entry points). Each shows exactly
+// one category, sourced from the vendor an admin has assigned to it — see
+// App\Support\PlatformServiceVendor. Distinct from /store/{vendor_code},
+// which is unaffected and still shows a vendor's full catalog.
+Route::prefix('services')->name('services.')->group(function () {
+    Route::get('data-bundles', [\App\Http\Controllers\PlatformServiceController::class, 'dataBundles'])->name('data-bundles');
+    Route::get('ecg', [\App\Http\Controllers\PlatformServiceController::class, 'ecg'])->name('ecg');
+    Route::get('shop', [\App\Http\Controllers\PlatformServiceController::class, 'shop'])->name('shop');
+    Route::get('result-checkers', [\App\Http\Controllers\PlatformServiceController::class, 'resultCheckers'])->name('result-checkers');
+    Route::get('afa-registration', [\App\Http\Controllers\PlatformServiceController::class, 'afaRegistration'])->name('afa-registration');
+});
+
 // Result Checker Routes - Customer Facing
 // Vendor-agnostic entry point used by the main navigation and homepage; it
 // resolves the flagship store at request time so the link never 404s when
@@ -452,6 +464,9 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
 
     Route::get('settings/vendor-approval', [\App\Http\Controllers\Admin\AdminSettingsController::class, 'index'])->name('settings.vendor-approval');
     Route::put('settings/vendor-approval', [\App\Http\Controllers\Admin\VendorApprovalSettingsController::class, 'update'])->name('settings.vendor-approval.update');
+
+    Route::get('settings/platform-service-vendors', [\App\Http\Controllers\Admin\AdminSettingsController::class, 'index'])->name('settings.platform-service-vendors');
+    Route::put('settings/platform-service-vendors', [\App\Http\Controllers\Admin\PlatformServiceVendorController::class, 'update'])->name('settings.platform-service-vendors.update');
 
     // Email Settings
     Route::get('settings/email', [\App\Http\Controllers\Admin\EmailSettingsController::class, 'index'])->name('settings.email');

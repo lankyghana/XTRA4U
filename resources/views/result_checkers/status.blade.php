@@ -1,171 +1,209 @@
+{{--
+    result_checkers/status.blade.php
+
+    Public result-checker status lookup (route: GET /results-checker/status).
+    Visual redesign only — the `resultCheckerStatusChecker()` Alpine
+    component at the bottom of this file (fetch to
+    result-checkers.status.check, status/label/date helpers) is unchanged;
+    only the markup/classes around it were rewritten to the storefront's
+    `x4` design system. Mirrors the structure already used for
+    /order-status, adapted for the result-checker's own status vocabulary
+    (pending_payment, pending_stock, processing, completed, failed).
+--}}
 @extends('layouts.app')
 
 @section('title', 'Check Result Checker Status - XTRA4U')
 @section('description', 'Track your result checker order status in real-time. Enter your phone number or order reference to check your results.')
 
-@section('content')
-<div class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 py-12" x-data="resultCheckerStatusChecker()">
-    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-        
-        <!-- Header -->
-        <div class="text-center mb-10">
-            <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-brand-deep-blue to-brand-green rounded-full mb-4">
-                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-            </div>
-            <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">Check Result Status</h1>
-            <p class="mt-3 text-lg text-gray-600">Enter your phone number or order reference to track your result checker order.</p>
-        </div>
+{{-- Scope the storefront design system to this page only. --}}
+@section('body-class', 'x4')
 
-        <!-- Search Form -->
-        <div class="bg-white rounded-2xl shadow-xl p-6 sm:p-8 mb-8">
-            <form @submit.prevent="checkStatus" class="space-y-4">
-                <div>
-                    <label for="query" class="block text-sm font-medium text-gray-700 mb-2">Phone Number or Order Reference</label>
-                    <div class="relative">
-                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                            </svg>
-                        </div>
-                        <input 
-                            type="text" 
-                            id="query" 
+@php
+    // Same flagship-store fallback the marketplace homepage uses for its
+    // "Buy Now" entry points — this page isn't tied to any one vendor.
+    $mainStoreVendor = \App\Support\MainStore::vendor();
+    $shopUrl = $mainStoreVendor
+        ? route('storefront.vendor', ['vendor' => $mainStoreVendor->vendor_code])
+        : route('checkout.show');
+@endphp
+
+@section('site-header')
+    <x-storefront.header :shop-url="$shopUrl" />
+@endsection
+
+@section('site-footer')
+    <x-storefront.footer :shop-url="$shopUrl" />
+@endsection
+
+@section('content')
+<div class="x4-page" style="padding-top: 64px;">
+    <section class="relative overflow-hidden" style="background: #fff; min-height: calc(100vh - 64px);">
+        <div class="x4-hero-wash absolute inset-0" aria-hidden="true" style="pointer-events: none;"></div>
+
+        <div class="relative max-w-3xl mx-auto px-5" style="padding-top: 56px; padding-bottom: 72px;" x-data="resultCheckerStatusChecker()">
+
+            {{-- ============================================================
+                 Header
+                 ============================================================ --}}
+            <x-storefront.reveal from="up" class="text-center mb-9">
+                <div
+                    class="mx-auto mb-5 flex items-center justify-center"
+                    style="width: 64px; height: 64px; border-radius: var(--x4-r-lg); background-color: var(--x4-violet);"
+                >
+                    <x-storefront.icon name="check" class="w-7 h-7" style="color: #fff;" />
+                </div>
+
+                <h1 class="x4-display-xl mb-3" style="color: var(--x4-ink-strong);">Check Result Status</h1>
+                <p class="x4-body-lg" style="color: var(--x4-ink-body);">
+                    Enter your phone number or order reference to track your result checker order.
+                </p>
+            </x-storefront.reveal>
+
+            {{-- ============================================================
+                 Search form
+                 ============================================================ --}}
+            <x-storefront.reveal :delay="60">
+            <div class="x4-panel mb-6" style="padding: 24px;">
+                <form @submit.prevent="checkStatus">
+                    <label for="query" class="x4-caption block mb-2" style="color: var(--x4-ink-sec); font-weight: 500;">Phone Number or Order Reference</label>
+                    <div class="relative mb-4">
+                        <x-storefront.icon
+                            name="search"
+                            class="w-4 h-4 absolute"
+                            style="left: 14px; top: 50%; transform: translateY(-50%); color: var(--x4-ink-mute); pointer-events: none;"
+                        />
+                        <input
+                            type="text"
+                            id="query"
                             x-model="query"
                             placeholder="e.g., 0244123456 or order reference"
-                            class="block w-full pl-12 pr-4 py-4 text-lg border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue transition-colors"
                             required
+                            class="x4-input"
+                            style="padding-left: 38px; padding-top: 13px; padding-bottom: 13px; font-size: 16px;"
                         >
                     </div>
-                </div>
-                
-                <button 
-                    type="submit" 
-                    :disabled="loading"
-                    class="w-full flex items-center justify-center px-6 py-4 bg-gradient-to-r from-brand-deep-blue to-brand-green text-white font-semibold text-lg rounded-xl hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-deep-blue transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    <template x-if="loading">
-                        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                    </template>
-                    <span x-text="loading ? 'Checking...' : 'Check Status'"></span>
-                </button>
-            </form>
-        </div>
 
-        <!-- Error Message -->
-        <template x-if="error">
-            <div class="bg-red-50 border border-red-200 rounded-xl p-4 mb-8">
-                <div class="flex items-center">
-                    <svg class="h-5 w-5 text-red-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                    </svg>
-                    <p class="text-red-700" x-text="error"></p>
-                </div>
-            </div>
-        </template>
-
-        <!-- Order Details -->
-        <template x-if="order && !error">
-            <div class="bg-white rounded-xl shadow-md overflow-hidden">
-                <!-- Order Header -->
-                <div class="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div>
-                        <span class="text-sm text-gray-500">Order ID</span>
-                        <p class="font-mono font-semibold text-gray-900" x-text="order.id"></p>
-                    </div>
-                    <div class="flex items-center" :class="getStatusColor(order.status).bg + ' ' + getStatusColor(order.status).text + ' px-3 py-1.5 rounded-full'">
-                        <span class="w-2 h-2 rounded-full mr-2" :class="getStatusColor(order.status).dot"></span>
-                        <span class="text-sm font-semibold" x-text="getStatusLabel(order.status)"></span>
-                    </div>
-                </div>
-                
-                <!-- Order Details -->
-                <div class="px-6 py-4">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                        <div>
-                            <span class="text-xs text-gray-500 uppercase tracking-wide">Service</span>
-                            <p class="font-medium text-gray-900 mt-1" x-text="order.service"></p>
-                        </div>
-                        <div>
-                            <span class="text-xs text-gray-500 uppercase tracking-wide">Customer Name</span>
-                            <p class="font-medium text-gray-900 mt-1" x-text="order.customer_name || 'N/A'"></p>
-                        </div>
-                        <div>
-                            <span class="text-xs text-gray-500 uppercase tracking-wide">Reference</span>
-                            <p class="font-mono font-semibold text-gray-900 mt-1 break-all" x-text="order.reference"></p>
-                        </div>
-                        <div>
-                            <span class="text-xs text-gray-500 uppercase tracking-wide">Order Date</span>
-                            <p class="font-medium text-gray-900 mt-1" x-text="formatDate(order.created_at)"></p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Status Message -->
-                <template x-if="order.message">
-                    <div class="px-6 py-4 bg-blue-50 border-t border-blue-100">
-                        <p class="text-blue-900" x-text="order.message"></p>
-                    </div>
-                </template>
-
-                <!-- Pins (if delivered) -->
-                <template x-if="order.pins_delivered && order.status === 'completed'">
-                    <div class="px-6 py-4 bg-green-50 border-t border-green-100">
-                        <div class="flex items-start">
-                            <svg class="h-5 w-5 text-green-500 mr-3 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    <button
+                        type="submit"
+                        :disabled="loading"
+                        class="x4-btn x4-btn-primary w-full"
+                        style="padding: 13px 22px;"
+                    >
+                        <template x-if="loading">
+                            <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
-                            <div>
-                                <p class="font-semibold text-green-900">Results Delivered!</p>
-                                <p class="text-green-700 text-sm mt-1">Your results have been sent to your phone number. Check your SMS for the details.</p>
+                        </template>
+                        <span x-text="loading ? 'Checking…' : 'Check Status'"></span>
+                    </button>
+                </form>
+            </div>
+            </x-storefront.reveal>
+
+            {{-- ============================================================
+                 Error
+                 ============================================================ --}}
+            <template x-if="error">
+                <div class="mb-6" style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: var(--x4-r-lg); padding: 16px 18px;">
+                    <div class="flex items-center gap-3">
+                        <x-storefront.icon name="close" class="w-4 h-4 flex-shrink-0" style="color: #dc2626;" />
+                        <p class="x4-body-md" style="color: #991b1b;" x-text="error"></p>
+                    </div>
+                </div>
+            </template>
+
+            {{-- ============================================================
+                 Order details
+                 ============================================================ --}}
+            <template x-if="order && !error">
+                <div class="x4-panel mb-6" style="overflow: hidden;">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3" style="padding: 18px 20px; border-bottom: 1px solid var(--x4-hairline); background-color: var(--x4-canvas-soft);">
+                        <div>
+                            <span class="x4-micro-cap" style="color: var(--x4-ink-mute);">Order ID</span>
+                            <p class="x4-tnum" style="font-size: 14px; font-weight: 500; color: var(--x4-ink);" x-text="order.id"></p>
+                        </div>
+                        <div class="inline-flex items-center flex-shrink-0" :class="getStatusColor(order.status).bg + ' ' + getStatusColor(order.status).text" style="padding: 5px 12px; border-radius: var(--x4-r-pill);">
+                            <span class="w-1.5 h-1.5 rounded-full mr-2" :class="getStatusColor(order.status).dot"></span>
+                            <span class="x4-caption" style="font-weight: 500;" x-text="getStatusLabel(order.status)"></span>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-5" style="padding: 20px;">
+                        <div>
+                            <span class="x4-micro-cap" style="color: var(--x4-ink-mute);">Service</span>
+                            <p class="x4-body-md mt-1" style="font-weight: 500; color: var(--x4-ink);" x-text="order.service"></p>
+                        </div>
+                        <div>
+                            <span class="x4-micro-cap" style="color: var(--x4-ink-mute);">Customer Name</span>
+                            <p class="x4-body-md mt-1" style="font-weight: 500; color: var(--x4-ink);" x-text="order.customer_name || 'N/A'"></p>
+                        </div>
+                        <div>
+                            <span class="x4-micro-cap" style="color: var(--x4-ink-mute);">Reference</span>
+                            <p class="x4-caption x4-tnum mt-1" style="font-weight: 500; color: var(--x4-ink); word-break: break-all;" x-text="order.reference"></p>
+                        </div>
+                        <div>
+                            <span class="x4-micro-cap" style="color: var(--x4-ink-mute);">Order Date</span>
+                            <p class="x4-body-md mt-1" style="font-weight: 500; color: var(--x4-ink);" x-text="formatDate(order.created_at)"></p>
+                        </div>
+                    </div>
+
+                    <template x-if="order.message">
+                        <div style="padding: 14px 20px; background-color: var(--x4-violet-soft); border-top: 1px solid var(--x4-violet-soft-deep);">
+                            <p class="x4-body-md" style="color: var(--x4-primary-deep);" x-text="order.message"></p>
+                        </div>
+                    </template>
+
+                    <template x-if="order.pins_delivered && order.status === 'completed'">
+                        <div style="padding: 16px 20px; background-color: #f0fdf4; border-top: 1px solid #bbf7d0;">
+                            <div class="flex items-start gap-3">
+                                <x-storefront.icon name="check" class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: #16a34a;" />
+                                <div>
+                                    <p class="x4-body-md" style="font-weight: 500; color: #166534;">Results Delivered!</p>
+                                    <p class="x4-caption mt-0.5" style="color: #15803d;">Your results have been sent to your phone number. Check your SMS for the details.</p>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </template>
-            </div>
-        </template>
+                    </template>
+                </div>
+            </template>
 
-        <!-- Status Legend -->
-        <div class="mt-10 bg-white rounded-xl shadow p-6">
-            <h3 class="text-sm font-semibold text-gray-900 uppercase tracking-wide mb-4">Status Guide</h3>
-            <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                <div class="flex items-center">
-                    <span class="w-3 h-3 rounded-full bg-yellow-500 mr-2"></span>
-                    <span class="text-sm text-gray-600">Pending Payment</span>
-                </div>
-                <div class="flex items-center">
-                    <span class="w-3 h-3 rounded-full bg-orange-500 mr-2"></span>
-                    <span class="text-sm text-gray-600">Pending Stock</span>
-                </div>
-                <div class="flex items-center">
-                    <span class="w-3 h-3 rounded-full bg-blue-500 mr-2"></span>
-                    <span class="text-sm text-gray-600">Processing</span>
-                </div>
-                <div class="flex items-center">
-                    <span class="w-3 h-3 rounded-full bg-green-500 mr-2"></span>
-                    <span class="text-sm text-gray-600">Completed</span>
-                </div>
-                <div class="flex items-center">
-                    <span class="w-3 h-3 rounded-full bg-red-500 mr-2"></span>
-                    <span class="text-sm text-gray-600">Failed</span>
+            {{-- ============================================================
+                 Status legend
+                 ============================================================ --}}
+            <x-storefront.reveal :delay="100">
+            <div class="x4-panel mb-8" style="padding: 20px 24px;">
+                <p class="x4-micro-cap mb-4" style="color: var(--x4-ink-mute);">Status Guide</p>
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    @foreach ([
+                        ['label' => 'Pending Payment', 'dot' => '#eab308'],
+                        ['label' => 'Pending Stock', 'dot' => '#f97316'],
+                        ['label' => 'Processing', 'dot' => '#3b82f6'],
+                        ['label' => 'Completed', 'dot' => '#22c55e'],
+                        ['label' => 'Failed', 'dot' => '#ef4444'],
+                    ] as $status)
+                        <div class="flex items-center gap-2">
+                            <span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 9999px; background-color: {{ $status['dot'] }}; flex-shrink: 0;"></span>
+                            <span class="x4-caption" style="color: var(--x4-ink-sec);">{{ $status['label'] }}</span>
+                        </div>
+                    @endforeach
                 </div>
             </div>
-        </div>
+            </x-storefront.reveal>
 
-        <!-- Back to Home -->
-        <div class="mt-8 text-center">
-            <a href="{{ route('storefront.index') }}" class="inline-flex items-center text-brand-deep-blue hover:text-brand-bright-blue font-medium transition-colors">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-                </svg>
-                Back to Home
-            </a>
+            {{-- ============================================================
+                 Back to home
+                 ============================================================ --}}
+            <div class="text-center">
+                <a href="{{ route('storefront.index') }}" class="x4-caption x4-link x4-link-accent inline-flex items-center gap-2" style="color: var(--x4-ink-mute); font-weight: 500;">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                    </svg>
+                    Back to Home
+                </a>
+            </div>
         </div>
-    </div>
+    </section>
 </div>
 
 @push('scripts')
@@ -238,9 +276,9 @@ function resultCheckerStatusChecker() {
         formatDate(dateString) {
             try {
                 const date = new Date(dateString);
-                return date.toLocaleDateString('en-US', { 
-                    year: 'numeric', 
-                    month: 'long', 
+                return date.toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
                     day: 'numeric',
                     hour: '2-digit',
                     minute: '2-digit'

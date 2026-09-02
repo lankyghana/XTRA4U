@@ -6,20 +6,18 @@
 <x-vendor-layout :vendor="$vendor" title="External Fulfillment" subtitle="Configure your external fulfillment integration" active="settings">
     <div class="space-y-6">
         @if(session('success'))
-            <div class="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg shadow-md">
-                <div class="flex items-center">
-                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                    </svg>
-                    {{ session('success') }}
-                </div>
+            <div class="flex items-center gap-3 bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-xl">
+                <svg class="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                </svg>
+                <span class="text-sm">{{ session('success') }}</span>
             </div>
         @endif
 
-        <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-            <div class="bg-gradient-to-r from-brand-deep-blue to-blue-700 px-6 py-4">
-                <h2 class="text-xl font-bold text-white">External Fulfillment Settings</h2>
-                <p class="text-blue-100">Enable and configure your API credentials</p>
+        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-100">
+                <h2 class="text-base font-semibold text-gray-900">External Fulfillment Settings</h2>
+                <p class="text-sm text-gray-500 mt-1">Enable and configure your API credentials</p>
             </div>
 
             <form method="POST" action="{{ route('vendor.settings.external-fulfillment.update') }}" class="p-6 space-y-6">
@@ -28,7 +26,7 @@
 
                 <div class="flex items-center">
                     <input type="checkbox" name="external_fulfillment_enabled" id="external_fulfillment_enabled" value="1"
-                        class="h-4 w-4 text-brand-deep-blue border-gray-300 rounded"
+                        class="h-4 w-4 text-brand-violet border-gray-300 rounded"
                         {{ (($settings['external_fulfillment_enabled'] ?? '0') === '1') ? 'checked' : '' }}>
                     <label for="external_fulfillment_enabled" class="ml-2 text-sm font-medium text-gray-700">
                         Enable external fulfillment
@@ -40,7 +38,7 @@
                     
                     <div class="flex items-center">
                         <input type="checkbox" name="external_fulfillment_datafyhub_enabled" id="external_fulfillment_datafyhub_enabled" value="1"
-                            class="h-4 w-4 text-brand-deep-blue border-gray-300 rounded provider-toggle"
+                            class="h-4 w-4 text-brand-violet border-gray-300 rounded provider-toggle"
                             {{ (($settings['external_fulfillment_datafyhub_enabled'] ?? '0') === '1') ? 'checked' : '' }}>
                         <label for="external_fulfillment_datafyhub_enabled" class="ml-2 text-sm font-medium text-gray-700">
                             Datafyhub
@@ -49,7 +47,7 @@
 
                     <div class="flex items-center">
                         <input type="checkbox" name="external_fulfillment_xpresportal_enabled" id="external_fulfillment_xpresportal_enabled" value="1"
-                            class="h-4 w-4 text-brand-deep-blue border-gray-300 rounded provider-toggle"
+                            class="h-4 w-4 text-brand-violet border-gray-300 rounded provider-toggle"
                             {{ (($settings['external_fulfillment_xpresportal_enabled'] ?? '0') === '1') ? 'checked' : '' }}>
                         <label for="external_fulfillment_xpresportal_enabled" class="ml-2 text-sm font-medium text-gray-700">
                             XpresPortal
@@ -58,7 +56,7 @@
 
                     <div class="flex items-center">
                         <input type="checkbox" name="external_fulfillment_gigshub_enabled" id="external_fulfillment_gigshub_enabled" value="1"
-                            class="h-4 w-4 text-brand-deep-blue border-gray-300 rounded provider-toggle"
+                            class="h-4 w-4 text-brand-violet border-gray-300 rounded provider-toggle"
                             {{ (($settings['external_fulfillment_gigshub_enabled'] ?? '0') === '1') ? 'checked' : '' }}>
                         <label for="external_fulfillment_gigshub_enabled" class="ml-2 text-sm font-medium text-gray-700">
                             GigsHub
@@ -67,7 +65,7 @@
 
                     <div class="flex items-center">
                         <input type="checkbox" name="external_fulfillment_skdataplug_enabled" id="external_fulfillment_skdataplug_enabled" value="1"
-                            class="h-4 w-4 text-brand-deep-blue border-gray-300 rounded provider-toggle"
+                            class="h-4 w-4 text-brand-violet border-gray-300 rounded provider-toggle"
                             {{ (($settings['external_fulfillment_skdataplug_enabled'] ?? '0') === '1') ? 'checked' : '' }}>
                         <label for="external_fulfillment_skdataplug_enabled" class="ml-2 text-sm font-medium text-gray-700">
                             SKDataPlug
@@ -80,7 +78,7 @@
                         Datafyhub API Token
                     </label>
                     <input type="password" name="external_fulfillment_token" id="external_fulfillment_token"
-                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-violet focus:border-brand-violet"
                         placeholder="{{ $settings['external_fulfillment_token_masked'] ?? '' }}">
                     @error('external_fulfillment_token')
                         <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
@@ -104,7 +102,7 @@
                             type="url"
                             name="external_fulfillment_xpres_base_url"
                             id="external_fulfillment_xpres_base_url"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-violet focus:border-brand-violet"
                             value="{{ old('external_fulfillment_xpres_base_url', $settings['external_fulfillment.xpres.base_url'] ?? '') }}"
                             placeholder="https://www.xpresportal.app"
                         >
@@ -121,7 +119,7 @@
                         <select
                             name="external_fulfillment_xpres_environment"
                             id="external_fulfillment_xpres_environment"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-violet focus:border-brand-violet"
                         >
                             <option value="sandbox" {{ $xpresEnvironment === 'sandbox' ? 'selected' : '' }}>sandbox</option>
                             <option value="production" {{ $xpresEnvironment === 'production' ? 'selected' : '' }}>production</option>
@@ -139,7 +137,7 @@
                             type="password"
                             name="external_fulfillment_xpres_api_key"
                             id="external_fulfillment_xpres_api_key"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-violet focus:border-brand-violet"
                             placeholder="{{ $settings['external_fulfillment_xpres_api_key_masked'] ?? '' }}"
                         >
                         @error('external_fulfillment_xpres_api_key')
@@ -156,7 +154,7 @@
                             type="password"
                             name="external_fulfillment_xpres_api_secret"
                             id="external_fulfillment_xpres_api_secret"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-violet focus:border-brand-violet"
                             placeholder="{{ $settings['external_fulfillment_xpres_api_secret_masked'] ?? '' }}"
                         >
                         @error('external_fulfillment_xpres_api_secret')
@@ -170,7 +168,7 @@
                             type="button"
                             id="test_xpres_connection"
                             data-url="{{ route('vendor.settings.external-fulfillment.test-xpres') }}"
-                            class="px-4 py-2 border border-brand-deep-blue text-brand-deep-blue rounded-lg font-medium hover:bg-brand-deep-blue hover:text-white transition-colors"
+                            class="px-4 py-2 border border-brand-violet text-brand-violet rounded-lg font-medium hover:bg-brand-violet hover:text-white transition-colors"
                         >
                             Test Xpres Connection
                         </button>
@@ -194,7 +192,7 @@
                             type="url"
                             name="external_fulfillment_gigshub_base_url"
                             id="external_fulfillment_gigshub_base_url"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-violet focus:border-brand-violet"
                             value="{{ old('external_fulfillment_gigshub_base_url', $settings['external_fulfillment.gigshub.base_url'] ?? '') }}"
                             placeholder="https://gigzhub.net/api/v1"
                         >
@@ -211,7 +209,7 @@
                             type="password"
                             name="external_fulfillment_gigshub_api_key"
                             id="external_fulfillment_gigshub_api_key"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-violet focus:border-brand-violet"
                             placeholder="{{ $settings['external_fulfillment_gigshub_api_key_masked'] ?? '' }}"
                         >
                         @error('external_fulfillment_gigshub_api_key')
@@ -237,7 +235,7 @@
                             type="password"
                             name="external_fulfillment_skdataplug_token"
                             id="external_fulfillment_skdataplug_token"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-violet focus:border-brand-violet"
                             placeholder="{{ $settings['external_fulfillment_skdataplug_token_masked'] ?? '' }}"
                         >
                         @error('external_fulfillment_skdataplug_token')
@@ -253,7 +251,7 @@
                     </label>
                     <input type="number" name="external_fulfillment_timeout_seconds" id="external_fulfillment_timeout_seconds"
                         min="1" max="120"
-                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-violet focus:border-brand-violet"
                         value="{{ $settings['external_fulfillment_timeout_seconds'] ?? '10' }}">
                     @error('external_fulfillment_timeout_seconds')
                         <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
@@ -261,9 +259,9 @@
                 </div>
 
                 <div class="pt-2">
-                    <button type="submit" class="w-full px-6 py-3 bg-brand-deep-blue text-white font-medium rounded-lg hover:bg-blue-700 transition-colors">
+                    <x-button type="submit" variant="primary" class="w-full justify-center">
                         Save Settings
-                    </button>
+                    </x-button>
                 </div>
             </form>
         </div>

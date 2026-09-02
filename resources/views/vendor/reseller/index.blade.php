@@ -5,17 +5,17 @@
 
 @section('content')
 <x-vendor-layout :vendor="$vendor" title="My Reseller Products" subtitle="Manage your reseller catalog" active="reseller">
-    <div class="min-h-screen bg-gradient-to-br from-slate-50 via-white to-purple-50 py-8">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div>
+        <div class="max-w-7xl mx-auto">
             <!-- Header -->
-            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
+            <div class="bg-white rounded-xl border border-gray-200 p-6 mb-8">
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
                         <h1 class="text-2xl font-bold text-gray-900">My Reseller Products</h1>
                         <p class="text-gray-500 mt-1">Manage your reseller catalog and markups</p>
                     </div>
-                    <a href="{{ route('vendor.marketplace.index') }}" 
-                       class="inline-flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white text-base font-semibold rounded-xl hover:from-purple-700 hover:to-purple-800 transition-all shadow-lg shadow-purple-200 hover:shadow-xl hover:shadow-purple-300">
+                    <a href="{{ route('vendor.marketplace.index') }}"
+                       class="inline-flex items-center gap-3 px-6 py-3 bg-brand-violet text-white text-base font-semibold rounded-xl hover:bg-brand-violet-deep transition-colors shadow-sm">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path>
                         </svg>
@@ -35,7 +35,7 @@
 
             @if($resellerProducts->isEmpty())
                 <!-- Empty State -->
-                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
+                <div class="bg-white rounded-xl border border-gray-200 p-12 text-center">
                     <div class="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
                         <svg class="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
@@ -46,7 +46,7 @@
                         Start adding products from the marketplace to build your reseller catalog
                     </p>
                     <a href="{{ route('vendor.marketplace.index') }}" 
-                       class="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 text-white font-medium rounded-xl hover:bg-purple-700 transition-colors">
+                       class="inline-flex items-center gap-2 px-6 py-3 bg-brand-violet text-white font-medium rounded-xl hover:bg-brand-violet-deep transition-colors">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path>
                         </svg>
@@ -80,7 +80,7 @@
                             $logoUrl = $networkService ? $networkService->image_url : null;
                         @endphp
 
-                        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md hover:border-purple-200 transition-all duration-200">
+                        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md hover:border-brand-violet transition-all duration-200">
                             <div class="p-5">
                                 <div class="flex items-start gap-4">
                                     <!-- Network Logo -->
@@ -88,7 +88,7 @@
                                         @if($logoUrl)
                                             <img src="{{ $logoUrl }}" alt="{{ $network }}" class="w-16 h-16 rounded-xl object-cover shadow-sm">
                                         @else
-                                            <div class="w-16 h-16 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shadow-sm">
+                                            <div class="w-16 h-16 rounded-xl bg-gradient-to-br from-brand-violet to-brand-violet-deep flex items-center justify-center shadow-sm">
                                                 <span class="text-white font-bold text-lg">{{ strtoupper(substr($network, 0, 2)) }}</span>
                                             </div>
                                         @endif
@@ -104,7 +104,7 @@
                                                         <span class="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded-full">{{ $tag }}</span>
                                                     @endif
                                                 </div>
-                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 capitalize mt-1">
+                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-violet-soft text-brand-violet-deep capitalize mt-1">
                                                     {{ $category }}
                                                 </span>
                                             </div>
@@ -156,7 +156,7 @@
                                     </div>
                                     <div class="text-center">
                                         <p class="text-xs text-gray-500 mb-0.5">Selling</p>
-                                        <p class="text-sm font-bold text-purple-600">₵{{ number_format($resellerProduct->selling_price, 2) }}</p>
+                                        <p class="text-sm font-bold text-brand-violet">₵{{ number_format($resellerProduct->selling_price, 2) }}</p>
                                     </div>
                                     <div class="text-center">
                                         <p class="text-xs text-gray-500 mb-0.5">Profit</p>
@@ -168,7 +168,7 @@
                                 <div class="flex items-center gap-2 mt-4">
                                     <button 
                                         onclick="openEditModal({{ $resellerProduct->id }}, '{{ addslashes($resellerProduct->product->name) }}', {{ $resellerProduct->base_price }}, {{ $resellerProduct->markup_price }}, {{ $resellerProduct->is_active ? 'true' : 'false' }}, '{{ addslashes($network) }}', '{{ $logoUrl ?? '' }}')"
-                                        class="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-purple-50 text-purple-700 rounded-xl hover:bg-purple-100 transition-colors text-sm font-medium">
+                                        class="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-brand-violet-soft text-brand-violet-deep rounded-xl hover:bg-brand-violet-soft transition-colors text-sm font-medium">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                                         </svg>
@@ -213,7 +213,7 @@
     <div id="editModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
             <!-- Modal Header -->
-            <div class="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-purple-50 to-blue-50">
+            <div class="px-6 py-5 border-b border-gray-100 bg-gray-50">
                 <h3 class="text-xl font-bold text-gray-900">Edit Reseller Product</h3>
                 <p class="text-sm text-gray-500 mt-1">Update your markup price</p>
             </div>
@@ -235,9 +235,9 @@
                     </div>
 
                     <!-- Base Price Display -->
-                    <div class="flex items-center justify-between p-4 bg-purple-50 rounded-xl mb-6">
-                        <span class="text-sm text-purple-700">Base Price</span>
-                        <span id="edit_base_price" class="text-lg font-bold text-purple-700"></span>
+                    <div class="flex items-center justify-between p-4 bg-brand-violet-soft rounded-xl mb-6">
+                        <span class="text-sm text-brand-violet-deep">Base Price</span>
+                        <span id="edit_base_price" class="text-lg font-bold text-brand-violet-deep"></span>
                     </div>
 
                     <!-- Markup Input -->
@@ -255,7 +255,7 @@
                                 min="0"
                                 required
                                 oninput="calculateEditSellingPrice()"
-                                class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-lg">
+                                class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-violet focus:border-brand-violet text-lg">
                         </div>
                     </div>
 
@@ -263,7 +263,7 @@
                     <div class="mb-6">
                         <label class="flex items-center gap-3 cursor-pointer">
                             <input type="hidden" name="is_active" value="0">
-                            <input type="checkbox" name="is_active" id="edit_is_active" value="1" class="w-5 h-5 text-purple-600 rounded border-gray-300 focus:ring-purple-500">
+                            <input type="checkbox" name="is_active" id="edit_is_active" value="1" class="w-5 h-5 text-brand-violet rounded border-gray-300 focus:ring-brand-violet">
                             <span class="text-sm font-medium text-gray-700">Product is Active</span>
                         </label>
                     </div>
@@ -293,7 +293,7 @@
                     </button>
                     <button 
                         type="submit"
-                        class="flex-1 px-5 py-3 bg-purple-600 text-white font-medium rounded-xl hover:bg-purple-700 transition-colors">
+                        class="flex-1 px-5 py-3 bg-brand-violet text-white font-medium rounded-xl hover:bg-brand-violet-deep transition-colors">
                         Update Product
                     </button>
                 </div>
@@ -326,7 +326,7 @@
             } else {
                 const initials = networkName.substring(0, 2).toUpperCase();
                 const div = document.createElement('div');
-                div.className = 'w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center';
+                div.className = 'w-12 h-12 rounded-xl bg-gradient-to-br from-brand-violet to-brand-violet-deep flex items-center justify-center';
                 const span = document.createElement('span');
                 span.className = 'text-white font-bold';
                 span.textContent = initials;

@@ -5,6 +5,14 @@
     'vendor' => null,
 ])
 
+{{--
+    Vendor dashboard shell, shared by every page under /vendor/*.
+    Visual redesign only: $navLinks, vendor_nav_paths(), $storefrontUrl,
+    notificationBell(), and every route()/Alpine binding are unchanged —
+    only the surrounding markup/classes were rewritten to the violet brand
+    accent (--color-brand-violet in resources/css/app.css) that now runs
+    through the whole product, not just the public storefront.
+--}}
 @once
     @php
         if (! function_exists('vendor_nav_paths')) {
@@ -127,7 +135,18 @@
     }
     unset($link);
 
-    $linkBaseClasses = 'group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors';
+    // Visual grouping only — every key below already exists in $navLinks above.
+    // No link is added, removed, or reordered across group boundaries; this just
+    // labels the existing list so a long sidebar scans faster.
+    $navGroups = [
+        'Overview' => ['dashboard'],
+        'Sell' => ['orders', 'fulfillment', 'products'],
+        'Grow' => ['marketplace', 'reseller', 'affiliates', 'result-checkers', 'afa', 'ussd'],
+        'Finance' => ['wallet', 'analytics'],
+        'Account' => ['settings'],
+    ];
+
+    $linkBaseClasses = 'group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors';
 @endphp
 
 <div x-data="{ openSidebar: false }" @keydown.window.escape="openSidebar = false" {{ $attributes->merge(['class' => 'flex min-h-screen bg-gray-50']) }}>
@@ -141,11 +160,11 @@
              x-transition:leave="transform transition ease-in duration-200"
              x-transition:leave-start="translate-x-0 opacity-100"
              x-transition:leave-end="-translate-x-full opacity-0"
-             class="relative flex w-4/5 max-w-sm flex-col bg-brand-deep-blue text-white shadow-2xl rounded-r-2xl">
+             class="relative flex w-4/5 max-w-sm flex-col text-white shadow-2xl rounded-r-2xl bg-brand-dark">
             <div class="flex items-center justify-between px-4 pt-5 pb-4 border-b border-white/10">
                 <div class="flex items-center">
-                    <div class="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
-                        <span class="text-brand-deep-blue font-bold text-sm">X4U</span>
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center bg-brand-violet">
+                        <span class="text-white font-bold text-sm">X4U</span>
                     </div>
                     <span class="ml-2 text-lg font-bold">Vendor Portal</span>
                 </div>
@@ -155,38 +174,53 @@
                     </svg>
                 </button>
             </div>
-            <div class="flex-1 overflow-y-auto px-4 py-6 space-y-1">
-                @foreach ($navLinks as $link)
-                    @php
-                        $linkClasses = $link['isActive']
-                            ? 'bg-white/20 text-white'
-                            : 'text-blue-100 hover:text-white hover:bg-white/10';
-                        $iconClasses = $link['isActive'] ? 'text-white' : 'text-blue-200 group-hover:text-white/80';
-                    @endphp
-                    <a href="{{ $link['href'] }}" class="{{ $linkBaseClasses }} {{ $linkClasses }}" @click="openSidebar = false">
-                        <svg class="mr-3 h-5 w-5 {{ $iconClasses }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            {!! vendor_nav_paths($link['key']) !!}
-                        </svg>
-                        {{ $link['label'] }}
-                    </a>
+            <div class="flex-1 overflow-y-auto px-3 py-6 space-y-4">
+                @foreach ($navGroups as $groupLabel => $groupKeys)
+                    @php $groupLinks = collect($navLinks)->whereIn('key', $groupKeys); @endphp
+                    @if ($groupLinks->isNotEmpty())
+                        <div>
+                            <p class="px-3 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/35">{{ $groupLabel }}</p>
+                            <div class="space-y-1">
+                                @foreach ($groupLinks as $link)
+                                    @php
+                                        $linkClasses = $link['isActive']
+                                            ? 'text-white bg-brand-violet'
+                                            : 'text-white/60 hover:text-white hover:bg-white/5';
+                                        $iconClasses = $link['isActive'] ? 'text-white' : 'text-white/40 group-hover:text-white/70';
+                                    @endphp
+                                    <a
+                                        href="{{ $link['href'] }}"
+                                        class="{{ $linkBaseClasses }} {{ $linkClasses }}"
+                                        @click="openSidebar = false"
+                                        @if ($link['isActive']) aria-current="page" @endif
+                                    >
+                                        <svg class="mr-3 h-5 w-5 flex-shrink-0 {{ $iconClasses }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            {!! vendor_nav_paths($link['key']) !!}
+                                        </svg>
+                                        {{ $link['label'] }}
+                                    </a>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
                 @endforeach
             </div>
             <div class="border-t border-white/10 px-4 py-4">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center">
-                        <div class="w-8 h-8 bg-white rounded-full flex items-center justify-center">
-                            <span class="text-brand-deep-blue font-medium text-sm">{{ strtoupper(substr(Auth::guard('vendor')->user()->name ?? 'VD', 0, 2)) }}</span>
+                        <div class="w-8 h-8 rounded-full flex items-center justify-center bg-brand-violet">
+                            <span class="text-white font-medium text-sm">{{ strtoupper(substr(Auth::guard('vendor')->user()->name ?? 'VD', 0, 2)) }}</span>
                         </div>
                         <div class="ml-3">
                             <p class="text-sm font-medium">{{ Auth::guard('vendor')->user()->name ?? 'Vendor User' }}</p>
-                            <p class="text-xs text-blue-100">{{ Auth::guard('vendor')->user()->email ?? 'vendor@example.com' }}</p>
+                            <p class="text-xs text-white/50">{{ Auth::guard('vendor')->user()->email ?? 'vendor@example.com' }}</p>
                         </div>
                     </div>
                 </div>
                 <!-- Mobile Logout Button -->
                 <form method="POST" action="{{ route('vendor.logout') }}" class="mt-4">
                     @csrf
-                    <button type="submit" class="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-colors">
+                    <button type="submit" class="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-white/10 hover:bg-white/15 rounded-lg transition-colors">
                         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                         </svg>
@@ -198,41 +232,61 @@
     </div>
 
     <!-- Desktop sidebar -->
-    <div class="hidden md:flex md:w-64 md:flex-col bg-brand-deep-blue text-white" aria-label="Vendor navigation">
-        <div class="flex flex-col grow pt-5 overflow-y-auto">
-            <div class="flex items-center shrink-0 px-4">
-                <div class="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
-                    <span class="text-brand-deep-blue font-bold text-sm">X4U</span>
-                </div>
-                <span class="ml-2 text-lg font-bold">Vendor Portal</span>
+    {{--
+        Layout fix only: three direct flex children so the brand header and the
+        vendor/profile footer stay pinned, and only the <nav> scrolls when there
+        isn't enough viewport height for every group. Previously the header, nav,
+        and footer were all nested inside one `overflow-y-auto` column, so the
+        header could scroll out of view on short screens. Links, groups, active
+        states, colors, and icons below are unchanged.
+    --}}
+    <div class="hidden md:flex md:w-64 md:flex-col text-white bg-brand-dark" aria-label="Vendor navigation">
+        <div class="flex items-center shrink-0 px-4 pt-5 pb-4">
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center bg-brand-violet">
+                <span class="text-white font-bold text-sm">X4U</span>
             </div>
-            <div class="mt-8 grow flex flex-col">
-                <nav class="flex-1 px-2 pb-4 space-y-1">
-                    @foreach ($navLinks as $link)
-                        @php
-                            $linkClasses = $link['isActive']
-                                ? 'bg-white/15 text-white'
-                                : 'text-blue-100 hover:text-white hover:bg-white/10';
-                            $iconClasses = $link['isActive'] ? 'text-white' : 'text-blue-200 group-hover:text-white/80';
-                        @endphp
-                        <a href="{{ $link['href'] }}" class="{{ $linkBaseClasses }} {{ $linkClasses }}">
-                            <svg class="mr-3 h-5 w-5 {{ $iconClasses }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                {!! vendor_nav_paths($link['key']) !!}
-                            </svg>
-                            {{ $link['label'] }}
-                        </a>
-                    @endforeach
-                </nav>
-                <div class="border-t border-white/10 p-4">
-                    <div class="flex items-center">
-                        <div class="w-8 h-8 bg-white rounded-full flex items-center justify-center">
-                            <span class="text-brand-deep-blue font-medium text-sm">{{ strtoupper(substr(Auth::guard('vendor')->user()->name ?? 'VD', 0, 2)) }}</span>
-                        </div>
-                        <div class="ml-3">
-                            <p class="text-sm font-medium text-white">{{ Auth::guard('vendor')->user()->name ?? 'Vendor User' }}</p>
-                            <p class="text-xs text-blue-200">{{ Auth::guard('vendor')->user()->email ?? 'vendor@example.com' }}</p>
+            <span class="ml-2 text-lg font-bold">Vendor Portal</span>
+        </div>
+
+        <nav class="flex-1 min-h-0 overflow-y-auto px-3 pb-4 space-y-4">
+            @foreach ($navGroups as $groupLabel => $groupKeys)
+                @php $groupLinks = collect($navLinks)->whereIn('key', $groupKeys); @endphp
+                @if ($groupLinks->isNotEmpty())
+                    <div>
+                        <p class="px-3 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/35">{{ $groupLabel }}</p>
+                        <div class="space-y-1">
+                            @foreach ($groupLinks as $link)
+                                @php
+                                    $linkClasses = $link['isActive']
+                                        ? 'text-white bg-brand-violet'
+                                        : 'text-white/60 hover:text-white hover:bg-white/5';
+                                    $iconClasses = $link['isActive'] ? 'text-white' : 'text-white/40 group-hover:text-white/70';
+                                @endphp
+                                <a
+                                    href="{{ $link['href'] }}"
+                                    class="{{ $linkBaseClasses }} {{ $linkClasses }}"
+                                    @if ($link['isActive']) aria-current="page" @endif
+                                >
+                                    <svg class="mr-3 h-5 w-5 flex-shrink-0 {{ $iconClasses }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        {!! vendor_nav_paths($link['key']) !!}
+                                    </svg>
+                                    {{ $link['label'] }}
+                                </a>
+                            @endforeach
                         </div>
                     </div>
+                @endif
+            @endforeach
+        </nav>
+
+        <div class="border-t border-white/10 p-4 shrink-0">
+            <div class="flex items-center">
+                <div class="w-8 h-8 rounded-full flex items-center justify-center bg-brand-violet">
+                    <span class="text-white font-medium text-sm">{{ strtoupper(substr(Auth::guard('vendor')->user()->name ?? 'VD', 0, 2)) }}</span>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm font-medium text-white">{{ Auth::guard('vendor')->user()->name ?? 'Vendor User' }}</p>
+                    <p class="text-xs text-white/50">{{ Auth::guard('vendor')->user()->email ?? 'vendor@example.com' }}</p>
                 </div>
             </div>
         </div>
@@ -243,7 +297,7 @@
         <header class="bg-white shadow-sm border-b border-gray-200">
             <div class="flex flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8 md:flex-row md:items-center md:justify-between">
                 <div class="flex items-center gap-3">
-                    <button class="md:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-deep-blue" @click="openSidebar = true" aria-label="Open sidebar">
+                    <button class="md:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-violet" @click="openSidebar = true" aria-label="Open sidebar">
                         <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
                         </svg>
@@ -255,17 +309,26 @@
                         @endif
                     </div>
                 </div>
-                <div class="flex items-center gap-2 sm:gap-3">
+                <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+                            {{--
+                                flex-wrap (not nowrap): on narrow phones this row (bell + page
+                                actions + storefront/logout) is wider than the viewport. Without
+                                wrap, flex's default shrink squeezes each button below its content
+                                width, wrapping text mid-label (e.g. "Share Store Link" breaking
+                                across three lines) instead of moving whole buttons to a new line.
+                                Every direct child below carries shrink-0 so it keeps its natural
+                                size and wraps as a unit.
+                            --}}
                             <!-- Notification Bell -->
-                            <div x-data="notificationBell()" class="relative">
-                                <button @click="toggleDropdown()" 
-                                        class="relative p-2 rounded-full text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-deep-blue transition-colors"
+                            <div x-data="notificationBell()" class="relative shrink-0">
+                                <button @click="toggleDropdown()"
+                                        class="relative p-2 rounded-full text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-violet transition-colors"
                                         aria-label="View notifications">
                                     <svg class="h-5 w-5 sm:h-6 sm:w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                                     </svg>
                                     <!-- Notification Badge -->
-                                    <span x-show="unreadCount > 0" 
+                                    <span x-show="unreadCount > 0"
                                           x-text="unreadCount > 99 ? '99+' : unreadCount"
                                           x-cloak
                                           class="absolute -top-1 -right-1 inline-flex items-center justify-center px-1 py-0.5 text-[10px] sm:text-xs font-bold leading-none text-white bg-red-500 rounded-full min-w-[16px] sm:min-w-[18px]">
@@ -273,7 +336,7 @@
                                 </button>
 
                                 <!-- Notification Dropdown -->
-                                <div x-show="isOpen" 
+                                <div x-show="isOpen"
                                      x-cloak
                                      @click.outside="isOpen = false"
                                      x-transition:enter="transition ease-out duration-200"
@@ -282,22 +345,22 @@
                                      x-transition:leave="transition ease-in duration-150"
                                      x-transition:leave-start="opacity-100 scale-100"
                                      x-transition:leave-end="opacity-0 scale-95"
-                                     class="fixed sm:absolute inset-x-2 sm:inset-x-auto sm:right-0 top-16 sm:top-auto sm:mt-2 w-auto sm:w-80 bg-white rounded-lg shadow-lg ring-1 ring-black ring-opacity-5 z-50 overflow-hidden max-h-[80vh] sm:max-h-none">
+                                     class="fixed sm:absolute inset-x-2 sm:inset-x-auto sm:right-0 top-16 sm:top-auto sm:mt-2 w-auto sm:w-80 bg-white rounded-xl shadow-lg ring-1 ring-black ring-opacity-5 z-50 overflow-hidden max-h-[80vh] sm:max-h-none">
                                     <!-- Header -->
                                     <div class="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between sticky top-0">
                                         <h3 class="text-sm font-semibold text-gray-900">Notifications</h3>
-                                        <button x-show="unreadCount > 0" 
-                                                @click="markAllRead()" 
-                                                class="text-xs text-brand-deep-blue hover:text-brand-deep-blue/80 font-medium">
+                                        <button x-show="unreadCount > 0"
+                                                @click="markAllRead()"
+                                                class="text-xs font-medium text-brand-violet">
                                             Mark all as read
                                         </button>
                                     </div>
-                                    
+
                                     <!-- Notifications List -->
                                     <div class="max-h-[60vh] sm:max-h-96 overflow-y-auto">
                                         <template x-if="loading">
                                             <div class="px-4 py-8 text-center text-gray-500">
-                                                <svg class="animate-spin h-6 w-6 mx-auto text-brand-deep-blue" fill="none" viewBox="0 0 24 24">
+                                                <svg class="animate-spin h-6 w-6 mx-auto text-brand-violet" fill="none" viewBox="0 0 24 24">
                                                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                                 </svg>
@@ -315,8 +378,8 @@
                                         </template>
 
                                         <template x-for="notification in notifications" :key="notification.id">
-                                            <div @click="markAsRead(notification.id)" 
-                                                 :class="{ 'bg-blue-50': !notification.read_at }"
+                                            <div @click="markAsRead(notification.id)"
+                                                 :class="{ 'bg-violet-50': !notification.read_at }"
                                                  class="px-3 sm:px-4 py-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors active:bg-gray-100">
                                                 <div class="flex items-start gap-2 sm:gap-3">
                                                     <div :class="getIconBgClass(notification.type)" class="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center">
@@ -332,7 +395,7 @@
                                                         <p class="text-xs text-gray-500 mt-0.5 line-clamp-2 leading-relaxed" x-text="notification.message"></p>
                                                         <p class="text-[11px] sm:text-xs text-gray-400 mt-1" x-text="formatTime(notification.created_at)"></p>
                                                     </div>
-                                                    <span x-show="!notification.read_at" class="flex-shrink-0 w-2 h-2 bg-blue-500 rounded-full mt-1"></span>
+                                                    <span x-show="!notification.read_at" class="flex-shrink-0 w-2 h-2 rounded-full mt-1 bg-brand-violet"></span>
                                                 </div>
                                             </div>
                                         </template>
@@ -341,20 +404,34 @@
                             </div>
 
                             @isset($actions)
-                                <div class="flex items-center gap-3">
+                                <div class="flex flex-wrap items-center gap-2 sm:gap-3">
                                     {{ $actions }}
                                 </div>
                             @endisset
 
                             @if ($storefrontUrl)
-                                <x-button href="{{ $storefrontUrl }}" variant="outline" size="sm" class="hidden sm:inline-flex whitespace-nowrap">
+                                {{--
+                                    Shown from lg: (1024px), not sm:. The sidebar takes 256px starting at
+                                    md: (768px), so between 768-1023px this button plus the page's own
+                                    header actions (e.g. Dashboard's Share Store Link + Quick Buy) can
+                                    outgrow the remaining row width; overflow-hidden on the content column
+                                    clips it silently rather than wrapping or scrolling.
+
+                                    `max-lg:hidden` (not a bare `hidden`) is deliberate: <x-button>'s own
+                                    base classes always include an unprefixed `inline-flex`, and a bare
+                                    `hidden` has the same specificity — whichever happens to land later in
+                                    Tailwind's generated stylesheet wins, unconditionally, at every width.
+                                    `max-lg:hidden` / `lg:inline-flex` are mutually exclusive media queries,
+                                    so there's no viewport where they can tie.
+                                --}}
+                                <x-button href="{{ $storefrontUrl }}" variant="outline" size="sm" class="max-lg:hidden lg:inline-flex whitespace-nowrap shrink-0">
                                     View Storefront
                                 </x-button>
                             @endif
 
-                            <form method="POST" action="{{ route('vendor.logout') }}" class="m-0 inline-flex">
+                            <form method="POST" action="{{ route('vendor.logout') }}" class="m-0 inline-flex shrink-0">
                                 @csrf
-                                <x-button type="submit" variant="secondary" size="sm" class="whitespace-nowrap text-xs sm:text-sm px-2 sm:px-3">
+                                <x-button type="submit" variant="secondary" size="sm" class="whitespace-nowrap text-xs sm:text-sm px-2 sm:px-3 shrink-0">
                                     <span class="hidden sm:inline">Log Out</span>
                                     <svg class="sm:hidden h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -421,7 +498,7 @@
                             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                         }
                     });
-                    
+
                     const notification = this.notifications.find(n => n.id === id);
                     if (notification && !notification.read_at) {
                         notification.read_at = new Date().toISOString();
@@ -441,7 +518,7 @@
                             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                         }
                     });
-                    
+
                     this.notifications.forEach(n => {
                         if (!n.read_at) {
                             n.read_at = new Date().toISOString();
@@ -468,12 +545,12 @@
                 const date = new Date(timestamp);
                 const now = new Date();
                 const diff = Math.floor((now - date) / 1000);
-                
+
                 if (diff < 60) return 'Just now';
                 if (diff < 3600) return Math.floor(diff / 60) + ' min ago';
                 if (diff < 86400) return Math.floor(diff / 3600) + ' hours ago';
                 if (diff < 604800) return Math.floor(diff / 86400) + ' days ago';
-                
+
                 return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
             }
         }

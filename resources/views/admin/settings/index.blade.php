@@ -30,6 +30,7 @@
                     ['key' => 'service-availability', 'label' => 'Service Availability'],
                     ['key' => 'delivery-status', 'label' => 'Delivery Status'],
                     ['key' => 'vendor-approval', 'label' => 'Vendor Approval'],
+                    ['key' => 'platform-service-vendors', 'label' => 'Platform Service Vendors'],
                     ['key' => 'vendor-tiers', 'label' => 'Vendor Tiers'],
                     ['key' => 'vendor-tier-promotions', 'label' => 'Tier Promotions'],
                     ['key' => 'vendor-tier-history', 'label' => 'Tier History'],
@@ -57,6 +58,10 @@
 
         <div x-show="tab === 'vendor-approval'" x-cloak>
             @include('admin.settings.partials.vendor-approval')
+        </div>
+
+        <div x-show="tab === 'platform-service-vendors'" x-cloak>
+            @include('admin.settings.partials.platform-service-vendors')
         </div>
 
         <div x-show="tab === 'vendor-tiers'" x-cloak>
