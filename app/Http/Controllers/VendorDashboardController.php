@@ -61,10 +61,10 @@ class VendorDashboardController extends Controller
         $commissions = $filteredStats['commissions'];
 
         // Vendors must only see successfully-paid orders.
-        // Refunded orders are excluded: the admin reverses vendor earnings on refund,
-        // so the order should not appear on the vendor side. All other statuses
-        // (Pending, Processing, Verifying, On Hold, Completed, Cancelled, Failed)
-        // are intentionally visible to the vendor.
+        // Pending orders are excluded from the vendor side: the customer can still track
+        // them on the storefront, but they should not clutter the vendor's account until
+        // they move past Pending. All other statuses (Processing, Verifying, On Hold,
+        // Completed, Cancelled, Failed, Refunded) are intentionally visible to the vendor.
         $productOrders = Order::query()
             ->where(function ($q) use ($vendorId) {
                 $q->where('vendor_id', $vendorId)
@@ -76,7 +76,7 @@ class VendorDashboardController extends Controller
                     });
             })
             ->whereIn('payment_status', ['paid', 'completed'])
-            ->whereNotIn('status', ['Refunded'])
+            ->whereNotIn('status', ['Pending'])
             ->whereHas('transactions', function ($q) {
                 $q->whereIn('payment_status', ['successful', 'completed']);
             })
@@ -326,11 +326,11 @@ class VendorDashboardController extends Controller
                     });
             })
             ->whereIn('payment_status', ['paid', 'completed'])
-            // Only hide Refunded orders from vendors. Refunded is admin-only (financial reversal);
-            // the vendor's earnings are clawed back so they should not see the order.
-            // All other statuses (Pending, Processing, Verifying, On Hold, Completed,
-            // Cancelled, Failed) remain visible to the vendor.
-            ->whereNotIn('status', ['Refunded'])
+            // Only hide Pending orders from vendors. The customer can still track a Pending
+            // order on the storefront; it just doesn't appear in the vendor's account until
+            // it moves past Pending. All other statuses (Processing, Verifying, On Hold,
+            // Completed, Cancelled, Failed, Refunded) remain visible to the vendor.
+            ->whereNotIn('status', ['Pending'])
             ->whereHas('transactions', fn ($q) => $q->whereIn('payment_status', ['successful', 'completed']))
             ->when($search !== '', function ($q) use ($search, $isNumericSearch, $like) {
                 $q->where(function ($q2) use ($search, $isNumericSearch, $like) {
@@ -374,8 +374,8 @@ class VendorDashboardController extends Controller
             ->where('vendor_id', $vendor->id)
             ->where('is_reseller_order', true)
             ->whereIn('payment_status', ['paid', 'completed'])
-            // Only hide Refunded orders from vendors (earnings were reversed by admin).
-            ->whereNotIn('status', ['Refunded'])
+            // Only hide Pending orders from vendors (still trackable by the customer on the storefront).
+            ->whereNotIn('status', ['Pending'])
             ->whereHas('transactions', fn ($q) => $q->whereIn('payment_status', ['successful', 'completed']))
             ->when($search !== '', function ($q) use ($search, $isNumericSearch, $like) {
                 $q->where(function ($q2) use ($search, $isNumericSearch, $like) {
@@ -463,8 +463,8 @@ class VendorDashboardController extends Controller
                     ->orWhere('owner_vendor_id', $vendorId);
             })
             ->whereIn('payment_status', ['paid', 'completed'])
-            // Refunded orders are excluded from vendor-side analytics (earnings were reversed).
-            ->whereNotIn('status', ['Refunded'])
+            // Pending orders are excluded from vendor-side analytics, matching the orders list.
+            ->whereNotIn('status', ['Pending'])
             ->whereHas('transactions', fn ($q) => $q->whereIn('payment_status', ['successful', 'completed']));
 
         // Total orders for this vendor
