@@ -37,7 +37,7 @@
 @endphp
 
 @section('site-header')
-    <x-storefront.header :shop-url="$shopUrl" />
+    <x-storefront.header :shop-url="$shopUrl" :show-dashboard-button="$isStoreOwner ?? false" />
 @endsection
 
 @section('site-footer')

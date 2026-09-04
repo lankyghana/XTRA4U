@@ -83,11 +83,11 @@
 @endphp
 
 @section('site-header')
-    <x-storefront.header :shop-url="$shopUrl" />
+    <x-storefront.header :shop-url="$shopUrl" :show-vendor-links="true" />
 @endsection
 
 @section('site-footer')
-    <x-storefront.footer :shop-url="$shopUrl" />
+    <x-storefront.footer :shop-url="$shopUrl" :show-vendor-links="true" />
 @endsection
 
 @section('content')

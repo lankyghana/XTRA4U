@@ -7,6 +7,7 @@ use App\Models\PaymentGatewayConfig;
 use App\Models\ResellerProduct;
 use App\Models\Vendor;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 
 class StorefrontController extends Controller
@@ -167,10 +168,20 @@ class StorefrontController extends Controller
 
         $categories = $this->buildGlobalCategoryList($services, $categoryConfig, $defaultCategory);
 
+        // Ownership check for the "Vendor Dashboard" storefront button:
+        // convenience UI only, not an authorization mechanism. $vendor is
+        // the store itself (no separate Store model), already resolved via
+        // route-model binding, so this reuses it rather than querying again.
+        // Reading the vendor guard here never mutates the current session
+        // or any other guard (web/admin).
+        $isStoreOwner = Auth::guard('vendor')->check()
+            && Auth::guard('vendor')->id() === $vendor->id;
+
         return view('vendor_store', [
             'vendor' => $vendor,
             'services' => $services,
             'categories' => $categories,
+            'isStoreOwner' => $isStoreOwner,
             // Category to preselect on load (e.g. 'results' for the
             // /store/{vendor}/result-checkers entry point). Null lets the
             // store fall back to the first category with services.
