@@ -123,7 +123,7 @@
 
         <!-- Metric Cards: consistent label / value / helper pattern, no per-card period badges
              (the period pills above already communicate the selected period) -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <!-- Total Sales -->
             <div class="bg-white rounded-xl border border-gray-200 p-5 flex flex-col justify-between min-h-[128px]">
                 <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Total Sales</p>
@@ -152,21 +152,6 @@
                     </template>
                 </div>
                 <p class="mt-1.5 text-[11px] text-gray-400">After applicable fees</p>
-            </div>
-
-            <!-- Commission -->
-            <div class="bg-white rounded-xl border border-gray-200 p-5 flex flex-col justify-between min-h-[128px]">
-                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Commission</p>
-                <div class="mt-3 flex items-baseline gap-1">
-                    <span x-show="loading" class="inline-block w-5 h-5 border-2 border-gray-200 border-t-brand-violet rounded-full animate-spin"></span>
-                    <template x-if="!loading">
-                        <span>
-                            <span class="text-gray-400 text-sm font-medium">GHS</span>
-                            <span class="text-2xl font-bold text-gray-900" x-text="commissions"></span>
-                        </span>
-                    </template>
-                </div>
-                <p class="mt-1.5 text-[11px] text-gray-400">Platform commission</p>
             </div>
 
             <!-- Available Balance: not period-filtered, always current. Its own action
@@ -366,7 +351,6 @@ function salesFilter() {
         activeFilter: '{{ $filter ?? "today" }}',
         sales: '{{ number_format($totalSales, 2) }}',
         earnings: '{{ number_format($totalEarnings, 2) }}',
-        commissions: '{{ number_format($commissions, 2) }}',
         loading: false,
 
         get filterLabel() {
@@ -398,9 +382,6 @@ function salesFilter() {
                     const data = await response.json();
                     this.sales = data.sales;
                     this.earnings = data.earnings;
-                    if (data.commissions !== undefined) {
-                        this.commissions = data.commissions;
-                    }
                 }
             } catch (error) {
                 console.error('Failed to fetch stats:', error);
