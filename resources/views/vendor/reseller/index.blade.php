@@ -276,7 +276,7 @@
                         </div>
                         <div class="border-t border-gray-200 pt-3">
                             <div class="flex justify-between text-sm">
-                                <span class="text-gray-500">Your Earning (after 2% fee)</span>
+                                <span class="text-gray-500">Your Earning</span>
                                 <span id="edit_reseller_earning" class="font-medium text-green-600">₵0.00</span>
                             </div>
                         </div>
@@ -345,7 +345,7 @@
         function calculateEditSellingPrice() {
             const markup = parseFloat(document.getElementById('edit_markup_price').value) || 0;
             const sellingPrice = editBasePrice + markup;
-            const resellerEarning = markup * 0.98; // After 2% platform fee
+            const resellerEarning = markup * 0.98;
             
             document.getElementById('edit_selling_price').textContent = '₵' + sellingPrice.toFixed(2);
             document.getElementById('edit_reseller_earning').textContent = '₵' + resellerEarning.toFixed(2);

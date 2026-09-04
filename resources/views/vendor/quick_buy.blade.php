@@ -77,7 +77,7 @@
     $categories = $globalCategories->concat($vendorExtras)->values();
 @endphp
 
-<x-vendor-layout :vendor="$vendor" title="Quick Buy" subtitle="Fast wallet-only orders — base price + 2% platform fee" active="dashboard">
+<x-vendor-layout :vendor="$vendor" title="Quick Buy" subtitle="Fast wallet-only orders" active="dashboard">
 <div class="w-full" x-data='quickBuy(@json($catalog), @json($categories))'>
     {{-- Header: wallet balance --}}
     <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
@@ -254,7 +254,7 @@
         <aside x-cloak x-show="productId" x-transition.opacity.duration.200ms class="bg-white border border-gray-100 rounded-xl shadow-sm p-6 order-last lg:order-none w-full lg:sticky lg:top-20">
             <p class="text-xs uppercase tracking-wide text-gray-500">Wallet Checkout</p>
             <h3 class="text-xl font-bold text-gray-900 mt-2">Quick Buy order</h3>
-            <p class="text-sm text-gray-500 mt-2">Wallet-only purchases debit the base price plus 2% platform fee.</p>
+            <p class="text-sm text-gray-500 mt-2">Wallet-only purchases debit your wallet balance.</p>
 
             <div class="mt-6 bg-gray-50 rounded-xl p-4 text-sm text-gray-700">
                 <div class="grid grid-cols-2 gap-2 items-center">
@@ -266,11 +266,6 @@
                         <p class="text-xs text-gray-500">Base</p>
                         <p class="font-semibold text-brand-violet" x-text="formatPrice(selectedBasePrice())">GHS 0.00</p>
                     </div>
-                </div>
-
-                <div class="mt-3 grid grid-cols-2">
-                    <div class="text-sm text-gray-500">Platform fee (2%)</div>
-                    <div class="text-right font-medium" x-text="formatPrice((selectedBasePrice() * 0.02).toFixed(2))">GHS 0.00</div>
                 </div>
 
                 <div class="mt-3 border-t pt-3 grid grid-cols-2 items-center">
@@ -308,7 +303,7 @@
                         <svg class="w-5 h-5 text-blue-600 mt-0.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 000 2h10a1 1 0 000-2h-1V6a4 4 0 00-4-4zM7 10a3 3 0 016 0v2H7v-2z"/></svg>
                         <div>
                             <p class="font-semibold text-gray-900">🔒 Wallet-only purchase</p>
-                            <p class="mt-1 text-gray-700">Uses wallet top-ups only. Top-ups are not withdrawable. Platform fee is charged upfront.</p>
+                            <p class="mt-1 text-gray-700">Uses wallet top-ups only. Top-ups are not withdrawable.</p>
                             <p class="mt-1 text-xs text-blue-700" x-show="selectedTotalCharge() > vendorBalance">Balance insufficient for this product. Add top-ups.</p>
                         </div>
                     </div>

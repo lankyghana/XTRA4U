@@ -273,16 +273,12 @@
                         </div>
                         <div class="border-t border-gray-200 pt-3 space-y-2">
                             <div class="flex justify-between text-sm">
-                                <span class="text-gray-500">Owner Earning (after 2% fee)</span>
+                                <span class="text-gray-500">Owner Earning</span>
                                 <span id="owner_earning" class="text-gray-700">₵0.00</span>
                             </div>
                             <div class="flex justify-between text-sm">
-                                <span class="text-gray-500">Your Earning (after 2% fee)</span>
+                                <span class="text-gray-500">Your Earning</span>
                                 <span id="reseller_earning" class="font-medium text-green-600">₵0.00</span>
-                            </div>
-                            <div class="flex justify-between text-sm">
-                                <span class="text-gray-500">Platform Fees</span>
-                                <span id="platform_fee" class="text-gray-500">₵0.00</span>
                             </div>
                         </div>
                     </div>
@@ -349,19 +345,16 @@
         function calculateSellingPrice() {
             const markup = parseFloat(document.getElementById('markup_price').value) || 0;
             const sellingPrice = currentBasePrice + markup;
-            
-            // Calculate platform fees (2% from each party)
+
             const ownerFee = currentBasePrice * 0.02;
             const resellerFee = markup * 0.02;
-            const totalPlatformFee = ownerFee + resellerFee;
-            
+
             const ownerEarning = currentBasePrice - ownerFee;
             const resellerEarning = markup - resellerFee;
-            
+
             document.getElementById('selling_price').textContent = '₵' + sellingPrice.toFixed(2);
             document.getElementById('owner_earning').textContent = '₵' + ownerEarning.toFixed(2);
             document.getElementById('reseller_earning').textContent = '₵' + resellerEarning.toFixed(2);
-            document.getElementById('platform_fee').textContent = '₵' + totalPlatformFee.toFixed(2);
         }
 
         // Close modal on outside click
