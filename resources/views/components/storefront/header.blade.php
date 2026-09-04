@@ -5,7 +5,20 @@
     using `components/navigation.blade.php`. Every destination below is an
     existing named route.
 --}}
-@props(['shopUrl'])
+{{--
+    `showVendorLinks` gates the "Vendor Login" / "Become a Vendor" nav items.
+    They are only meant to surface on the main homepage — every other page
+    that shares this header (vendor storefronts, checkout, static pages,
+    etc.) leaves this false and gets neither link.
+
+    `showDashboardButton` gates the "Vendor Dashboard" nav item. Only the
+    vendor storefront page (vendor_store.blade.php) passes this, and only
+    when the authenticated vendor guard's id matches the store being
+    viewed — see StorefrontController::showVendorStore(). It is a
+    convenience shortcut back to the dashboard, not an authorization check;
+    the dashboard route itself stays behind its own middleware.
+--}}
+@props(['shopUrl', 'showVendorLinks' => false, 'showDashboardButton' => false])
 
 @php
     $navLinks = [
@@ -39,14 +52,22 @@
         </nav>
 
         <div class="hidden md:flex items-center gap-4">
-            <a
-                href="{{ route('vendor.login.form') }}"
-                class="x4-body-md x4-link"
-            >Vendor Login</a>
+            @if ($showVendorLinks)
+                <a
+                    href="{{ route('vendor.login.form') }}"
+                    class="x4-body-md x4-link"
+                >Vendor Login</a>
 
-            <x-storefront.btn :href="route('vendor.request.form')" variant="outline">
-                Become a Vendor
-            </x-storefront.btn>
+                <x-storefront.btn :href="route('vendor.request.form')" variant="outline">
+                    Become a Vendor
+                </x-storefront.btn>
+            @endif
+
+            @if ($showDashboardButton)
+                <x-storefront.btn :href="route('vendor.dashboard')" variant="outline">
+                    Vendor Dashboard
+                </x-storefront.btn>
+            @endif
 
             <x-storefront.btn :href="$shopUrl" variant="primary">
                 Buy Now
@@ -83,16 +104,25 @@
             >{{ $link['label'] }}</a>
         @endforeach
 
-        <a
-            href="{{ route('vendor.login.form') }}"
-            class="x4-body-md block py-3"
-            style="color: var(--x4-ink); border-bottom: 1px solid var(--x4-hairline);"
-        >Vendor Portal</a>
+        @if ($showVendorLinks)
+            <a
+                href="{{ route('vendor.login.form') }}"
+                class="x4-body-md block py-3"
+                style="color: var(--x4-ink); border-bottom: 1px solid var(--x4-hairline);"
+            >Vendor Portal</a>
+        @endif
 
         <div class="flex flex-col gap-3 mt-4">
-            <x-storefront.btn :href="route('vendor.request.form')" variant="outline" class="justify-center">
-                Become a Vendor
-            </x-storefront.btn>
+            @if ($showVendorLinks)
+                <x-storefront.btn :href="route('vendor.request.form')" variant="outline" class="justify-center">
+                    Become a Vendor
+                </x-storefront.btn>
+            @endif
+            @if ($showDashboardButton)
+                <x-storefront.btn :href="route('vendor.dashboard')" variant="outline" class="justify-center">
+                    Vendor Dashboard
+                </x-storefront.btn>
+            @endif
             <x-storefront.btn :href="$shopUrl" variant="primary" class="justify-center">
                 Buy Now
             </x-storefront.btn>

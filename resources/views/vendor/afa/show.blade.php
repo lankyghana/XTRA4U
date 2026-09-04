@@ -341,10 +341,6 @@
                                 <span class="font-medium text-brand-violet">GH₵ {{ number_format($registration->reseller_earning, 2) }}</span>
                             </div>
                             @endif
-                            <div class="flex justify-between py-2 border-b border-gray-100">
-                                <span class="text-gray-500">Platform Fee</span>
-                                <span class="font-medium text-gray-600">GH₵ {{ number_format($registration->platform_commission, 2) }}</span>
-                            </div>
                             <div class="flex justify-between py-2">
                                 <span class="text-gray-500">Payment Status</span>
                                 <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {{ $registration->payment_status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700' }}">

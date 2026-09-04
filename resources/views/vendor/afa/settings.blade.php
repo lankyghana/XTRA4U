@@ -125,7 +125,7 @@
                                     >
                                 </div>
                                 <p class="mt-1 text-sm text-gray-500">
-                                    This is the amount customers will pay for AFA registration. Platform takes 2% commission.
+                                    This is the amount customers will pay for AFA registration.
                                 </p>
                                 @error('afa_price')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
@@ -139,10 +139,6 @@
                                     <div class="flex justify-between text-sm">
                                         <span class="text-gray-500">Customer Pays:</span>
                                         <span class="font-medium text-gray-900" id="preview-customer-pays">GH₵ {{ number_format($vendor->afa_price ?? 50, 2) }}</span>
-                                    </div>
-                                    <div class="flex justify-between text-sm">
-                                        <span class="text-gray-500">Platform Fee (2%):</span>
-                                        <span class="font-medium text-gray-600" id="preview-platform-fee">GH₵ {{ number_format(($vendor->afa_price ?? 50) * 0.02, 2) }}</span>
                                     </div>
                                     <div class="border-t border-gray-200 pt-2 flex justify-between">
                                         <span class="font-medium text-gray-700">Your Earning:</span>
@@ -230,7 +226,7 @@
                                     >
                                 </div>
                                 <p class="mt-1 text-sm text-gray-500">
-                                    This is the amount you add on top of the base price. Platform takes 2% of your markup.
+                                    This is the amount you add on top of the base price.
                                 </p>
                                 @error('afa_markup')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
@@ -252,10 +248,6 @@
                                     <div class="flex justify-between text-sm border-t border-gray-200 pt-2">
                                         <span class="text-gray-700 font-medium">Customer Pays:</span>
                                         <span class="font-bold text-gray-900" id="reseller-selling-price">GH₵ {{ number_format($vendor->afa_selling_price ?? 0, 2) }}</span>
-                                    </div>
-                                    <div class="flex justify-between text-sm">
-                                        <span class="text-gray-500">Platform Fee (2% of markup):</span>
-                                        <span class="font-medium text-gray-600" id="reseller-platform-fee">GH₵ {{ number_format(($vendor->afa_markup ?? 0) * 0.02, 2) }}</span>
                                     </div>
                                     <div class="border-t border-gray-200 pt-2 flex justify-between">
                                         <span class="font-medium text-gray-700">Your Earning:</span>
@@ -299,8 +291,7 @@
                             </p>
                             <ul class="list-disc list-inside space-y-1 ml-2">
                                 <li>They pay the price you set</li>
-                                <li>2% platform commission is deducted</li>
-                                <li>You receive 98% of the registration fee</li>
+                                <li>You receive your earning based on your configured price</li>
                                 <li>The order appears in your queue for processing</li>
                             </ul>
                         </div>
@@ -363,11 +354,9 @@
     // Price preview calculator for direct mode
     document.getElementById('afa_price').addEventListener('input', function() {
         const price = parseFloat(this.value) || 0;
-        const platformFee = price * 0.02;
         const earning = price * 0.98;
-        
+
         document.getElementById('preview-customer-pays').textContent = 'GH₵ ' + price.toFixed(2);
-        document.getElementById('preview-platform-fee').textContent = 'GH₵ ' + platformFee.toFixed(2);
         document.getElementById('preview-your-earning').textContent = 'GH₵ ' + earning.toFixed(2);
     });
 
@@ -405,13 +394,11 @@
         const markup = parseFloat(markupInput.value) || 0;
         
         const sellingPrice = basePrice + markup;
-        const platformFee = markup * 0.02;
         const yourEarning = markup * 0.98;
-        
+
         document.getElementById('reseller-base-price').textContent = 'GH₵ ' + basePrice.toFixed(2);
         document.getElementById('reseller-markup').textContent = 'GH₵ ' + markup.toFixed(2);
         document.getElementById('reseller-selling-price').textContent = 'GH₵ ' + sellingPrice.toFixed(2);
-        document.getElementById('reseller-platform-fee').textContent = 'GH₵ ' + platformFee.toFixed(2);
         document.getElementById('reseller-your-earning').textContent = 'GH₵ ' + yourEarning.toFixed(2);
     }
 

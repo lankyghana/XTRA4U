@@ -8,6 +8,28 @@
             <p class="text-sm text-gray-500">Monitor order amounts, statuses, and fulfillment dates.</p>
         </div>
 
+        <form method="GET" action="{{ route('admin.orders.index') }}" class="flex flex-col sm:flex-row gap-3 sm:items-center">
+            <div class="flex-1">
+                <input
+                    type="text"
+                    name="q"
+                    value="{{ $search ?? request('q') }}"
+                    placeholder="Search by order id, reference, phone, or vendor"
+                    class="w-full text-sm border-gray-300 rounded-lg focus:ring-brand-bright-blue focus:border-brand-bright-blue px-3 py-2 font-medium shadow-sm"
+                />
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="text-sm px-4 py-2 rounded-lg bg-brand-bright-blue text-white font-medium shadow-sm hover:bg-brand-deep-blue">
+                    Search
+                </button>
+                @if (($search ?? request('q')))
+                    <a href="{{ route('admin.orders.index') }}" class="text-sm px-4 py-2 rounded-lg border border-gray-300 text-gray-700 font-medium shadow-sm hover:bg-gray-50">
+                        Clear
+                    </a>
+                @endif
+            </div>
+        </form>
+
         <x-table :headers="['Order ID', 'Vendor', 'Service', 'Amount Paid', 'Status', 'Date', '']">
             @forelse ($orders as $order)
                 <tr class="hover:bg-gray-50">
@@ -25,7 +47,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="6" class="px-6 py-4 text-center text-sm text-gray-500">No orders found.</td>
+                    <td colspan="7" class="px-6 py-4 text-center text-sm text-gray-500">No orders found.</td>
                 </tr>
             @endforelse
         </x-table>

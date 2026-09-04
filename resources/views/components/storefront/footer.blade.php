@@ -6,7 +6,13 @@
     /support, /vendors) are mapped onto the routes this application
     actually serves rather than shipped as dead anchors.
 --}}
-@props(['shopUrl'])
+{{--
+    `showVendorLinks` gates the "Become a Vendor" / "Vendor Login" entries in
+    the "For Vendors" column below. Only the main homepage passes true — every
+    other page sharing this footer (vendor storefronts, checkout, static
+    pages, etc.) keeps them out.
+--}}
+@props(['shopUrl', 'showVendorLinks' => false])
 
 @php
     // The platform's public WhatsApp channel, as already used by
@@ -26,12 +32,12 @@
             ['label' => 'Order Status', 'href' => route('order.status')],
             ['label' => 'About Us', 'href' => route('about')],
         ],
-        'For Vendors' => [
-            ['label' => 'Become a Vendor', 'href' => route('vendor.request.form')],
-            ['label' => 'Vendor Login', 'href' => route('vendor.login.form')],
+        'For Vendors' => array_filter([
+            $showVendorLinks ? ['label' => 'Become a Vendor', 'href' => route('vendor.request.form')] : null,
+            $showVendorLinks ? ['label' => 'Vendor Login', 'href' => route('vendor.login.form')] : null,
             ['label' => 'Vendor Dashboard', 'href' => route('vendor.dashboard')],
             ['label' => 'Support', 'href' => $whatsappChannel],
-        ],
+        ]),
         'Legal' => [
             ['label' => 'Privacy Policy', 'href' => route('privacy')],
             ['label' => 'Terms of Service', 'href' => route('terms')],
