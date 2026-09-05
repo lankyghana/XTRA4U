@@ -309,18 +309,17 @@
                         @endif
                     </div>
                 </div>
-                <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+                <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
                             {{--
-                                flex-wrap (not nowrap): on narrow phones this row (bell + page
-                                actions + storefront/logout) is wider than the viewport. Without
-                                wrap, flex's default shrink squeezes each button below its content
-                                width, wrapping text mid-label (e.g. "Share Store Link" breaking
-                                across three lines) instead of moving whole buttons to a new line.
-                                Every direct child below carries shrink-0 so it keeps its natural
-                                size and wraps as a unit.
+                                Below sm: (640px) the bell sits on its own row (flex-col above) so
+                                it never competes with the 4-button action grid for row width —
+                                it's not one of the grid's cells and doesn't affect their sizing.
+                                From sm: up this container is a wrapping flex row again, same as
+                                before, so the bell rejoins the buttons on one line exactly like
+                                the original desktop layout.
                             --}}
                             <!-- Notification Bell -->
-                            <div x-data="notificationBell()" class="relative shrink-0">
+                            <div x-data="notificationBell()" class="relative self-start sm:self-auto shrink-0">
                                 <button @click="toggleDropdown()"
                                         class="relative p-2 rounded-full text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-violet transition-colors"
                                         aria-label="View notifications">
@@ -403,41 +402,58 @@
                                 </div>
                             </div>
 
-                            @isset($actions)
-                                <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+                            {{--
+                                The four actions (page-supplied actions slot, View Storefront, Log
+                                Out) render as a balanced 2-column grid below sm: (640px) — every
+                                item is w-full so its cell width comes from the grid, never from its
+                                own label length — and fall back to the original horizontal
+                                flex-wrap row from sm: up. Same markup/slot at every breakpoint, no
+                                separate mobile logic.
+                            --}}
+                            <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
+                                @isset($actions)
                                     {{ $actions }}
-                                </div>
-                            @endisset
+                                @endisset
 
-                            @if ($storefrontUrl)
+                                @if ($storefrontUrl)
+                                    {{--
+                                        Visible on true mobile (<768px, part of the balanced grid
+                                        above) and on full desktop (lg:, 1024px+). Hidden only in the
+                                        768-1023px tablet band, where the persistent 256px sidebar
+                                        (from md:) plus the page's own header actions (e.g. Dashboard's
+                                        Share Store Link + Quick Buy) can outgrow the remaining row
+                                        width and get clipped by the content column's overflow-hidden
+                                        rather than wrapping cleanly.
+
+                                        `md:hidden` / `lg:inline-flex` (not a bare `hidden`) is
+                                        deliberate: <x-button>'s own base classes always include an
+                                        unprefixed `inline-flex`, and a bare `hidden` has the same
+                                        specificity — whichever happens to land later in Tailwind's
+                                        generated stylesheet wins, unconditionally, at every width.
+                                        Prefixed variants each carry their own media query, so
+                                        `lg:inline-flex` reliably overrides `md:hidden` from 1024px up.
+                                    --}}
+                                    <x-button href="{{ $storefrontUrl }}" variant="outline" size="sm" class="w-full sm:w-auto justify-center md:hidden lg:inline-flex whitespace-nowrap shrink-0">
+                                        View Storefront
+                                    </x-button>
+                                @endif
+
                                 {{--
-                                    Shown from lg: (1024px), not sm:. The sidebar takes 256px starting at
-                                    md: (768px), so between 768-1023px this button plus the page's own
-                                    header actions (e.g. Dashboard's Share Store Link + Quick Buy) can
-                                    outgrow the remaining row width; overflow-hidden on the content column
-                                    clips it silently rather than wrapping or scrolling.
-
-                                    `max-lg:hidden` (not a bare `hidden`) is deliberate: <x-button>'s own
-                                    base classes always include an unprefixed `inline-flex`, and a bare
-                                    `hidden` has the same specificity — whichever happens to land later in
-                                    Tailwind's generated stylesheet wins, unconditionally, at every width.
-                                    `max-lg:hidden` / `lg:inline-flex` are mutually exclusive media queries,
-                                    so there's no viewport where they can tie.
+                                    Always show the "Log Out" label, on every breakpoint — the grid
+                                    (mobile) / flex-wrap (sm:+) above already gives it its own cell
+                                    or its own line, so there's no need to compress the label away to
+                                    an unlabeled icon.
                                 --}}
-                                <x-button href="{{ $storefrontUrl }}" variant="outline" size="sm" class="max-lg:hidden lg:inline-flex whitespace-nowrap shrink-0">
-                                    View Storefront
-                                </x-button>
-                            @endif
-
-                            <form method="POST" action="{{ route('vendor.logout') }}" class="m-0 inline-flex shrink-0">
-                                @csrf
-                                <x-button type="submit" variant="secondary" size="sm" class="whitespace-nowrap text-xs sm:text-sm px-2 sm:px-3 shrink-0">
-                                    <span class="hidden sm:inline">Log Out</span>
-                                    <svg class="sm:hidden h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                                    </svg>
-                                </x-button>
-                            </form>
+                                <form method="POST" action="{{ route('vendor.logout') }}" class="m-0 w-full sm:w-auto sm:inline-flex shrink-0">
+                                    @csrf
+                                    <x-button type="submit" variant="secondary" size="sm" class="w-full sm:w-auto justify-center whitespace-nowrap text-xs sm:text-sm px-2.5 sm:px-3 shrink-0">
+                                        <svg class="h-4 w-4 mr-1.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                        </svg>
+                                        Log Out
+                                    </x-button>
+                                </form>
+                            </div>
                         </div>
             </div>
         </header>
