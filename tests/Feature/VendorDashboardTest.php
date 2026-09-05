@@ -178,6 +178,69 @@ class VendorDashboardTest extends TestCase
         $response->assertSee('#' . $order->id, false);
     }
 
+    /**
+     * Regression test: updateOrderStatus() / AdminOrderController::update() repoint a
+     * paid order's linked Transaction.payment_status to 'pending' (On Hold, Verifying)
+     * or 'failed' (Refunded) purely for earnings bookkeeping — that must not also hide
+     * the order from the vendor, since the order itself (payment_status paid, status
+     * one of these) is still a legitimate, already-visible order.
+     */
+    public function test_vendor_dashboard_shows_orders_on_hold_verifying_or_refunded()
+    {
+        $vendor = Vendor::factory()->create([
+            'is_approved' => true,
+            'password' => bcrypt('password'),
+        ]);
+
+        $statusPairs = [
+            'On Hold' => 'pending',
+            'Verifying' => 'pending',
+            'Refunded' => 'failed',
+        ];
+
+        $orders = [];
+        foreach ($statusPairs as $status => $transactionPaymentStatus) {
+            $order = Order::create([
+                'recipient_phone_number' => '0552222222',
+                'mobile_money_number' => '0552222222',
+                'service_purchased' => 'ORDER-' . $status,
+                'amount_paid' => 15.00,
+                'vendor_id' => $vendor->id,
+                'status' => $status,
+                'payment_status' => 'paid',
+                'payment_completed_at' => now(),
+            ]);
+
+            Transaction::create([
+                'order_id' => $order->id,
+                'vendor_id' => $vendor->id,
+                'recipient_phone' => $order->recipient_phone_number,
+                'amount' => 15.00,
+                'commission_amount' => 0.30,
+                'vendor_earning' => 14.70,
+                // Mirrors what the status-update endpoints actually write for these
+                // statuses — no longer 'successful'/'completed'.
+                'payment_status' => $transactionPaymentStatus,
+            ]);
+
+            $orders[$status] = $order;
+        }
+
+        $this->actingAs($vendor, 'vendor');
+
+        $dashboardResponse = $this->get('/vendor/dashboard');
+        $dashboardResponse->assertStatus(200);
+
+        $ordersResponse = $this->get(route('vendor.orders.index'));
+        $ordersResponse->assertStatus(200);
+
+        foreach ($orders as $status => $order) {
+            $dashboardResponse->assertSee('#' . $order->id, false);
+            $ordersResponse->assertSee('#' . $order->id, false);
+            $ordersResponse->assertSee($status, false);
+        }
+    }
+
     public function test_vendor_dashboard_shows_paid_afa_registration_in_recent_orders()
     {
         $vendor = Vendor::factory()->create([

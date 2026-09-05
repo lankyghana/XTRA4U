@@ -65,6 +65,15 @@ class VendorDashboardController extends Controller
         // them on the storefront, but they should not clutter the vendor's account until
         // they move past Pending. All other statuses (Processing, Verifying, On Hold,
         // Completed, Cancelled, Failed, Refunded) are intentionally visible to the vendor.
+        //
+        // "Successfully paid" is decided by the order's own payment_status, not by
+        // requiring a linked Transaction to still read successful/completed:
+        // updateOrderStatus() / AdminOrderController::update() deliberately repoint a
+        // transaction's payment_status to 'pending' (On Hold/Verifying) or 'failed'
+        // (Refunded) purely for earnings bookkeeping (see TransactionService) — that's
+        // not a signal that the payment itself stopped being successful. Gating
+        // visibility on it made an order vanish from the vendor's own dashboard the
+        // moment its status changed to On Hold, Verifying, or Refunded.
         $productOrders = Order::query()
             ->where(function ($q) use ($vendorId) {
                 $q->where('vendor_id', $vendorId)
@@ -77,9 +86,6 @@ class VendorDashboardController extends Controller
             })
             ->whereIn('payment_status', ['paid', 'completed'])
             ->whereNotIn('status', ['Pending'])
-            ->whereHas('transactions', function ($q) {
-                $q->whereIn('payment_status', ['successful', 'completed']);
-            })
             ->with(['service'])
             ->latest()
             ->limit(50)
@@ -330,8 +336,14 @@ class VendorDashboardController extends Controller
             // order on the storefront; it just doesn't appear in the vendor's account until
             // it moves past Pending. All other statuses (Processing, Verifying, On Hold,
             // Completed, Cancelled, Failed, Refunded) remain visible to the vendor.
+            //
+            // Deliberately not also requiring a linked Transaction to read
+            // successful/completed: updateOrderStatus() repoints the transaction's
+            // payment_status to 'pending' (On Hold/Verifying) or 'failed' (Refunded)
+            // purely for earnings bookkeeping, not because the payment stopped being
+            // successful — gating visibility on that made orders vanish the moment
+            // their status changed to one of those.
             ->whereNotIn('status', ['Pending'])
-            ->whereHas('transactions', fn ($q) => $q->whereIn('payment_status', ['successful', 'completed']))
             ->when($search !== '', function ($q) use ($search, $isNumericSearch, $like) {
                 $q->where(function ($q2) use ($search, $isNumericSearch, $like) {
                     if ($isNumericSearch) {
@@ -374,9 +386,11 @@ class VendorDashboardController extends Controller
             ->where('vendor_id', $vendor->id)
             ->where('is_reseller_order', true)
             ->whereIn('payment_status', ['paid', 'completed'])
-            // Only hide Pending orders from vendors (still trackable by the customer on the storefront).
+            // Only hide Pending orders from vendors (still trackable by the customer on
+            // the storefront). Deliberately not also requiring a linked Transaction to
+            // read successful/completed — see orders() above for why that guard made
+            // On Hold/Verifying/Refunded orders vanish.
             ->whereNotIn('status', ['Pending'])
-            ->whereHas('transactions', fn ($q) => $q->whereIn('payment_status', ['successful', 'completed']))
             ->when($search !== '', function ($q) use ($search, $isNumericSearch, $like) {
                 $q->where(function ($q2) use ($search, $isNumericSearch, $like) {
                     if ($isNumericSearch) {
@@ -463,9 +477,11 @@ class VendorDashboardController extends Controller
                     ->orWhere('owner_vendor_id', $vendorId);
             })
             ->whereIn('payment_status', ['paid', 'completed'])
-            // Pending orders are excluded from vendor-side analytics, matching the orders list.
-            ->whereNotIn('status', ['Pending'])
-            ->whereHas('transactions', fn ($q) => $q->whereIn('payment_status', ['successful', 'completed']));
+            // Pending orders are excluded from vendor-side analytics, matching the orders
+            // list. Deliberately not also requiring a linked Transaction to read
+            // successful/completed — see orders() above for why that guard made On
+            // Hold/Verifying/Refunded orders vanish.
+            ->whereNotIn('status', ['Pending']);
 
         // Total orders for this vendor
         $totalOrders = (clone $allVendorOrdersQuery)->count();
