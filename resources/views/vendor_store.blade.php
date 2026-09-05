@@ -41,7 +41,7 @@
 @endsection
 
 @section('site-footer')
-    <x-storefront.footer :shop-url="$shopUrl" />
+    <x-storefront.footer :shop-url="$shopUrl" :show-vendor-dashboard-link="false" />
 @endsection
 
 @section('content')

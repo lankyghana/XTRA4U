@@ -11,8 +11,13 @@
     the "For Vendors" column below. Only the main homepage passes true — every
     other page sharing this footer (vendor storefronts, checkout, static
     pages, etc.) keeps them out.
+
+    `showVendorDashboardLink` gates the "Vendor Dashboard" entry in that same
+    column. It defaults to true everywhere except a vendor's own storefront
+    (vendor_store.blade.php), which already surfaces a dashboard button in
+    the header for the storefront owner and doesn't need it repeated here.
 --}}
-@props(['shopUrl', 'showVendorLinks' => false])
+@props(['shopUrl', 'showVendorLinks' => false, 'showVendorDashboardLink' => true])
 
 @php
     // The platform's public WhatsApp channel, as already used by
@@ -35,7 +40,7 @@
         'For Vendors' => array_filter([
             $showVendorLinks ? ['label' => 'Become a Vendor', 'href' => route('vendor.request.form')] : null,
             $showVendorLinks ? ['label' => 'Vendor Login', 'href' => route('vendor.login.form')] : null,
-            ['label' => 'Vendor Dashboard', 'href' => route('vendor.dashboard')],
+            $showVendorDashboardLink ? ['label' => 'Vendor Dashboard', 'href' => route('vendor.dashboard')] : null,
             ['label' => 'Support', 'href' => $whatsappChannel],
         ]),
         'Legal' => [

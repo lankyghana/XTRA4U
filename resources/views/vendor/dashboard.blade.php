@@ -7,10 +7,16 @@
 <x-vendor-layout :vendor="$vendor" title="Dashboard" subtitle="Manage your vendor account and track your performance" active="dashboard">
     <x-slot name="actions">
         @if($vendor->vendor_code)
-        <div x-data="{ copied: false }" class="shrink-0">
+        {{--
+            w-full/justify-center below sm: (640px) so this fills its cell in the
+            layout's 2-column mobile action grid at equal width with the other
+            three buttons, regardless of label length; sm:w-auto reverts to the
+            original content-sized desktop button.
+        --}}
+        <div x-data="{ copied: false }" class="w-full sm:w-auto shrink-0">
             <button
                 @click="navigator.clipboard.writeText('{{ route('storefront.vendor', ['vendor' => $vendor->vendor_code]) }}'); copied = true; setTimeout(() => copied = false, 2000)"
-                class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg shadow-sm transition-colors whitespace-nowrap"
+                class="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg shadow-sm transition-colors whitespace-nowrap"
                 :class="copied ? 'bg-green-600 text-white' : 'bg-brand-violet text-white hover:bg-brand-violet-deep'"
             >
                 <svg x-show="!copied" class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -22,7 +28,7 @@
                 <span x-text="copied ? 'Link Copied!' : 'Share Store Link'"></span>
             </button>
         </div>
-        <x-button href="{{ route('vendor.quick-buy.show') }}" variant="secondary" class="whitespace-nowrap shrink-0">
+        <x-button href="{{ route('vendor.quick-buy.show') }}" variant="secondary" class="w-full sm:w-auto justify-center whitespace-nowrap shrink-0">
             Quick Buy
         </x-button>
         @endif
@@ -102,20 +108,26 @@
                 <h2 class="text-lg font-semibold text-gray-900">Sales Overview</h2>
                 <p class="text-sm text-gray-500">Track your revenue and earnings</p>
             </div>
-            <div class="flex items-center gap-1 p-1 bg-gray-100 rounded-lg self-start sm:self-auto">
-                <button @click="setFilter('today')" :class="activeFilter === 'today' ? 'bg-white text-brand-violet shadow-sm' : 'text-gray-600 hover:text-gray-900'" class="px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-200">
+            {{--
+                All 5 periods stay in the DOM at every breakpoint — none are ever
+                `hidden`. On viewports too narrow to fit the whole pill row, it
+                scrolls horizontally (overflow-x-auto + shrink-0/whitespace-nowrap
+                on each pill) instead of dropping "Week" or any other option.
+            --}}
+            <div class="flex items-center gap-1 p-1 bg-gray-100 rounded-lg self-start sm:self-auto max-w-full overflow-x-auto">
+                <button @click="setFilter('today')" :class="activeFilter === 'today' ? 'bg-white text-brand-violet shadow-sm' : 'text-gray-600 hover:text-gray-900'" class="shrink-0 whitespace-nowrap px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-200">
                     Today
                 </button>
-                <button @click="setFilter('yesterday')" :class="activeFilter === 'yesterday' ? 'bg-white text-brand-violet shadow-sm' : 'text-gray-600 hover:text-gray-900'" class="px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-200">
+                <button @click="setFilter('yesterday')" :class="activeFilter === 'yesterday' ? 'bg-white text-brand-violet shadow-sm' : 'text-gray-600 hover:text-gray-900'" class="shrink-0 whitespace-nowrap px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-200">
                     Yesterday
                 </button>
-                <button @click="setFilter('this_week')" :class="activeFilter === 'this_week' ? 'bg-white text-brand-violet shadow-sm' : 'text-gray-600 hover:text-gray-900'" class="px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-200 hidden sm:block">
+                <button @click="setFilter('this_week')" :class="activeFilter === 'this_week' ? 'bg-white text-brand-violet shadow-sm' : 'text-gray-600 hover:text-gray-900'" class="shrink-0 whitespace-nowrap px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-200">
                     Week
                 </button>
-                <button @click="setFilter('this_month')" :class="activeFilter === 'this_month' ? 'bg-white text-brand-violet shadow-sm' : 'text-gray-600 hover:text-gray-900'" class="px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-200">
+                <button @click="setFilter('this_month')" :class="activeFilter === 'this_month' ? 'bg-white text-brand-violet shadow-sm' : 'text-gray-600 hover:text-gray-900'" class="shrink-0 whitespace-nowrap px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-200">
                     Month
                 </button>
-                <button @click="setFilter('all_time')" :class="activeFilter === 'all_time' ? 'bg-white text-brand-violet shadow-sm' : 'text-gray-600 hover:text-gray-900'" class="px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-200">
+                <button @click="setFilter('all_time')" :class="activeFilter === 'all_time' ? 'bg-white text-brand-violet shadow-sm' : 'text-gray-600 hover:text-gray-900'" class="shrink-0 whitespace-nowrap px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-200">
                     All
                 </button>
             </div>

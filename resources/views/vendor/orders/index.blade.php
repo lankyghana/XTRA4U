@@ -153,8 +153,13 @@
                                                 <x-badge variant="warning">Cancelled</x-badge>
                                             @elseif($order->status === 'Refunded')
                                                 <x-badge variant="warning">Refunded</x-badge>
+                                            @elseif($order->status === 'Failed')
+                                                <x-badge variant="failed">Failed</x-badge>
                                             @else
-                                                <x-badge variant="pending">Pending</x-badge>
+                                                {{-- Vendors never see Pending orders (excluded at the query level),
+                                                     so this only guards against an unexpected/future status value —
+                                                     show it verbatim rather than mislabeling it. --}}
+                                                <x-badge variant="default">{{ $order->status }}</x-badge>
                                             @endif
                                         </td>
                                         <td class="px-6 py-4 text-sm">

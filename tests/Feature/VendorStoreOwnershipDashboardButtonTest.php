@@ -14,13 +14,14 @@ use Tests\TestCase;
  * `vendor.dashboard` itself stays protected by the `vendor.approved`
  * middleware regardless of what this button does or doesn't show.
  *
- * Note: the storefront footer already carries an unconditional "Vendor
- * Dashboard" link (general site navigation, shown to every visitor
- * regardless of auth — pre-existing, out of scope here). So a plain
- * assertSee('Vendor Dashboard') can't distinguish "the owner's header
- * button rendered" from "the footer link is just always there". These
- * tests count occurrences instead: 1 (footer only) when the header button
- * is hidden, 3 (footer + desktop nav + mobile nav) when it's shown.
+ * Note: the storefront footer's own "Vendor Dashboard" link (general site
+ * navigation) is deliberately suppressed on a vendor's own storefront page
+ * (vendor_store.blade.php passes show-vendor-dashboard-link="false") for
+ * every visitor, since the header already carries the ownership-gated
+ * button there — see components/storefront/footer.blade.php. So on this
+ * route the footer never contributes a "Vendor Dashboard" mention; these
+ * tests count occurrences instead: 0 when the header button is hidden, 2
+ * (desktop nav + mobile nav) when it's shown.
  */
 class VendorStoreOwnershipDashboardButtonTest extends TestCase
 {
@@ -44,8 +45,8 @@ class VendorStoreOwnershipDashboardButtonTest extends TestCase
 
         $response->assertOk();
         $response->assertSee(route('vendor.dashboard'), false);
-        // Footer link (always present) + desktop nav button + mobile nav button.
-        $this->assertSame(3, $this->dashboardMentionCount($response));
+        // Footer link is suppressed on this page; desktop nav button + mobile nav button remain.
+        $this->assertSame(2, $this->dashboardMentionCount($response));
     }
 
     public function test_vendor_visiting_another_vendors_storefront_does_not_see_the_dashboard_button(): void
@@ -64,9 +65,9 @@ class VendorStoreOwnershipDashboardButtonTest extends TestCase
         $response = $this->get(route('storefront.vendor', ['vendor' => $vendorB->vendor_code]));
 
         $response->assertOk();
-        // Only the always-on footer link remains; the header's
+        // The footer link is suppressed on this page and the header's
         // ownership-gated button must not appear on someone else's store.
-        $this->assertSame(1, $this->dashboardMentionCount($response));
+        $this->assertSame(0, $this->dashboardMentionCount($response));
     }
 
     public function test_guest_visiting_a_storefront_does_not_see_the_dashboard_button(): void
@@ -79,7 +80,7 @@ class VendorStoreOwnershipDashboardButtonTest extends TestCase
         $response = $this->get(route('storefront.vendor', ['vendor' => $vendor->vendor_code]));
 
         $response->assertOk();
-        $this->assertSame(1, $this->dashboardMentionCount($response));
+        $this->assertSame(0, $this->dashboardMentionCount($response));
     }
 
     public function test_owner_can_follow_the_button_to_a_working_dashboard_and_stays_authenticated(): void
@@ -117,7 +118,7 @@ class VendorStoreOwnershipDashboardButtonTest extends TestCase
         $response = $this->get(route('storefront.vendor', ['vendor' => $vendor->vendor_code]));
 
         $response->assertOk();
-        $this->assertSame(1, $this->dashboardMentionCount($response));
+        $this->assertSame(0, $this->dashboardMentionCount($response));
     }
 
     public function test_owner_sees_the_dashboard_button_in_both_desktop_and_mobile_nav_markup(): void
@@ -144,7 +145,7 @@ class VendorStoreOwnershipDashboardButtonTest extends TestCase
         $mobileNavMarkup = substr($html, $mobileNavStart, $headerEnd - $mobileNavStart);
         $this->assertStringContainsString('Vendor Dashboard', $mobileNavMarkup);
 
-        // Footer + desktop nav + mobile nav.
-        $this->assertSame(3, $this->dashboardMentionCount($response));
+        // Footer link is suppressed on this page; desktop nav + mobile nav remain.
+        $this->assertSame(2, $this->dashboardMentionCount($response));
     }
 }
