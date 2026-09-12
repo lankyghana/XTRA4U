@@ -79,18 +79,30 @@
             @if($configFields)
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     @foreach($configFields as $key => $label)
+                        @php
+                            $isSensitive = str_contains($key, 'secret') || str_contains($key, 'key') || str_contains($key, 'pin');
+                            // PINs never round-trip to the browser at all — even
+                            // masked, a password-type input's value="" attribute
+                            // still carries the plaintext in the raw HTML. Every
+                            // other sensitive field keeps the existing (weaker)
+                            // pattern of prefilling a masked input; only the PIN
+                            // gets the stricter "never in HTML source" treatment.
+                            $isPin = str_contains($key, 'pin');
+                            $prefillValue = $isPin ? old('config.' . $key, '') : old('config.' . $key, $gateway->getConfig($key));
+                        @endphp
                         <div>
                             <label for="config_{{ $key }}" class="block text-sm font-medium text-gray-700 mb-1">
                                 {{ $label }}
                             </label>
-                            <input type="{{ str_contains($key, 'secret') || str_contains($key, 'key') ? 'password' : 'text' }}" 
-                                   name="config[{{ $key }}]" 
+                            <input type="{{ $isSensitive ? 'password' : 'text' }}"
+                                   name="config[{{ $key }}]"
                                    id="config_{{ $key }}"
-                                   value="{{ old('config.' . $key, $gateway->getConfig($key)) }}"
+                                   value="{{ $prefillValue }}"
+                                   autocomplete="off"
                                    placeholder="{{ $gatewayInfo['default_config'][$key] ?? '' }}"
                                    class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            
-                            @if(str_contains($key, 'secret') || str_contains($key, 'key'))
+
+                            @if($isSensitive)
                                 <div class="mt-1 text-xs text-gray-500">
                                     Leave blank to keep existing value
                                 </div>

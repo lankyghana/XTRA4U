@@ -11,17 +11,27 @@ class PaymentGatewayConfig extends Model
     use HasFactory;
 
     public const TYPE_PAYMENT_COLLECTION = 'payment_collection';
+
     public const TYPE_PAYOUT = 'payout';
+
     public const TYPE_SMS = 'sms';
 
     public const GATEWAY_PAYSTACK = 'paystack';
+
     public const GATEWAY_FLUTTERWAVE = 'flutterwave';
+
     public const GATEWAY_BULKCLIX = 'bulkclix';
+
     public const GATEWAY_HUBTEL = 'hubtel';
+
     public const GATEWAY_MOMO = 'momo';
+
     public const GATEWAY_MOOLRE = 'moolre';
 
+    public const GATEWAY_PAYAZA = 'payaza';
+
     public const ENV_SANDBOX = 'sandbox';
+
     public const ENV_LIVE = 'live';
 
     protected $fillable = [
@@ -47,7 +57,21 @@ class PaymentGatewayConfig extends Model
         'supports_payout' => 'boolean',
         'supports_sms' => 'boolean',
         'supports_webhook' => 'boolean',
-        'config_data' => 'array',
+        // NOT cast to 'array' here — config_data has its own get/set mutator
+        // pair below that already handles encrypt/decrypt + JSON encode/decode
+        // (a custom accessor/mutator takes precedence over a cast for reads
+        // and writes either way). Also declaring an 'array' cast alongside
+        // it creates a real bug: Eloquent's dirty-checking (originalIsEquivalent())
+        // sees the 'array' cast and compares the OLD and NEW values by
+        // json_decode()-ing them — but by the time it runs, both are already
+        // *encrypted ciphertext strings* (the mutator ran first), so both
+        // decode to null and compare as "equivalent" even when the actual
+        // plaintext changed. That silently drops config_data from the UPDATE
+        // query on every save — i.e. editing a gateway's credentials to a
+        // genuinely different value would appear to succeed but never
+        // persist. (Blank-preserve and initial create are unaffected: create
+        // has no "original" to compare against, and leaving a field blank
+        // never attempts a real change in the first place.)
         'supported_features' => 'array',
     ];
 
@@ -92,6 +116,16 @@ class PaymentGatewayConfig extends Model
                 'supports_sms' => true,
                 'supports_webhook' => true,
             ],
+            self::GATEWAY_PAYAZA => [
+                // Payout is intentionally not wired: this integration covers the
+                // Web Checkout (collection) SDK only. Extending to payouts would
+                // need its own PayazaPayoutService + docs review — out of scope.
+                'supports_collection' => true,
+                'supports_generic' => true,
+                'supports_payout' => false,
+                'supports_sms' => false,
+                'supports_webhook' => true,
+            ],
         ];
     }
 
@@ -131,10 +165,10 @@ class PaymentGatewayConfig extends Model
      */
     public function getConfigDataAttribute($value)
     {
-        if (!$value) {
+        if (! $value) {
             return [];
         }
-        
+
         try {
             return json_decode(Crypt::decryptString($value), true);
         } catch (\Exception $e) {
@@ -216,7 +250,7 @@ class PaymentGatewayConfig extends Model
                     'vodafone_cash' => true,
                     'airteltigo_momo' => true,
                     'bank_transfer' => true,
-                ]
+                ],
             ],
             self::GATEWAY_FLUTTERWAVE => [
                 'name' => 'Flutterwave',
@@ -238,7 +272,7 @@ class PaymentGatewayConfig extends Model
                     'mtn_momo' => true,
                     'vodafone_cash' => true,
                     'airteltigo_momo' => true,
-                ]
+                ],
             ],
             self::GATEWAY_BULKCLIX => [
                 'name' => 'BulkClix',
@@ -264,7 +298,7 @@ class PaymentGatewayConfig extends Model
                 'default_config' => [
                     'base_url' => 'https://api.bulkclix.com/api/v1',
                     'sender_id' => 'XTRA4U',
-                ]
+                ],
             ],
             self::GATEWAY_HUBTEL => [
                 'name' => 'Hubtel',
@@ -288,7 +322,7 @@ class PaymentGatewayConfig extends Model
                     'bank_transfer' => true,
                     'sms' => true,
                     'bulk_sms' => true,
-                ]
+                ],
             ],
 
             self::GATEWAY_MOOLRE => [
@@ -319,10 +353,10 @@ class PaymentGatewayConfig extends Model
                         'base_url' => 'Base URL',
                     ],
                     self::TYPE_SMS => [
-                        'api_user'  => 'API Username',
-                        'vas_key'   => 'VAS Key (SMS)',
+                        'api_user' => 'API Username',
+                        'vas_key' => 'VAS Key (SMS)',
                         'sender_id' => 'Sender ID (max 11 chars)',
-                        'base_url'  => 'Base URL',
+                        'base_url' => 'Base URL',
                     ],
                 ],
                 'default_config' => [
@@ -337,6 +371,56 @@ class PaymentGatewayConfig extends Model
                     'airteltigo_momo' => true,
                     'sms' => true,
                     'webhook' => true,
+                ],
+            ],
+
+            self::GATEWAY_PAYAZA => [
+                'name' => 'Payaza',
+                // TYPE_PAYOUT is listed so a payout config row can be created and
+                // its credentials stored ahead of time — it is NOT live. Payaza
+                // payouts remain disabled until a PayazaPayoutService exists:
+                // capabilityMap() below still declares supports_payout => false,
+                // which PaymentGatewayController enforces at save time (a payout
+                // row can never be saved is_active=true while that's false) and
+                // which GatewayManager checks again before resolving any payout
+                // service. Storing credentials here does not enable anything.
+                'types' => [self::TYPE_PAYMENT_COLLECTION, self::TYPE_PAYOUT],
+                // Web Checkout SDK: the browser opens Payaza's own hosted popup
+                // (card/MoMo/bank all collected inside it), so — like Paystack/
+                // Flutterwave's hosted checkout — XTRA4U does not need to collect
+                // the payer's MoMo number up front. 'redirect' is the flag that
+                // controls that ("no upfront payer phone needed"); it does not
+                // mean the browser actually navigates away.
+                'collection_flow' => 'redirect',
+                'capabilities' => self::defaultCapabilitiesFor(self::GATEWAY_PAYAZA),
+                // Per-type fields: collection and payout need different secrets.
+                // Payout additionally needs a transaction PIN — see
+                // PaymentGatewayController's PIN masking/blank-preserve/validation
+                // handling, and isConfigured() below for its format check.
+                'config_fields_by_type' => [
+                    self::TYPE_PAYMENT_COLLECTION => [
+                        'public_key' => 'Public API Key (used client-side as merchant_key, and base64-encoded server-side for API auth)',
+                        'secret_key' => 'Secret Key (server-side only — webhook signature verification)',
+                        'base_url' => 'API Base URL',
+                    ],
+                    self::TYPE_PAYOUT => [
+                        'public_key' => 'Public API Key (base64-encoded server-side for API auth — confirm with Payaza whether payouts need a distinct key from collections)',
+                        'secret_key' => 'Secret Key (server-side only — payout webhook signature verification)',
+                        'transaction_pin' => 'Transaction PIN (6 digits, no repeated or sequential pattern — set on your Payaza dashboard)',
+                        'base_url' => 'API Base URL',
+                    ],
+                ],
+                'default_config' => [
+                    'base_url' => 'https://api.payaza.africa/live',
+                    'currency' => 'GHS',
+                ],
+                'supported_features' => [
+                    'mobile_money' => true,
+                    'mtn_momo' => true,
+                    'vodafone_cash' => true,
+                    'airteltigo_momo' => true,
+                    'card' => true,
+                    'bank_transfer' => true,
                 ],
             ],
         ];
@@ -369,6 +453,7 @@ class PaymentGatewayConfig extends Model
     public function getConfig(string $key, $default = null)
     {
         $config = $this->config_data;
+
         return $config[$key] ?? $default;
     }
 
@@ -379,8 +464,8 @@ class PaymentGatewayConfig extends Model
     {
         $config = $this->config_data;
         $gateways = static::getAvailableGateways();
-        
-        if (!isset($gateways[$this->gateway_name])) {
+
+        if (! isset($gateways[$this->gateway_name])) {
             return false;
         }
 
@@ -392,7 +477,7 @@ class PaymentGatewayConfig extends Model
         } elseif (isset($gatewayInfo['config_fields'])) {
             $requiredFields = array_keys($gatewayInfo['config_fields']);
         }
-        
+
         foreach ($requiredFields as $field) {
             // Webhook secret is optional for Moolre collections.
             // We verify payment via Moolre's status API (server-to-server) instead of trusting the webhook payload.
@@ -407,6 +492,17 @@ class PaymentGatewayConfig extends Model
             if ($this->gateway_name === self::GATEWAY_MOOLRE
                 && $this->gateway_type === self::TYPE_SMS
                 && $field === 'base_url'
+            ) {
+                continue;
+            }
+
+            // Payaza secret_key is only used to verify webhook signatures — an
+            // optional, additional confirmation layer. Collection still works
+            // (and is independently verified) via the public-key-authenticated
+            // status-query API, so don't block the whole gateway on it being set.
+            if ($this->gateway_name === self::GATEWAY_PAYAZA
+                && $this->gateway_type === self::TYPE_PAYMENT_COLLECTION
+                && $field === 'secret_key'
             ) {
                 continue;
             }
@@ -428,6 +524,17 @@ class PaymentGatewayConfig extends Model
                     return false;
                 }
             }
+
+            // Full format check for the Payaza payout transaction PIN — same
+            // rule the admin form enforces at save time (see
+            // isValidPayazaTransactionPin()), checked again here so a row
+            // created any other way (tinker, a future code path, direct DB
+            // access) is never reported "configured" with a malformed PIN.
+            if ($field === 'transaction_pin' && is_string($value)) {
+                if (! static::isValidPayazaTransactionPin($value)) {
+                    return false;
+                }
+            }
         }
 
         // Moolre collection credential compatibility:
@@ -444,5 +551,39 @@ class PaymentGatewayConfig extends Model
         }
 
         return true;
+    }
+
+    /**
+     * Payaza's documented payout transaction PIN rule: exactly 6 digits,
+     * every digit distinct (no repeats), and not a strictly ascending or
+     * descending run (e.g. 123456 or 654321). Shared between isConfigured()
+     * above and the admin form validation in PaymentGatewayController so the
+     * rule lives in exactly one place.
+     */
+    public static function isValidPayazaTransactionPin(string $pin): bool
+    {
+        if (! preg_match('/^\d{6}$/', $pin)) {
+            return false;
+        }
+
+        $digits = str_split($pin);
+
+        if (count(array_unique($digits)) !== 6) {
+            return false;
+        }
+
+        $ascending = true;
+        $descending = true;
+
+        for ($i = 1; $i < 6; $i++) {
+            if ((int) $digits[$i] !== (int) $digits[$i - 1] + 1) {
+                $ascending = false;
+            }
+            if ((int) $digits[$i] !== (int) $digits[$i - 1] - 1) {
+                $descending = false;
+            }
+        }
+
+        return ! $ascending && ! $descending;
     }
 }
