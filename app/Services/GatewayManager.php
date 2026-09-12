@@ -5,15 +5,9 @@ namespace App\Services;
 use App\Contracts\Gateways\CollectsPayments;
 use App\Contracts\Gateways\HandlesGenericPayments;
 use App\Contracts\Gateways\HandlesPayouts;
-use App\Models\PaymentGatewayConfig;
 use App\Models\Order;
+use App\Models\PaymentGatewayConfig;
 use App\Models\VendorWithdrawal;
-use App\Services\PaystackPaymentService;
-use App\Services\FlutterwavePaymentService;
-use App\Services\HubtelPaymentService;
-use App\Services\BulkClixPaymentService;
-use App\Services\MoolrePaymentService;
-use App\Services\SmsService;
 use App\Services\Payouts\BulkClixPayoutService;
 use App\Services\Payouts\FlutterwavePayoutService;
 use App\Services\Payouts\HubtelPayoutService;
@@ -30,7 +24,7 @@ class GatewayManager
     {
         $service = $this->getCollectionService();
 
-        if (!$service) {
+        if (! $service) {
             return [
                 'success' => false,
                 'message' => 'No active payment gateway configured.',
@@ -46,15 +40,62 @@ class GatewayManager
 
     /**
      * Single entry point: verify a collection payment.
+     *
+     * IMPORTANT: this resolves whichever gateway is CURRENTLY marked as the
+     * platform default. That is only correct while a payment is brand new
+     * (e.g. an immediate double-check right after initiate, before the
+     * payable even records its own gateway). For anything already
+     * initialized — an existing Order/AfaRegistration/ResultCheckerOrder/
+     * UssdSubscription — use verifyCollectionWithGateway() instead, so that
+     * changing the admin default gateway can never affect a payment that
+     * was created under a different one. See CollectsPayments callers for
+     * the established pattern.
      */
     public function verifyCollection(string $reference): array
     {
         $service = $this->getCollectionService();
 
-        if (!$service) {
+        if (! $service) {
             return [
                 'success' => false,
                 'message' => 'No active payment gateway configured.',
+            ];
+        }
+
+        return $service->verifyPayment($reference);
+    }
+
+    /**
+     * Verify a collection payment against a SPECIFIC gateway — the one that
+     * actually created it, not whichever gateway is currently the platform
+     * default. This is the correct entry point for verifying any existing
+     * payable (Order, AfaRegistration, ResultCheckerOrder, UssdSubscription):
+     * pass its stored `payment_gateway` column, never the current default.
+     *
+     * A missing/unresolvable gateway name, or a gateway that is no longer
+     * active/configured, returns success=false (never throws) — callers
+     * should treat that as an inconclusive verification (state UNKNOWN),
+     * exactly like a network failure, not as proof of anything.
+     */
+    public function verifyCollectionWithGateway(?string $gatewayName, string $reference): array
+    {
+        if (! is_string($gatewayName) || $gatewayName === '') {
+            return [
+                'success' => false,
+                'message' => 'No payment gateway recorded for this transaction.',
+            ];
+        }
+
+        $service = $this->getPaymentServiceByGateway($gatewayName);
+
+        if (! $service || ! ($service instanceof CollectsPayments) || ! $service->isConfigured()) {
+            Log::warning('verifyCollectionWithGateway: gateway service unavailable', [
+                'gateway' => $gatewayName,
+            ]);
+
+            return [
+                'success' => false,
+                'message' => "Payment gateway '{$gatewayName}' is not available for verification.",
             ];
         }
 
@@ -70,7 +111,7 @@ class GatewayManager
     {
         $config = $this->getDefaultConfig(PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION);
 
-        if (!$config || !$config->is_active) {
+        if (! $config || ! $config->is_active) {
             return [
                 'success' => false,
                 'message' => 'No active payment gateway configured.',
@@ -78,7 +119,7 @@ class GatewayManager
             ];
         }
 
-        if (!$config->supports_generic) {
+        if (! $config->supports_generic) {
             return [
                 'success' => false,
                 'message' => 'Selected payment gateway does not support generic payments for this flow.',
@@ -88,7 +129,7 @@ class GatewayManager
 
         $service = $this->getPaymentServiceByConfig($config);
 
-        if (!$service || !($service instanceof HandlesGenericPayments)) {
+        if (! $service || ! ($service instanceof HandlesGenericPayments)) {
             return [
                 'success' => false,
                 'message' => 'Selected payment gateway does not support generic payments for this flow.',
@@ -105,6 +146,7 @@ class GatewayManager
         );
 
         $result['gateway_name'] = $config->gateway_name;
+
         return $result;
     }
 
@@ -115,7 +157,7 @@ class GatewayManager
     {
         $config = $this->resolvePayoutConfigForWithdrawal($withdrawal);
 
-        if (!$config || !$config->is_active) {
+        if (! $config || ! $config->is_active) {
             return [
                 'success' => false,
                 'message' => 'No payout gateway configured. Please configure one in Admin → Payment Gateways.',
@@ -123,7 +165,7 @@ class GatewayManager
             ];
         }
 
-        if (!$config->supports_payout) {
+        if (! $config->supports_payout) {
             return [
                 'success' => false,
                 'message' => 'Selected payout gateway does not support payouts.',
@@ -133,7 +175,7 @@ class GatewayManager
 
         $service = $this->getPayoutServiceByConfig($config);
 
-        if (!$service) {
+        if (! $service) {
             return [
                 'success' => false,
                 'message' => 'Selected payout gateway is not supported by this system.',
@@ -143,6 +185,7 @@ class GatewayManager
 
         $result = $service->processPayout($withdrawal);
         $result['gateway_name'] = $config->gateway_name;
+
         return $result;
     }
 
@@ -151,7 +194,7 @@ class GatewayManager
      */
     public function resolvePayoutConfigForWithdrawal(VendorWithdrawal $withdrawal): ?PaymentGatewayConfig
     {
-        if (!empty($withdrawal->payout_gateway)) {
+        if (! empty($withdrawal->payout_gateway)) {
             $byName = PaymentGatewayConfig::where('gateway_name', $withdrawal->payout_gateway)
                 ->where('gateway_type', PaymentGatewayConfig::TYPE_PAYOUT)
                 ->where('is_active', true)
@@ -193,7 +236,7 @@ class GatewayManager
             ->where('is_active', true)
             ->first();
 
-        if (!$config) {
+        if (! $config) {
             return null;
         }
 
@@ -202,14 +245,16 @@ class GatewayManager
 
     protected function getPaymentServiceByConfig(?PaymentGatewayConfig $config): ?object
     {
-        if (!$config || !$config->is_active) {
+        if (! $config || ! $config->is_active) {
             Log::warning('No active payment collection gateway configured');
+
             return null;
         }
 
         // Capability safety: block unsupported flows explicitly.
-        if (!$config->supports_collection) {
+        if (! $config->supports_collection) {
             Log::warning('Configured gateway does not support collections', ['gateway' => $config->gateway_name]);
+
             return null;
         }
 
@@ -220,6 +265,7 @@ class GatewayManager
             PaymentGatewayConfig::GATEWAY_HUBTEL => null,
             PaymentGatewayConfig::GATEWAY_BULKCLIX => new BulkClixPaymentService($config),
             PaymentGatewayConfig::GATEWAY_MOOLRE => new MoolrePaymentService($config),
+            PaymentGatewayConfig::GATEWAY_PAYAZA => new PayazaPaymentService($config),
             default => null
         };
     }
@@ -264,6 +310,7 @@ class GatewayManager
     public function getPayoutService(): ?object
     {
         $config = $this->getDefaultConfig(PaymentGatewayConfig::TYPE_PAYOUT);
+
         return $config ? $this->getPayoutServiceByConfig($config) : null;
     }
 
@@ -277,7 +324,7 @@ class GatewayManager
             ->where('is_active', true)
             ->first();
 
-        if (!$config) {
+        if (! $config) {
             return null;
         }
 
@@ -286,13 +333,15 @@ class GatewayManager
 
     protected function getPayoutServiceByConfig(PaymentGatewayConfig $config): ?HandlesPayouts
     {
-        if (!$config->is_active) {
+        if (! $config->is_active) {
             Log::warning('No active payout gateway configured');
+
             return null;
         }
 
-        if (!$config->supports_payout) {
+        if (! $config->supports_payout) {
             Log::warning('Configured gateway does not support payouts', ['gateway' => $config->gateway_name]);
+
             return null;
         }
 
@@ -305,7 +354,7 @@ class GatewayManager
             default => null,
         };
 
-        if ($service && !$service->isConfigured()) {
+        if ($service && ! $service->isConfigured()) {
             return null;
         }
 
@@ -318,21 +367,23 @@ class GatewayManager
     public function getSmsService(): ?SmsService
     {
         $config = PaymentGatewayConfig::getDefault(PaymentGatewayConfig::TYPE_SMS);
-        
-        if (!$config || !$config->is_active) {
+
+        if (! $config || ! $config->is_active) {
             Log::warning('No active SMS gateway configured');
+
             return null;
         }
 
-        if (!$config->supports_sms) {
+        if (! $config->supports_sms) {
             Log::warning('Configured gateway does not support SMS', ['gateway' => $config->gateway_name]);
+
             return null;
         }
 
         // Only BulkClix and Moolre are wired to the SmsService contract in this codebase.
         return match ($config->gateway_name) {
             PaymentGatewayConfig::GATEWAY_BULKCLIX => new SmsService($config),
-            PaymentGatewayConfig::GATEWAY_MOOLRE   => new SmsService($config),
+            PaymentGatewayConfig::GATEWAY_MOOLRE => new SmsService($config),
             default => null,
         };
     }
@@ -376,17 +427,17 @@ class GatewayManager
             'payment_gateways' => [
                 'total' => PaymentGatewayConfig::where('gateway_type', PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION)->count(),
                 'active' => PaymentGatewayConfig::where('gateway_type', PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION)->where('is_active', true)->count(),
-                'configured' => PaymentGatewayConfig::where('gateway_type', PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION)->get()->filter(fn($g) => $g->isConfigured())->count(),
+                'configured' => PaymentGatewayConfig::where('gateway_type', PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION)->get()->filter(fn ($g) => $g->isConfigured())->count(),
             ],
             'payout_gateways' => [
                 'total' => PaymentGatewayConfig::where('gateway_type', PaymentGatewayConfig::TYPE_PAYOUT)->count(),
                 'active' => PaymentGatewayConfig::where('gateway_type', PaymentGatewayConfig::TYPE_PAYOUT)->where('is_active', true)->count(),
-                'configured' => PaymentGatewayConfig::where('gateway_type', PaymentGatewayConfig::TYPE_PAYOUT)->get()->filter(fn($g) => $g->isConfigured())->count(),
+                'configured' => PaymentGatewayConfig::where('gateway_type', PaymentGatewayConfig::TYPE_PAYOUT)->get()->filter(fn ($g) => $g->isConfigured())->count(),
             ],
             'sms_gateways' => [
                 'total' => PaymentGatewayConfig::where('gateway_type', PaymentGatewayConfig::TYPE_SMS)->count(),
                 'active' => PaymentGatewayConfig::where('gateway_type', PaymentGatewayConfig::TYPE_SMS)->where('is_active', true)->count(),
-                'configured' => PaymentGatewayConfig::where('gateway_type', PaymentGatewayConfig::TYPE_SMS)->get()->filter(fn($g) => $g->isConfigured())->count(),
+                'configured' => PaymentGatewayConfig::where('gateway_type', PaymentGatewayConfig::TYPE_SMS)->get()->filter(fn ($g) => $g->isConfigured())->count(),
             ],
         ];
     }
@@ -402,18 +453,20 @@ class GatewayManager
                 ->where('is_active', true)
                 ->first();
 
-            if (!$gateway) {
+            if (! $gateway) {
                 return false;
             }
 
             $gateway->setAsDefault();
+
             return true;
         } catch (\Exception $e) {
             Log::error('Failed to switch default gateway', [
                 'type' => $gatewayType,
                 'gateway' => $gatewayName,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
