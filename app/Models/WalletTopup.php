@@ -12,7 +12,9 @@ class WalletTopup extends Model
     protected $table = 'wallet_topups';
 
     protected $fillable = [
-        'reference', 'vendor_id', 'amount', 'status', 'metadata', 'gateway_response', 'consumed'
+        'reference', 'vendor_id', 'amount', 'status', 'payment_gateway', 'metadata', 'gateway_response', 'consumed',
+        'reconciliation_attempts', 'last_reconciliation_at', 'next_reconciliation_at', 'reconciliation_note',
+        'idempotency_scope', 'idempotency_key',
     ];
 
     protected $casts = [
@@ -20,6 +22,8 @@ class WalletTopup extends Model
         'gateway_response' => 'array',
         'amount' => 'float',
         'consumed' => 'float',
+        'last_reconciliation_at' => 'datetime',
+        'next_reconciliation_at' => 'datetime',
     ];
 
     public function vendor()

@@ -37,6 +37,12 @@ class AfaRegistration extends Model
         'admin_notes',
         'rejection_reason',
         'reference',
+        'reconciliation_attempts',
+        'last_reconciliation_at',
+        'next_reconciliation_at',
+        'reconciliation_note',
+        'idempotency_scope',
+        'idempotency_key',
     ];
 
     protected $casts = [
@@ -49,25 +55,37 @@ class AfaRegistration extends Model
         'reseller_earning' => 'decimal:2',
         'is_reseller_order' => 'boolean',
         'payment_completed_at' => 'datetime',
+        'last_reconciliation_at' => 'datetime',
+        'next_reconciliation_at' => 'datetime',
     ];
 
     // Status constants
     const STATUS_PENDING = 'pending';
+
     const STATUS_PROCESSING = 'processing';
+
     const STATUS_APPROVED = 'approved';
+
     const STATUS_COMPLETED = 'completed';
+
     const STATUS_REJECTED = 'rejected';
+
     const STATUS_CANCELLED = 'cancelled';
 
     // Payment status constants
     const PAYMENT_PENDING = 'pending';
+
     const PAYMENT_COMPLETED = 'completed';
+
     const PAYMENT_FAILED = 'failed';
+
     const PAYMENT_REFUNDED = 'refunded';
 
     // ID Type constants
     const ID_GHANA_CARD = 'ghana_card';
+
     const ID_DRIVERS_LICENSE = 'drivers_license';
+
     const ID_VOTERS_ID = 'voters_id';
 
     /**
@@ -214,7 +232,7 @@ class AfaRegistration extends Model
     public static function generateReference(): string
     {
         do {
-            $reference = 'AFA-' . strtoupper(substr(uniqid(), -8)) . '-' . rand(100, 999);
+            $reference = 'AFA-'.strtoupper(substr(uniqid(), -8)).'-'.rand(100, 999);
         } while (self::where('reference', $reference)->exists());
 
         return $reference;
