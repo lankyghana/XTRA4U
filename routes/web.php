@@ -1,35 +1,33 @@
 <?php
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\AdminLoginController;
-use App\Http\Controllers\AdminController;
+
 use App\Http\Controllers\AdminAuthController;
-use App\Http\Controllers\AdminWalletTopupController;
-use App\Http\Controllers\VendorController;
-use App\Http\Controllers\VendorRequestController;
-use App\Http\Controllers\VendorAuthController;
-use App\Http\Controllers\VendorDashboardController;
-use App\Http\Controllers\VendorQuickBuyController;
-use App\Http\Controllers\VendorFulfillmentController;
-use App\Http\Controllers\ProductController;
-use App\Http\Controllers\OrderController;
-use App\Http\Controllers\TransactionController;
-use App\Http\Controllers\StorefrontController;
-use App\Http\Controllers\CheckoutController;
-use App\Http\Controllers\PaymentCallbackController;
-use App\Http\Controllers\AdminVendorController;
-use App\Http\Controllers\AdminOrderController;
-use App\Http\Controllers\AdminTransactionController;
-use App\Http\Controllers\AdminWithdrawalController;
+use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AdminNetworkServiceController;
-use App\Http\Controllers\OrderStatusController;
+use App\Http\Controllers\AdminOrderController;
+use App\Http\Controllers\AdminResultCheckerPinsController;
+use App\Http\Controllers\AdminResultCheckerPricingTierController;
+use App\Http\Controllers\AdminTransactionController;
+use App\Http\Controllers\AdminVendorController;
+use App\Http\Controllers\AdminWalletTopupController;
+use App\Http\Controllers\AdminWithdrawalController;
 use App\Http\Controllers\AfaRegistrationController;
-use App\Http\Controllers\VendorAfaController;
+use App\Http\Controllers\CheckoutController;
+use App\Http\Controllers\OrderStatusController;
+use App\Http\Controllers\PaymentCallbackController;
+use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ResultCheckerCheckoutController;
 use App\Http\Controllers\ResultCheckerPaymentCallbackController;
 use App\Http\Controllers\ResultCheckerStatusController;
+use App\Http\Controllers\StorefrontController;
+use App\Http\Controllers\VendorAfaController;
+use App\Http\Controllers\VendorAuthController;
+use App\Http\Controllers\VendorController;
+use App\Http\Controllers\VendorDashboardController;
+use App\Http\Controllers\VendorFulfillmentController;
+use App\Http\Controllers\VendorQuickBuyController;
+use App\Http\Controllers\VendorRequestController;
 use Illuminate\Support\Facades\Artisan;
-use App\Http\Controllers\AdminResultCheckerPinsController;
-use App\Http\Controllers\AdminResultCheckerPricingTierController;
+use Illuminate\Support\Facades\Route;
 
 // Admin login routes - moved to consolidated section below
 
@@ -38,16 +36,16 @@ Route::get('/clear-cache/{secret}', function ($secret) {
     if ($secret !== 'xtra4u-2025-clear') {
         abort(404);
     }
-    
+
     Artisan::call('cache:clear');
     Artisan::call('config:clear');
     Artisan::call('route:clear');
     Artisan::call('view:clear');
-    
+
     return response()->json([
         'success' => true,
         'message' => 'All caches cleared successfully!',
-        'timestamp' => now()->toDateTimeString()
+        'timestamp' => now()->toDateTimeString(),
     ]);
 })->name('cache.clear');
 
@@ -56,11 +54,11 @@ Route::get('/storage-link/{secret}', function ($secret) {
     if ($secret !== 'xtra4u-2025-clear') {
         abort(404);
     }
-    
+
     // Check if symlink already exists
     $publicStorage = public_path('storage');
     $targetPath = storage_path('app/public');
-    
+
     if (file_exists($publicStorage)) {
         // Check if it's a valid symlink
         if (is_link($publicStorage)) {
@@ -68,26 +66,26 @@ Route::get('/storage-link/{secret}', function ($secret) {
                 'success' => true,
                 'message' => 'Storage symlink already exists and is valid.',
                 'link' => $publicStorage,
-                'target' => readlink($publicStorage)
+                'target' => readlink($publicStorage),
             ]);
         } else {
             return response()->json([
                 'success' => false,
                 'message' => 'A file/folder named "storage" exists in public folder. Delete it first.',
-                'path' => $publicStorage
+                'path' => $publicStorage,
             ]);
         }
     }
-    
+
     // Try to create symlink
     try {
         Artisan::call('storage:link');
-        
+
         return response()->json([
             'success' => true,
             'message' => 'Storage symlink created successfully!',
             'link' => $publicStorage,
-            'target' => $targetPath
+            'target' => $targetPath,
         ]);
     } catch (\Exception $e) {
         // Manual symlink creation for shared hosting
@@ -96,14 +94,14 @@ Route::get('/storage-link/{secret}', function ($secret) {
                 'success' => true,
                 'message' => 'Storage symlink created manually!',
                 'link' => $publicStorage,
-                'target' => $targetPath
+                'target' => $targetPath,
             ]);
         }
-        
+
         return response()->json([
             'success' => false,
-            'message' => 'Failed to create symlink: ' . $e->getMessage(),
-            'manual_command' => "ln -s $targetPath $publicStorage"
+            'message' => 'Failed to create symlink: '.$e->getMessage(),
+            'manual_command' => "ln -s $targetPath $publicStorage",
         ]);
     }
 })->name('storage.link');
@@ -132,16 +130,24 @@ Route::post('/order-status/poll', [OrderStatusController::class, 'poll'])->name(
 
 // AFA Registration Routes (Public)
 Route::get('/store/{vendor:vendor_code}/afa', [AfaRegistrationController::class, 'show'])->name('afa.register');
-Route::post('/afa/store/{vendor:vendor_code}', [AfaRegistrationController::class, 'store'])->name('afa.store');
+// Phase 5: rate limiting was missing here (result-checkers.checkout and
+// wallet top-up already had it — see their own routes). 20/min per IP
+// mirrors result-checkers.checkout: generous enough for normal double-click/
+// refresh retries (Phase 4's idempotency guard makes those cheap re-checks,
+// never a second charge) while still bounding gateway-verification abuse
+// from a single source.
+Route::post('/afa/store/{vendor:vendor_code}', [AfaRegistrationController::class, 'store'])
+    ->middleware('throttle:20,1,afa-store')
+    ->name('afa.store');
 Route::get('/afa/callback', [AfaRegistrationController::class, 'paymentCallback'])->name('afa.callback');
 Route::get('/afa/success/{reference}', [AfaRegistrationController::class, 'success'])->name('afa.success');
 Route::post('/afa/check-status', [AfaRegistrationController::class, 'checkStatus'])->name('afa.check-status');
 Route::post('/afa/verify', [AfaRegistrationController::class, 'verify'])->name('afa.verify');
 
 Route::get('/', [StorefrontController::class, 'index'])->name('storefront.index');
-Route::get('/about', fn() => view('pages.about'))->name('about');
-Route::get('/privacy', fn() => view('pages.privacy'))->name('privacy');
-Route::get('/terms', fn() => view('pages.terms'))->name('terms');
+Route::get('/about', fn () => view('pages.about'))->name('about');
+Route::get('/privacy', fn () => view('pages.privacy'))->name('privacy');
+Route::get('/terms', fn () => view('pages.terms'))->name('terms');
 
 // Public Marketplace alias (matches common capitalized URL)
 Route::get('/Marketplace', fn () => redirect()->route('checkout.show'));
@@ -187,11 +193,13 @@ Route::get('/results-checker/status/{order}', [ResultCheckerStatusController::cl
 // Success/pending pages
 Route::get('/result-checkers/success/{order}', function (\App\Models\ResultCheckerOrder $order) {
     $order->load('service', 'vendor');
+
     return view('result_checkers.success', compact('order'));
 })->name('result-checkers.success');
 
 Route::get('/result-checkers/pending-stock/{order}', function (\App\Models\ResultCheckerOrder $order) {
     $order->load('service', 'vendor');
+
     return view('result_checkers.pending_stock', compact('order'));
 })->name('result-checkers.pending-stock');
 
@@ -230,7 +238,7 @@ Route::middleware(['vendor.approved'])
         Route::get('fulfillment/download/{network}', [VendorFulfillmentController::class, 'download'])->name('fulfillment.download')->where('network', '.+');
         Route::post('fulfillment/complete/{network}', [VendorFulfillmentController::class, 'complete'])->name('fulfillment.complete')->where('network', '.+');
         Route::post('fulfillment/resend-failed-api', [VendorFulfillmentController::class, 'resendAllFailedApiOrders'])->name('fulfillment.resend-failed-api');
-        
+
         Route::get('analytics', [VendorDashboardController::class, 'analytics'])
             ->name('analytics.index');
 
@@ -238,13 +246,13 @@ Route::middleware(['vendor.approved'])
             ->name('affiliates.index');
         Route::post('affiliates/join', [VendorDashboardController::class, 'joinAffiliate'])
             ->name('affiliates.join');
-        
+
         // Reseller/Marketplace Routes
         Route::get('marketplace', [VendorDashboardController::class, 'marketplace'])
             ->name('marketplace.index');
         Route::post('marketplace/add', [VendorDashboardController::class, 'addResellerProduct'])
             ->name('marketplace.add');
-        
+
         Route::get('reseller-products', [VendorDashboardController::class, 'myResellerProducts'])
             ->name('reseller.index');
         Route::patch('reseller-products/{id}', [VendorDashboardController::class, 'updateResellerProduct'])
@@ -261,7 +269,7 @@ Route::middleware(['vendor.approved'])
             Route::get('orders', [\App\Http\Controllers\VendorResultCheckerOrdersController::class, 'index'])
                 ->name('orders.index');
         });
-        
+
         Route::get('transactions', fn () => redirect()->route('vendor.dashboard'))
             ->name('transactions.index');
 
@@ -274,7 +282,6 @@ Route::middleware(['vendor.approved'])
         Route::post('wallet', [VendorDashboardController::class, 'requestWithdrawal'])
             ->name('withdrawals.store');
 
-
         // Notification Routes
         Route::get('notifications', [VendorDashboardController::class, 'notifications'])
             ->name('notifications.index');
@@ -284,7 +291,7 @@ Route::middleware(['vendor.approved'])
             ->name('notifications.read-all');
         Route::get('notifications/unread-count', [VendorDashboardController::class, 'unreadNotificationsCount'])
             ->name('notifications.unread-count');
-        
+
         // AFA Registration Management Routes
         Route::get('afa', [VendorAfaController::class, 'index'])->name('afa.index');
         Route::get('afa/settings', [VendorAfaController::class, 'settings'])->name('afa.settings');
@@ -295,7 +302,7 @@ Route::middleware(['vendor.approved'])
         Route::patch('afa/{registration}/status', [VendorAfaController::class, 'updateStatus'])->name('afa.update-status');
         Route::post('afa/bulk-update', [VendorAfaController::class, 'bulkUpdate'])->name('afa.bulk-update');
         Route::get('afa/{registration}/status-api', [VendorAfaController::class, 'getStatus'])->name('afa.get-status');
-        
+
         // Vendor Settings Routes
         Route::get('settings', [VendorDashboardController::class, 'settings'])->name('settings.index');
         Route::put('settings', [VendorDashboardController::class, 'updateSettings'])->name('settings.update');
@@ -325,7 +332,7 @@ Route::middleware(['vendor.approved'])
         // Lightweight balance endpoint (used by quick-buy UI polling)
         Route::get('wallet/balance', [\App\Http\Controllers\VendorWalletController::class, 'balance'])
             ->name('wallet.balance');
-        
+
         // Vendor USSD subscription. The gateway callback is public and lives
         // outside this group as `vendor.ussd.subscription.callback`.
         Route::get('ussd/subscription', [\App\Http\Controllers\Vendor\UssdSubscriptionController::class, 'index'])
@@ -346,16 +353,19 @@ Route::middleware(['vendor.approved'])
         // Vendor Quick Buy (dashboard shortcut)
         Route::get('quick-buy', [VendorQuickBuyController::class, 'show'])->name('quick-buy.show');
         Route::post('quick-buy', [VendorQuickBuyController::class, 'store'])->name('quick-buy.store');
-        
+
         // NOTE: the actual payment gateway callback for top-ups should be public
         // and not require vendor authentication. The topup callback route is
         // defined outside the `vendor.approved` group below as `vendor.wallet.topup.callback`.
     });
 Route::get('/checkout', [CheckoutController::class, 'show'])->name('checkout.show');
-Route::post('/checkout', [CheckoutController::class, 'process'])->name('checkout.process');
+// Phase 5: see the afa.store route above for the rate-limit rationale.
+Route::post('/checkout', [CheckoutController::class, 'process'])
+    ->middleware('throttle:20,1,checkout-process')
+    ->name('checkout.process');
 Route::post('/checkout/verify', [CheckoutController::class, 'verify'])->name('checkout.verify');
 // Public wallet top-up callback (payment gateway will call/redirect here)
-Route::match(['GET','POST'], '/vendor/wallet/topup/callback/{reference}', [\App\Http\Controllers\VendorWalletController::class, 'topupCallback'])
+Route::match(['GET', 'POST'], '/vendor/wallet/topup/callback/{reference}', [\App\Http\Controllers\VendorWalletController::class, 'topupCallback'])
     ->middleware('throttle:10,1,wallet-topup-callback')
     ->name('vendor.wallet.topup.callback');
 
@@ -379,13 +389,23 @@ Route::get('/favicon.ico', function () {
     return response()->file(public_path('favicon-32x32.png'));
 })->name('favicon');
 Route::middleware('prune.purchase.tokens')->group(function () {
-    Route::post('/purchase', [\App\Http\Controllers\PurchaseController::class, 'store'])->name('purchase');
+    // Phase 5: see the afa.store route above for the rate-limit rationale.
+    // VendorQuickBuyController reuses PurchaseController::store() via a
+    // direct Container::call() (not an HTTP request through this route), so
+    // this throttle never applies to that internal path.
+    Route::post('/purchase', [\App\Http\Controllers\PurchaseController::class, 'store'])
+        ->middleware('throttle:20,1,purchase-store')
+        ->name('purchase');
     Route::get('/purchase/callback/{token}', [\App\Http\Controllers\PurchaseController::class, 'paymentCallback'])->name('purchase.callback');
 });
 
 Route::post('/webhooks/moolre/payment', [\App\Http\Controllers\Webhooks\MoolreWebhookController::class, 'handle'])
     ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
     ->name('webhooks.moolre.payment');
+Route::post('/webhooks/payaza', [\App\Http\Controllers\Webhooks\PayazaWebhookController::class, 'handle'])
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
+    ->middleware('throttle:120,1,payaza-webhook')
+    ->name('webhooks.payaza');
 Route::post('/api/ussd', [\App\Http\Controllers\Api\UssdController::class, 'handle'])
     ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
     ->middleware('ussd.gateway')
@@ -409,12 +429,12 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
         ->parameters(['network-services' => 'network_service']);
     Route::post('vendors/{vendor}/approve', [AdminVendorController::class, 'approve'])->name('vendors.approve');
     Route::post('vendors/{vendor}/reject', [AdminVendorController::class, 'reject'])->name('vendors.reject');
-	Route::post('vendors/{vendor}/disable-affiliate', [AdminVendorController::class, 'disableAffiliate'])->name('vendors.disable-affiliate');
-	Route::post('vendors/{vendor}/tier', [AdminVendorController::class, 'updateTier'])->name('vendors.update-tier');
-        Route::resource('orders', AdminOrderController::class)->only(['index', 'show', 'update']);
-	Route::post('orders/{order}/confirm-payment', [AdminOrderController::class, 'confirmPayment'])
-		->name('orders.confirm-payment');
-        Route::resource('transactions', AdminTransactionController::class)->only(['index']);
+    Route::post('vendors/{vendor}/disable-affiliate', [AdminVendorController::class, 'disableAffiliate'])->name('vendors.disable-affiliate');
+    Route::post('vendors/{vendor}/tier', [AdminVendorController::class, 'updateTier'])->name('vendors.update-tier');
+    Route::resource('orders', AdminOrderController::class)->only(['index', 'show', 'update']);
+    Route::post('orders/{order}/confirm-payment', [AdminOrderController::class, 'confirmPayment'])
+        ->name('orders.confirm-payment');
+    Route::resource('transactions', AdminTransactionController::class)->only(['index']);
     Route::post('transactions/{transaction}/confirm-payment', [AdminTransactionController::class, 'confirmPayment'])
         ->name('transactions.confirm-payment');
     Route::get('wallet-topups', [AdminWalletTopupController::class, 'index'])->name('wallet-topups.index');
@@ -429,19 +449,28 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
     Route::get('recipient-numbers/export', [\App\Http\Controllers\AdminRecipientNumberController::class, 'export'])->name('recipient-numbers.export');
     Route::get('recipient-numbers/copy', [\App\Http\Controllers\AdminRecipientNumberController::class, 'copy'])->name('recipient-numbers.copy');
     // Payment Gateway Management - replaces legacy paystack-config
-    
+
     // Payment Gateway Management
     Route::resource('payment-gateways', \App\Http\Controllers\Admin\PaymentGatewayController::class)
         ->parameters(['payment-gateways' => 'gateway']);
     Route::patch('payment-gateways/{gateway}/set-default', [\App\Http\Controllers\Admin\PaymentGatewayController::class, 'setDefault'])->name('payment-gateways.set-default');
     Route::patch('payment-gateways/{gateway}/toggle-active', [\App\Http\Controllers\Admin\PaymentGatewayController::class, 'toggleActive'])->name('payment-gateways.toggle-active');
     Route::post('payment-gateways/{gateway}/test', [\App\Http\Controllers\Admin\PaymentGatewayController::class, 'test'])->name('payment-gateways.test');
-    
+
+    // Payment Health — read-only operational monitoring (Phase 6). The
+    // "recheck" action is the only mutating route here and is rate limited
+    // since it triggers a real outbound gateway status query.
+    Route::get('payment-health', [\App\Http\Controllers\Admin\PaymentHealthController::class, 'index'])
+        ->name('payment-health.index');
+    Route::post('payment-health/recheck', [\App\Http\Controllers\Admin\PaymentHealthController::class, 'recheck'])
+        ->middleware('throttle:20,1')
+        ->name('payment-health.recheck');
+
     // Admin Notifications
     Route::get('notifications', [AdminController::class, 'notifications'])->name('notifications.index');
     Route::post('notifications/{notification}/read', [AdminController::class, 'markNotificationRead'])->name('notifications.read');
     Route::post('notifications/read-all', [AdminController::class, 'markAllNotificationsRead'])->name('notifications.read-all');
-    
+
     // Consolidated Settings page (service availability, delivery status, vendor approval,
     // vendor tiers, tier promotions, tier history — all shown as tabs on one page).
     Route::get('settings/service-availability', [\App\Http\Controllers\Admin\AdminSettingsController::class, 'index'])->name('settings.service-availability');
