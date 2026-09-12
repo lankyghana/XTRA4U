@@ -49,10 +49,14 @@ class AfaVendorEmailNotificationTest extends TestCase
         ]);
 
         $paymentService = Mockery::mock(PaymentService::class);
-        $paymentService->shouldReceive('checkPaymentStatus')
+        // The registration above has no payment_gateway set, so the controller
+        // resolves verification with a null gateway — see AfaRegistrationController
+        // ::paymentCallback(), which now verifies against the gateway that
+        // actually created the registration rather than the current default.
+        $paymentService->shouldReceive('checkPaymentStatusForGateway')
             ->once()
-            ->with('PAY_REF_123')
-            ->andReturn(['success' => true]);
+            ->with('PAY_REF_123', null)
+            ->andReturn(['success' => true, 'data' => ['status' => 'success']]);
 
         $this->app->instance(PaymentService::class, $paymentService);
 

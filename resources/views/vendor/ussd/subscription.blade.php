@@ -341,13 +341,23 @@
             clearMessage();
             setBusy(true);
 
+            const planId = button.getAttribute('data-plan-id');
             const body = new URLSearchParams();
-            body.append('plan_id', button.getAttribute('data-plan-id'));
+            body.append('plan_id', planId);
             if (phoneInput && phoneInput.value.trim() !== '') {
                 body.append('payer_phone', phoneInput.value.trim());
             }
             if (networkInput && networkInput.value !== '') {
                 body.append('network', networkInput.value);
+            }
+
+            // Phase 4 duplicate-charge prevention: the SAME key is
+            // resubmitted for a double-click/duplicate-POST/refresh of this
+            // exact intent, so the server can recognise a retry instead of
+            // starting a second charge.
+            const intentFingerprint = 'ussd:' + planId;
+            if (window.XtraCheckoutIntent) {
+                body.append('idempotency_key', window.XtraCheckoutIntent.getKey(intentFingerprint));
             }
 
             let data;
@@ -371,7 +381,93 @@
 
             if (!data || !data.success) {
                 setBusy(false);
+                // A confirmed failure (never merely "still confirming") —
+                // safe to let the next click mint a brand new intent key.
+                window.XtraCheckoutIntent?.clear(intentFingerprint);
                 showMessage((data && data.message) || 'Failed to start the purchase.', 'error');
+                return;
+            }
+
+            // Already active — nothing new was charged, just reflect the
+            // existing subscription.
+            if (data.status === 'paid') {
+                window.XtraCheckoutIntent?.clear(intentFingerprint);
+                showMessage(data.message || 'Subscription already active.', 'success');
+                window.location.href = reloadUrl;
+                return;
+            }
+
+            // Phase 4: an existing attempt for this SAME intent is still
+            // financially ambiguous — the server deliberately did NOT start
+            // a second charge. Never say "failed" here; keep confirming the
+            // existing reference via the same status-poll loop used for
+            // in-flight inline-gateway payments.
+            if (data.status === 'confirming' && data.reference) {
+                showMessage(data.message || "We're still confirming your previous payment. Please don't pay again yet.", 'info');
+
+                const pollUrl = statusBase + '/' + encodeURIComponent(data.reference);
+
+                window.InlinePaymentManager.open({
+                    reference: data.reference,
+                    authorization_url: null,
+                    no_redirect: true,
+                    poll_url: pollUrl,
+                }, function (status) {
+                    if (status === 'paid') {
+                        window.XtraCheckoutIntent?.clear(intentFingerprint);
+                        showMessage('Payment confirmed. Activating your subscription…', 'success');
+                        window.location.href = reloadUrl;
+                        return true;
+                    }
+                    if (status === 'failed') {
+                        window.XtraCheckoutIntent?.clear(intentFingerprint);
+                        setBusy(false);
+                        showMessage('The payment was not completed. Please try again.', 'error');
+                    } else if (status === 'timeout') {
+                        setBusy(false);
+                        showMessage('We could not confirm the payment in time. If you approved it, refresh this page in a moment.', 'error');
+                    }
+                });
+                return;
+            }
+
+            // Payaza Web Checkout SDK: opens its own popup; once it reports any
+            // result, hand off straight into the exact same status-poll loop
+            // used below for BulkClix/Moolre (poll_url mode — see
+            // components/inline_payment_manager.blade.php). The SDK's own
+            // callback/onClose is never trusted; status() re-verifies and
+            // activates server-side.
+            if (data.flow_type === 'payaza' && data.checkout_config && window.InlinePaymentManager) {
+                showMessage('Complete payment in the popup window.', 'info');
+
+                const pollUrl = statusBase + '/' + encodeURIComponent(data.reference);
+
+                window.InlinePaymentManager.openPayaza({
+                    reference: data.reference,
+                    checkout_config: data.checkout_config,
+                    poll_url: pollUrl,
+                    no_redirect: true,
+                }, function (status) {
+                    if (status === 'paid') {
+                        window.XtraCheckoutIntent?.clear(intentFingerprint);
+                        showMessage('Payment confirmed. Activating your subscription…', 'success');
+                        window.location.href = reloadUrl;
+                        return true;
+                    }
+                    if (status === 'failed') {
+                        window.XtraCheckoutIntent?.clear(intentFingerprint);
+                        setBusy(false);
+                        showMessage('The payment was not completed. Please try again.', 'error');
+                    } else if (status === 'timeout') {
+                        setBusy(false);
+                        showMessage('We could not confirm the payment in time. If you approved it, refresh this page in a moment.', 'error');
+                    } else if (status === 'sdk_unavailable') {
+                        // No payment was ever attempted — the checkout SDK itself
+                        // failed to load/initialise.
+                        setBusy(false);
+                        showMessage('Unable to load the payment service. Please try again or choose another payment method.', 'error');
+                    }
+                });
                 return;
             }
 
@@ -393,11 +489,13 @@
                     poll_url: pollUrl,
                 }, function (status) {
                     if (status === 'paid') {
+                        window.XtraCheckoutIntent?.clear(intentFingerprint);
                         showMessage('Payment confirmed. Activating your subscription…', 'success');
                         window.location.href = reloadUrl;
                         return true; // suppress InlinePaymentManager's own redirect
                     }
                     if (status === 'failed') {
+                        window.XtraCheckoutIntent?.clear(intentFingerprint);
                         setBusy(false);
                         showMessage('The payment was not completed. Please try again.', 'error');
                     } else if (status === 'timeout') {

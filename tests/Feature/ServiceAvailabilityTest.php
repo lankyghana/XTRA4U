@@ -103,14 +103,23 @@ class ServiceAvailabilityTest extends TestCase
         ServiceAvailability::setMessage('Data purchases are closed.');
 
         $vendor = Vendor::factory()->create();
+        $product = Product::create([
+            'vendor_id' => $vendor->id,
+            'name' => 'MTN 1GB',
+            'description' => json_encode(['category' => 'data']),
+            'price' => 5.00,
+            'is_active' => true,
+        ]);
 
-        // Valid payload with no product => guard resolves the default 'data' category.
+        // The availability guard must still fire even for a real, priced
+        // product — closing a category blocks it regardless of price.
         $this->postJson(route('checkout.process'), [
             'vendor_id' => $vendor->id,
             'service_id' => 'svc-1',
             'package_id' => 'pkg-1',
             'amount' => 5.00,
             'recipient_phone' => '0244000000',
+            'original_product_id' => $product->id,
         ])
             ->assertStatus(422)
             ->assertJson([

@@ -26,12 +26,16 @@ class ResultCheckerService
      */
     public function handlePaymentCallback(ResultCheckerOrder $order, string $paymentReference, ?string $gateway = null): void
     {
-        $processed = DB::transaction(function () use ($order, $paymentReference, $gateway) {
-            // Idempotent: if already paid, skip
-            $order->refresh();
-            if ($order->status === 'completed' || $order->paid_at) {
+        $processed = DB::transaction(function () use (&$order, $paymentReference, $gateway) {
+            // Idempotent: if already paid, skip. Locked (not a plain refresh())
+            // so two concurrent callers (browser callback, webhook, and now the
+            // Phase 3 reconciler) can never both pass this check and both
+            // create a Transaction row / allocate pins — matches the lock
+            // doAllocatePins() already takes one layer down.
+            $order = ResultCheckerOrder::whereKey($order->id)->lockForUpdate()->first();
+            if (! $order || $order->status === 'completed' || $order->paid_at) {
                 Log::info('ResultCheckerService: Order already paid, skipping duplicate callback', [
-                    'order_id' => $order->id,
+                    'order_id' => $order->id ?? null,
                     'reference' => $paymentReference,
                 ]);
 

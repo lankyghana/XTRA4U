@@ -8,12 +8,60 @@ use App\Models\PaymentGatewayConfig;
 use App\Models\Product;
 use App\Models\ResultCheckerOrder;
 use App\Models\UssdSession;
+use App\Services\Payments\CheckoutIntentGuard;
 use App\Services\Ussd\UssdConfig;
 use Illuminate\Support\Facades\Log;
 
 class UssdMenuService
 {
-    public function __construct(private readonly UssdConfig $config) {}
+    public function __construct(
+        private readonly UssdConfig $config,
+        private readonly CheckoutIntentGuard $intentGuard,
+    ) {}
+
+    /**
+     * Phase 5 finding: this is a telco USSD dial session, not a web request —
+     * a customer confirming "1. Confirm & Pay" has no idempotency key to send
+     * (no JS, no hidden field), and USSD aggregators are known to retry a
+     * request whose response didn't arrive before their own short timeout.
+     * Two near-simultaneous "confirm" deliveries for the SAME dial session
+     * would otherwise each create their own Order/ResultCheckerOrder and
+     * initialize their own charge — the exact class of bug Phase 4 closed
+     * for the web checkout endpoints, missed here because this controller
+     * was never in Phase 4's scan. Reuses the identical CheckoutIntentGuard
+     * every other surface uses; the aggregator's own opaque `sessionId` (see
+     * UssdGatewayRequest) is the natural "same intent" identity — a single
+     * dial session can only ever confirm one purchase.
+     */
+    private function orderIsSuccess(Order $o): bool
+    {
+        return in_array($o->payment_status, ['paid', 'completed'], true);
+    }
+
+    private function orderIsTerminalFailure(Order $o): bool
+    {
+        return $o->payment_status === 'failed';
+    }
+
+    private function orderHasGateway(Order $o): bool
+    {
+        return (bool) $o->payment_gateway && (bool) $o->payment_reference;
+    }
+
+    private function rcoIsSuccess(ResultCheckerOrder $o): bool
+    {
+        return $o->isPaid();
+    }
+
+    private function rcoIsTerminalFailure(ResultCheckerOrder $o): bool
+    {
+        return $o->status === 'failed';
+    }
+
+    private function rcoHasGateway(ResultCheckerOrder $o): bool
+    {
+        return (bool) $o->payment_gateway && (bool) $o->payment_reference;
+    }
 
     /**
      * Advance the menu one step.
@@ -229,7 +277,31 @@ class UssdMenuService
             return 'END Bundle no longer available. Please try again.';
         }
 
+        $scope = CheckoutIntentGuard::scopeForUssdDialSession((string) $session->session_id);
+        $key = 'ussd-data-order';
+
         try {
+            $intentDecision = $this->intentGuard->evaluate(
+                Order::class,
+                $scope,
+                $key,
+                fn (Order $o) => $this->orderIsSuccess($o),
+                fn (Order $o) => $this->orderIsTerminalFailure($o),
+                fn (Order $o) => $this->orderHasGateway($o),
+            );
+
+            if ($intentDecision['action'] === CheckoutIntentGuard::ALREADY_SUCCEEDED) {
+                return 'END Payment already confirmed for this order. Thank you!';
+            }
+
+            if ($intentDecision['action'] === CheckoutIntentGuard::STILL_PENDING) {
+                return 'END We are still confirming your payment. Please do not dial again — check your phone for the payment prompt.';
+            }
+
+            if ($intentDecision['action'] === CheckoutIntentGuard::RETRY_AFTER_FAILURE) {
+                $key = $this->intentGuard->freshKeyAfterFailure($key);
+            }
+
             $gatewayManager = app(GatewayManager::class);
             $gatewayName = $gatewayManager->getDefaultGatewayName(PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION) ?? 'paystack';
 
@@ -239,21 +311,48 @@ class UssdMenuService
             $sessionVendorId = $session->vendor_id;
             $isReseller = ($sessionVendorId !== $product->vendor_id);
 
-            $order = Order::create([
-                'recipient_phone_number' => $recipientPhone,
-                'mobile_money_number' => $session->phone_number,
-                'mobile_money_network' => $session->getData('network_name'),
-                'service_purchased' => $product->name,
-                'amount_paid' => $product->price,
-                'vendor_id' => $sessionVendorId,
-                'vendor_service_id' => $product->id,
-                'owner_vendor_id' => $isReseller ? $product->vendor_id : null,
-                'reseller_vendor_id' => $isReseller ? $sessionVendorId : null,
-                'is_reseller_order' => $isReseller,
-                'status' => 'Pending',
-                'payment_status' => 'unpaid',
-                'payment_gateway' => $gatewayName,
-            ]);
+            $creationResult = $this->intentGuard->createOrReuse(
+                Order::class,
+                $scope,
+                $key,
+                fn (?string $k) => Order::create([
+                    'recipient_phone_number' => $recipientPhone,
+                    'mobile_money_number' => $session->phone_number,
+                    'mobile_money_network' => $session->getData('network_name'),
+                    'service_purchased' => $product->name,
+                    'amount_paid' => $product->price,
+                    'vendor_id' => $sessionVendorId,
+                    'vendor_service_id' => $product->id,
+                    'owner_vendor_id' => $isReseller ? $product->vendor_id : null,
+                    'reseller_vendor_id' => $isReseller ? $sessionVendorId : null,
+                    'is_reseller_order' => $isReseller,
+                    'status' => 'Pending',
+                    'payment_status' => 'unpaid',
+                    'payment_gateway' => $gatewayName,
+                    'idempotency_scope' => $k ? $scope : null,
+                    'idempotency_key' => $k,
+                ]),
+                fn (Order $o) => $this->orderIsSuccess($o),
+                fn (Order $o) => $this->orderIsTerminalFailure($o),
+                fn (Order $o) => $this->orderHasGateway($o),
+            );
+
+            if ($creationResult['action'] === CheckoutIntentGuard::ALREADY_SUCCEEDED) {
+                return 'END Payment already confirmed for this order. Thank you!';
+            }
+
+            if ($creationResult['action'] === CheckoutIntentGuard::STILL_PENDING) {
+                return 'END We are still confirming your payment. Please do not dial again — check your phone for the payment prompt.';
+            }
+
+            if ($creationResult['action'] === CheckoutIntentGuard::RETRY_AFTER_FAILURE) {
+                // Vanishingly rare double-collision — see CheckoutController
+                // for the identical reasoning. Never attribute someone else's
+                // (or our own prior) failed row to this confirmation.
+                return 'END A system error occurred. Please dial again.';
+            }
+
+            $order = $creationResult['payable'];
 
             $customerEmail = $session->phone_number.'@ussd.xtra4u.local';
             $init = app(PaymentService::class)->initiatePayment($order, $customerEmail, (float) $product->price);
@@ -360,20 +459,84 @@ class UssdMenuService
             return 'END Selected exam type is no longer available.';
         }
 
-        try {
-            $order = ResultCheckerOrder::create([
-                'vendor_id' => $session->vendor_id,
-                'service_id' => $service->id,
-                'customer_phone' => $recipientPhone,
-                'customer_name' => 'USSD Customer',
-                'quantity' => $qty,
-                'unit_price' => $totalPrice / $qty,
-                'total_price' => $totalPrice,
-                'status' => 'pending_payment',
-            ]);
+        $scope = CheckoutIntentGuard::scopeForUssdDialSession((string) $session->session_id);
+        $key = 'ussd-rc-order';
 
+        try {
+            $intentDecision = $this->intentGuard->evaluate(
+                ResultCheckerOrder::class,
+                $scope,
+                $key,
+                fn (ResultCheckerOrder $o) => $this->rcoIsSuccess($o),
+                fn (ResultCheckerOrder $o) => $this->rcoIsTerminalFailure($o),
+                fn (ResultCheckerOrder $o) => $this->rcoHasGateway($o),
+            );
+
+            if ($intentDecision['action'] === CheckoutIntentGuard::ALREADY_SUCCEEDED) {
+                return 'END Payment already confirmed for this order. Thank you!';
+            }
+
+            if ($intentDecision['action'] === CheckoutIntentGuard::STILL_PENDING) {
+                return 'END We are still confirming your payment. Please do not dial again — check your phone for the payment prompt.';
+            }
+
+            if ($intentDecision['action'] === CheckoutIntentGuard::RETRY_AFTER_FAILURE) {
+                $key = $this->intentGuard->freshKeyAfterFailure($key);
+            }
+
+            $creationResult = $this->intentGuard->createOrReuse(
+                ResultCheckerOrder::class,
+                $scope,
+                $key,
+                fn (?string $k) => ResultCheckerOrder::create([
+                    'vendor_id' => $session->vendor_id,
+                    'service_id' => $service->id,
+                    'customer_phone' => $recipientPhone,
+                    'customer_name' => 'USSD Customer',
+                    'quantity' => $qty,
+                    'unit_price' => $totalPrice / $qty,
+                    'total_price' => $totalPrice,
+                    'status' => 'pending_payment',
+                    'idempotency_scope' => $k ? $scope : null,
+                    'idempotency_key' => $k,
+                ]),
+                fn (ResultCheckerOrder $o) => $this->rcoIsSuccess($o),
+                fn (ResultCheckerOrder $o) => $this->rcoIsTerminalFailure($o),
+                fn (ResultCheckerOrder $o) => $this->rcoHasGateway($o),
+            );
+
+            if ($creationResult['action'] === CheckoutIntentGuard::ALREADY_SUCCEEDED) {
+                return 'END Payment already confirmed for this order. Thank you!';
+            }
+
+            if ($creationResult['action'] === CheckoutIntentGuard::STILL_PENDING) {
+                return 'END We are still confirming your payment. Please do not dial again — check your phone for the payment prompt.';
+            }
+
+            if ($creationResult['action'] === CheckoutIntentGuard::RETRY_AFTER_FAILURE) {
+                return 'END A system error occurred. Please dial again.';
+            }
+
+            $order = $creationResult['payable'];
+
+            // Phase 5 fix: GatewayManager::collect() is type-hinted to Order
+            // and would throw a TypeError (uncaught by the catch(\Exception)
+            // below — TypeError extends \Error, not \Exception) for a
+            // ResultCheckerOrder. This USSD-dial result-checker path was
+            // therefore completely non-functional before this fix; use the
+            // same genericPayment() entry point ResultCheckerCheckoutController
+            // already uses correctly for this payable type.
             $email = $recipientPhone.'@ussd.xtra4u.local';
-            $paymentResult = app(GatewayManager::class)->collect($order, $email, $totalPrice);
+            $reference = 'XTRA4U-RC-'.strtoupper(uniqid('', true)).'-'.$order->id;
+            $paymentResult = app(GatewayManager::class)->genericPayment([
+                'email' => $email,
+                'amount' => $totalPrice,
+                'callback_url' => route('result-checkers.payment.callback', ['order' => $order->id]),
+                'reference' => $reference,
+                'metadata' => [
+                    'phone_number' => $recipientPhone,
+                ],
+            ]);
 
             if ($paymentResult['reference'] ?? null) {
                 $order->update([

@@ -2,17 +2,152 @@
 
 namespace App\Services;
 
+use App\Models\AdminNotification;
 use App\Models\Order;
 use App\Models\Transaction;
 use App\Models\Vendor;
 use App\Models\VendorNotification;
 use App\Models\WalletLedger;
+use App\Models\WalletTopup;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class WalletService
 {
+    /**
+     * The single authoritative WalletTopup completion pipeline. Every caller
+     * that can conclude a top-up succeeded — the browser callback, the
+     * status-polling endpoint, and the automatic PaymentReconciliationService
+     * — must go through here rather than crediting inline, so there is
+     * exactly one place that credits a wallet for a top-up.
+     *
+     * Idempotent and race-safe: locks the WalletTopup row and re-checks its
+     * status before crediting, so two callers racing the same reference
+     * (double-click, webhook + browser callback + reconciler) can only ever
+     * credit once. $verification is stored verbatim as an audit trail —
+     * the credited amount always comes from $topup->amount (what the vendor
+     * actually requested), never from the gateway's reported amount, and a
+     * reported amount below that expected amount refuses to credit at all
+     * (the same financial-integrity guard every other completion path uses).
+     *
+     * Returns true if the top-up is 'completed' when this call returns —
+     * whether this call did the crediting or a race already had.
+     */
+    public function completeTopup(WalletTopup $topup, array $verification): bool
+    {
+        $creditedNow = false;
+        $alreadyCompleted = false;
+
+        DB::transaction(function () use ($topup, $verification, &$creditedNow, &$alreadyCompleted) {
+            $locked = WalletTopup::whereKey($topup->id)->lockForUpdate()->first();
+
+            if (! $locked || $locked->status === 'completed') {
+                $alreadyCompleted = (bool) $locked && $locked->status === 'completed';
+
+                return;
+            }
+
+            $vendorId = (int) $locked->vendor_id;
+            $expectedAmount = (float) $locked->amount;
+
+            if ($vendorId <= 0 || $expectedAmount <= 0) {
+                Log::warning('WalletService::completeTopup: invalid topup record, refusing to credit', [
+                    'topup_id' => $locked->id,
+                ]);
+
+                return;
+            }
+
+            $reportedAmount = data_get($verification, 'data.amount');
+            if ($reportedAmount !== null && round((float) $reportedAmount, 2) < round($expectedAmount, 2)) {
+                Log::error('WalletService::completeTopup: verified amount is less than expected — refusing to credit', [
+                    'topup_id' => $locked->id,
+                    'expected_amount' => $expectedAmount,
+                    'verified_amount' => $reportedAmount,
+                ]);
+
+                return;
+            }
+
+            $creditedNow = $this->creditVendor($vendorId, $expectedAmount, ['reference' => $locked->reference]);
+
+            if ($creditedNow) {
+                $locked->update([
+                    'status' => 'completed',
+                    'gateway_response' => $verification,
+                ]);
+                Cache::forget("wallet_topup:{$locked->reference}");
+                Cache::forget("vendor:{$vendorId}:topups_available");
+            }
+        });
+
+        if ($creditedNow) {
+            $this->sendTopupNotifications($topup->fresh());
+        }
+
+        return $creditedNow || $alreadyCompleted;
+    }
+
+    /**
+     * Best-effort, non-blocking notifications for a just-completed top-up.
+     * Only ever called once per top-up — completeTopup() only invokes this
+     * when THIS call performed the crediting, never for a racing caller that
+     * found the top-up already completed.
+     */
+    private function sendTopupNotifications(WalletTopup $topup): void
+    {
+        try {
+            $vendor = Vendor::find($topup->vendor_id);
+            if (! $vendor) {
+                return;
+            }
+
+            $amount = (float) $topup->amount;
+            $reference = (string) $topup->reference;
+
+            VendorNotification::create([
+                'vendor_id' => $vendor->id,
+                'type' => 'wallet_topup',
+                'title' => 'Wallet topped up',
+                'message' => 'Your wallet was topped up with GHS '.number_format($amount, 2).". Reference: {$reference}",
+                'data' => [
+                    'amount' => $amount,
+                    'reference' => $reference,
+                ],
+            ]);
+
+            AdminNotification::create([
+                'type' => 'vendor_wallet_topup',
+                'title' => 'Vendor wallet topped up',
+                'message' => "Vendor {$vendor->name} topped up wallet with GHS ".number_format($amount, 2).". Reference: {$reference}",
+                'vendor_id' => $vendor->id,
+                'data' => [
+                    'vendor_id' => $vendor->id,
+                    'amount' => $amount,
+                    'reference' => $reference,
+                ],
+            ]);
+
+            try {
+                \Illuminate\Support\Facades\Mail::to($vendor->email)->send(new \App\Mail\VendorWalletTopupMail($vendor, $amount, $reference));
+            } catch (\Throwable $e) {
+                Log::warning('Failed to send vendor topup email', ['err' => $e->getMessage(), 'vendor_id' => $vendor->id]);
+            }
+
+            $adminEmail = config('mail.admin_email') ?? env('ADMIN_EMAIL');
+            if ($adminEmail) {
+                try {
+                    \Illuminate\Support\Facades\Mail::to($adminEmail)->send(new \App\Mail\AdminVendorWalletTopupMail($vendor, $amount, $reference));
+                } catch (\Throwable $e) {
+                    Log::warning('Failed to send admin topup email', ['err' => $e->getMessage()]);
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Failed to create notifications for wallet topup', ['err' => $e->getMessage(), 'reference' => $topup->reference]);
+        }
+    }
+
     /**
      * Credit vendor wallet and create ledger entry
      */
@@ -110,10 +245,14 @@ class WalletService
             $consumptions = [];
 
             foreach ($topups as $t) {
-                if ($remaining <= 0) break;
+                if ($remaining <= 0) {
+                    break;
+                }
                 $consumedSoFar = (float) ($t->consumed ?? 0.0);
                 $topupAvailable = max(0.0, $t->amount - $consumedSoFar);
-                if ($topupAvailable <= 0) continue;
+                if ($topupAvailable <= 0) {
+                    continue;
+                }
                 $take = min($topupAvailable, $remaining);
                 $newConsumed = round($consumedSoFar + $take, 2);
                 $t->consumed = $newConsumed;

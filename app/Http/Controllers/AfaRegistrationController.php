@@ -2,27 +2,46 @@
 
 namespace App\Http\Controllers;
 
-use App\Mail\AfaOrderPlacedMail;
 use App\Models\AfaRegistration;
-use App\Models\Vendor;
 use App\Models\PaymentGatewayConfig;
-use App\Services\PaymentService;
+use App\Models\Vendor;
 use App\Services\AfaPaymentService;
 use App\Services\AffiliateChainService;
+use App\Services\Payments\CheckoutIntentGuard;
+use App\Services\PaymentService;
+use App\Support\PaymentVerificationState;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 class AfaRegistrationController extends Controller
 {
     protected PaymentService $paymentService;
+
     protected AfaPaymentService $afaPaymentService;
 
-    public function __construct(PaymentService $paymentService, AfaPaymentService $afaPaymentService)
+    protected CheckoutIntentGuard $intentGuard;
+
+    public function __construct(PaymentService $paymentService, AfaPaymentService $afaPaymentService, ?CheckoutIntentGuard $intentGuard = null)
     {
         $this->paymentService = $paymentService;
         $this->afaPaymentService = $afaPaymentService;
+        $this->intentGuard = $intentGuard ?? app(CheckoutIntentGuard::class);
+    }
+
+    private function afaIsSuccess(AfaRegistration $r): bool
+    {
+        return $r->payment_status === AfaRegistration::PAYMENT_COMPLETED;
+    }
+
+    private function afaIsTerminalFailure(AfaRegistration $r): bool
+    {
+        return $r->payment_status === AfaRegistration::PAYMENT_FAILED;
+    }
+
+    private function afaHasGateway(AfaRegistration $r): bool
+    {
+        return (bool) $r->payment_gateway && (bool) $r->payment_reference;
     }
 
     /**
@@ -43,7 +62,7 @@ class AfaRegistrationController extends Controller
         $afaPrice = null;
         $isReseller = false;
         $sourceVendor = null;
-        
+
         if ($vendor->afa_enabled && $vendor->afa_price > 0) {
             // Direct AFA service
             $afaPrice = $vendor->afa_price;
@@ -51,16 +70,16 @@ class AfaRegistrationController extends Controller
             // Reseller AFA service
             $afaPrice = $vendor->afa_selling_price;
             $isReseller = true;
-            $chainService = new AffiliateChainService();
+            $chainService = new AffiliateChainService;
             $sourceVendor = $chainService->resolveRootAfaProviderFromSeller($vendor);
 
-            if (!$sourceVendor) {
+            if (! $sourceVendor) {
                 return redirect()->route('storefront.vendor', $vendor->vendor_code)
                     ->with('error', 'AFA Registration is currently not available.');
             }
         }
-        
-        if (!$afaPrice || $afaPrice <= 0) {
+
+        if (! $afaPrice || $afaPrice <= 0) {
             return redirect()->route('storefront.vendor', $vendor->vendor_code)
                 ->with('error', 'AFA Registration is not available from this vendor.');
         }
@@ -102,7 +121,7 @@ class AfaRegistrationController extends Controller
         // Build validation rules based on ID type
         $idType = $request->input('id_type');
         $idNumberRules = ['required', 'string', 'max:50'];
-        
+
         // Add specific validation based on ID type
         if ($idType === 'ghana_card') {
             // Ghana Card format: GHA-XXXXXXXXX-X (total 15 characters)
@@ -114,7 +133,7 @@ class AfaRegistrationController extends Controller
             // Voter's ID: Typically 10 digits
             $idNumberRules[] = 'regex:/^[0-9]{10}$/';
         }
-        
+
         $validated = $request->validate([
             'full_name' => ['required', 'string', 'max:255'],
             'id_type' => ['required', 'string', 'in:ghana_card,drivers_license,voters_id'],
@@ -124,16 +143,64 @@ class AfaRegistrationController extends Controller
             'location' => ['required', 'string', 'max:255'],
             'region' => ['required', 'string', 'max:100'],
             'occupation' => ['nullable', 'string', 'max:255'],
-			// Inline/API gateways like BulkClix require payer phone/network before initiation.
-			'payer_phone' => $requiresInlineMomo
-				? ['required', 'string', 'min:10', 'max:15']
-				: ['nullable', 'string', 'min:10', 'max:15'],
-			'payer_network' => $requiresInlineMomo
-				? ['required', 'string', 'in:MTN,TELECEL,AIRTELTIGO']
-				: ['nullable', 'string', 'in:MTN,TELECEL,AIRTELTIGO'],
+            // Inline/API gateways like BulkClix require payer phone/network before initiation.
+            'payer_phone' => $requiresInlineMomo
+                ? ['required', 'string', 'min:10', 'max:15']
+                : ['nullable', 'string', 'min:10', 'max:15'],
+            'payer_network' => $requiresInlineMomo
+                ? ['required', 'string', 'in:MTN,TELECEL,AIRTELTIGO']
+                : ['nullable', 'string', 'in:MTN,TELECEL,AIRTELTIGO'],
+            // Phase 4: identifies one payment ATTEMPT for one checkout intent.
+            // Optional for backward compatibility — see CheckoutIntentGuard.
+            'idempotency_key' => ['nullable', 'string', 'max:100'],
         ], [
             'id_number.regex' => $this->getIdNumberErrorMessage($idType),
         ]);
+
+        $idempotencyKey = $validated['idempotency_key'] ?? null;
+        $intentScope = CheckoutIntentGuard::scopeForSession($request->session()->getId());
+
+        $intentDecision = $this->intentGuard->evaluate(
+            AfaRegistration::class,
+            $intentScope,
+            $idempotencyKey,
+            fn (AfaRegistration $r) => $this->afaIsSuccess($r),
+            fn (AfaRegistration $r) => $this->afaIsTerminalFailure($r),
+            fn (AfaRegistration $r) => $this->afaHasGateway($r),
+        );
+
+        if ($intentDecision['action'] === CheckoutIntentGuard::ALREADY_SUCCEEDED) {
+            $existing = $intentDecision['payable'];
+            $payload = [
+                'success' => true,
+                'message' => 'Payment already completed.',
+                'redirect' => route('afa.success', ['reference' => $existing->reference]),
+            ];
+
+            return $request->expectsJson() ? response()->json($payload) : redirect($payload['redirect']);
+        }
+
+        if ($intentDecision['action'] === CheckoutIntentGuard::STILL_PENDING) {
+            $existing = $intentDecision['payable'];
+            $message = "We're still confirming your previous payment. Please don't pay again yet.";
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'status' => 'confirming',
+                    'message' => $message,
+                    'reference' => $existing->payment_reference,
+                    'verify_url' => route('afa.verify'),
+                    'success_url' => route('afa.success', ['reference' => $existing->reference]),
+                ]);
+            }
+
+            return back()->with('success', $message);
+        }
+
+        if ($intentDecision['action'] === CheckoutIntentGuard::RETRY_AFTER_FAILURE && $idempotencyKey) {
+            $idempotencyKey = $this->intentGuard->freshKeyAfterFailure($idempotencyKey);
+        }
 
         // Determine if this is a direct or reseller AFA order
         $isResellerOrder = false;
@@ -142,16 +209,16 @@ class AfaRegistrationController extends Controller
         $basePrice = 0;
         $markupPrice = 0;
         $affiliateChainSnapshot = null;
-        
+
         if ($vendor->afa_enabled && $vendor->afa_price > 0) {
             // Direct AFA order
             $afaPrice = $vendor->afa_price;
             $sourceVendorId = $vendor->id;
         } elseif ($vendor->afa_reseller_enabled && $vendor->afa_selling_price > 0 && $vendor->afa_source_vendor_id) {
             // Reseller AFA order
-            $chainService = new AffiliateChainService();
+            $chainService = new AffiliateChainService;
             $payout = $chainService->computeAfaPayoutFromSeller($vendor);
-            if (!($payout['ok'] ?? false)) {
+            if (! ($payout['ok'] ?? false)) {
                 return back()->with('error', 'AFA Registration is currently not available.');
             }
 
@@ -169,13 +236,13 @@ class AfaRegistrationController extends Controller
             }
         }
 
-        if (!$afaPrice || $afaPrice <= 0) {
+        if (! $afaPrice || $afaPrice <= 0) {
             return back()->with('error', 'AFA Registration is not available from this vendor.');
         }
 
         // Calculate commissions (2% platform fee)
         $commissionRate = 0.02;
-        
+
         if ($isResellerOrder) {
             // Snapshot-based multi-level logic: platform commission is per-portion.
             // For stored summary fields, we keep the owner + immediate seller amounts.
@@ -185,14 +252,14 @@ class AfaRegistrationController extends Controller
             $vendorEarning = round($basePrice - $ownerCommission, 2); // Root provider earning
             $resellerEarning = round($markupPrice - $resellerCommission, 2); // Immediate seller earning
 
-            if (is_array($affiliateChainSnapshot) && !empty($affiliateChainSnapshot)) {
+            if (is_array($affiliateChainSnapshot) && ! empty($affiliateChainSnapshot)) {
                 // Recompute totals from snapshot to include all resellers.
                 $platformCommission = 0.0;
                 $vendorEarning = 0.0;
                 $resellerEarning = 0.0;
 
                 foreach ($affiliateChainSnapshot as $idx => $entry) {
-                    if (!is_array($entry)) {
+                    if (! is_array($entry)) {
                         continue;
                     }
 
@@ -228,31 +295,81 @@ class AfaRegistrationController extends Controller
         try {
             DB::beginTransaction();
 
-            // Create the AFA registration
-            $registration = AfaRegistration::create([
-                'vendor_id' => $sourceVendorId, // The source vendor who processes the registration
-                'reseller_vendor_id' => $isResellerOrder ? $vendor->id : null, // The reseller who sold it
-                'full_name' => $validated['full_name'],
-                'id_type' => $validated['id_type'],
-                'id_number' => $validated['id_number'],
-                'date_of_birth' => $validated['date_of_birth'],
-                'phone_number' => $validated['phone_number'],
-                'location' => $validated['location'],
-                'region' => $validated['region'],
-                'occupation' => $validated['occupation'] ?? null,
-                'amount' => $afaPrice,
-                'vendor_price' => $isResellerOrder ? $basePrice : $afaPrice,
-                'platform_commission' => $platformCommission,
-                'vendor_earning' => $vendorEarning,
-                'reseller_earning' => $resellerEarning,
-                'affiliate_chain_snapshot' => $affiliateChainSnapshot,
-                'is_reseller_order' => $isResellerOrder,
-                'status' => AfaRegistration::STATUS_PENDING,
-                'payment_status' => AfaRegistration::PAYMENT_PENDING,
-                'reference' => AfaRegistration::generateReference(),
-            ]);
+            // Create the AFA registration. Race-safe: two concurrent
+            // submissions of the same checkout intent can create at most one
+            // row here — see CheckoutIntentGuard::createOrReuse().
+            $creationResult = $this->intentGuard->createOrReuse(
+                AfaRegistration::class,
+                $intentScope,
+                $idempotencyKey,
+                fn (?string $key) => AfaRegistration::create([
+                    'vendor_id' => $sourceVendorId, // The source vendor who processes the registration
+                    'reseller_vendor_id' => $isResellerOrder ? $vendor->id : null, // The reseller who sold it
+                    'full_name' => $validated['full_name'],
+                    'id_type' => $validated['id_type'],
+                    'id_number' => $validated['id_number'],
+                    'date_of_birth' => $validated['date_of_birth'],
+                    'phone_number' => $validated['phone_number'],
+                    'location' => $validated['location'],
+                    'region' => $validated['region'],
+                    'occupation' => $validated['occupation'] ?? null,
+                    'amount' => $afaPrice,
+                    'vendor_price' => $isResellerOrder ? $basePrice : $afaPrice,
+                    'platform_commission' => $platformCommission,
+                    'vendor_earning' => $vendorEarning,
+                    'reseller_earning' => $resellerEarning,
+                    'affiliate_chain_snapshot' => $affiliateChainSnapshot,
+                    'is_reseller_order' => $isResellerOrder,
+                    'status' => AfaRegistration::STATUS_PENDING,
+                    'payment_status' => AfaRegistration::PAYMENT_PENDING,
+                    'reference' => AfaRegistration::generateReference(),
+                    'idempotency_scope' => $key ? $intentScope : null,
+                    'idempotency_key' => $key,
+                ]),
+                fn (AfaRegistration $r) => $this->afaIsSuccess($r),
+                fn (AfaRegistration $r) => $this->afaIsTerminalFailure($r),
+                fn (AfaRegistration $r) => $this->afaHasGateway($r),
+            );
 
             DB::commit();
+
+            if ($creationResult['action'] === CheckoutIntentGuard::ALREADY_SUCCEEDED) {
+                $existing = $creationResult['payable'];
+                $payload = [
+                    'success' => true,
+                    'message' => 'Payment already completed.',
+                    'redirect' => route('afa.success', ['reference' => $existing->reference]),
+                ];
+
+                return $request->expectsJson() ? response()->json($payload) : redirect($payload['redirect']);
+            }
+
+            if ($creationResult['action'] === CheckoutIntentGuard::STILL_PENDING) {
+                $existing = $creationResult['payable'];
+                $message = "We're still confirming your previous payment. Please don't pay again yet.";
+
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => true,
+                        'status' => 'confirming',
+                        'message' => $message,
+                        'reference' => $existing->payment_reference,
+                        'verify_url' => route('afa.verify'),
+                        'success_url' => route('afa.success', ['reference' => $existing->reference]),
+                    ]);
+                }
+
+                return back()->with('success', $message);
+            }
+
+            if ($creationResult['action'] === CheckoutIntentGuard::RETRY_AFTER_FAILURE) {
+                return $request->expectsJson()
+                    ? response()->json(['success' => false, 'message' => 'Please try again.'], 409)
+                    : back()->with('error', 'Please try again.');
+            }
+
+            // PROCEED: a fresh registration for this intent was just created.
+            $registration = $creationResult['payable'];
 
             // Use the selling vendor's email for payment (reseller or direct).
             // Some vendor accounts may not have an email set; payment gateways like Paystack require one.
@@ -271,10 +388,15 @@ class AfaRegistrationController extends Controller
                     'reseller_vendor_id' => $isResellerOrder ? $vendor->id : null,
                     'customer_name' => $registration->full_name,
                     'is_reseller_order' => $isResellerOrder,
-                    // Needed for inline/API collections like BulkClix.
-                    'phone_number' => $validated['payer_phone'] ?? null,
-					'network' => $validated['payer_network'] ?? null,
-					'payer_network' => $validated['payer_network'] ?? null,
+                    // Needed for inline/API collections like BulkClix, and for
+                    // Payaza (which always requires a phone number but isn't
+                    // classified as "requires inline MoMo", so payer_phone is
+                    // never collected for it) — fall back to the registrant's
+                    // own phone number, exactly as the Order-based checkout
+                    // flow falls back to the recipient's phone.
+                    'phone_number' => $validated['payer_phone'] ?? $validated['phone_number'],
+                    'network' => $validated['payer_network'] ?? null,
+                    'payer_network' => $validated['payer_network'] ?? null,
                 ]
             );
 
@@ -287,18 +409,25 @@ class AfaRegistrationController extends Controller
 
                 // AJAX flow (inline gateways like BulkClix): return payload so frontend can poll.
                 if ($request->expectsJson()) {
+                    // flow_type/checkout_config are only present for gateways that
+                    // launch a client-side SDK popup (currently Payaza) — omitted
+                    // for every other gateway so existing behaviour is unchanged.
+                    $isSdkPopupFlow = ! empty($paymentResult['checkout_config']);
+
                     return response()->json([
                         'success' => true,
                         'message' => $paymentResult['message'] ?? 'Payment initiated. Please approve the MoMo prompt.',
                         'reference' => $paymentResult['reference'] ?? null,
                         'redirect' => $paymentResult['authorization_url'] ?? null,
+                        'flow_type' => $isSdkPopupFlow ? $paymentResult['flow_type'] : null,
+                        'checkout_config' => $isSdkPopupFlow ? $paymentResult['checkout_config'] : null,
                         'verify_url' => route('afa.verify'),
                         'success_url' => route('afa.success', ['reference' => $registration->reference]),
                     ]);
                 }
 
                 // Non-AJAX fallback.
-                if (!empty($paymentResult['authorization_url'])) {
+                if (! empty($paymentResult['authorization_url'])) {
                     return redirect($paymentResult['authorization_url']);
                 }
 
@@ -312,11 +441,11 @@ class AfaRegistrationController extends Controller
             if ($request->expectsJson()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Payment could not be initiated: ' . ($paymentResult['message'] ?? 'Unknown error'),
+                    'message' => 'Payment could not be initiated: '.($paymentResult['message'] ?? 'Unknown error'),
                 ], 422);
             }
 
-            return back()->with('error', 'Payment could not be initiated: ' . ($paymentResult['message'] ?? 'Unknown error'));
+            return back()->with('error', 'Payment could not be initiated: '.($paymentResult['message'] ?? 'Unknown error'));
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -368,25 +497,13 @@ class AfaRegistrationController extends Controller
             ]);
         }
 
-        $verification = $this->paymentService->checkPaymentStatus($paymentReference);
-        if (! ($verification['success'] ?? false)) {
-            return response()->json([
-                'success' => false,
-                'message' => $verification['message'] ?? 'Verification failed.',
-            ], 422);
-        }
+        // Verify against the gateway that actually created this registration —
+        // never whichever gateway is currently the admin default.
+        $verification = $this->paymentService->checkPaymentStatusForGateway($paymentReference, $registration->payment_gateway);
 
-        $paymentStatus = strtolower((string) data_get($verification, 'data.status', ''));
-        if ($paymentStatus === 'pending' || $paymentStatus === 'unknown' || $paymentStatus === '') {
-            return response()->json([
-                'success' => true,
-                'status' => 'pending',
-                'message' => 'Payment pending. Please approve the MoMo prompt.',
-            ]);
-        }
+        $state = PaymentVerificationState::from($verification);
 
-        $isSuccess = in_array($paymentStatus, ['success', 'successful', 'completed', 'paid'], true);
-        if (! $isSuccess) {
+        if ($state === PaymentVerificationState::FAILED) {
             $registration->update([
                 'payment_status' => AfaRegistration::PAYMENT_FAILED,
                 'status' => AfaRegistration::STATUS_CANCELLED,
@@ -396,6 +513,36 @@ class AfaRegistrationController extends Controller
                 'success' => true,
                 'status' => 'failed',
                 'message' => 'Payment failed.',
+            ]);
+        }
+
+        if ($state !== PaymentVerificationState::SUCCESS) {
+            // PENDING or UNKNOWN (verification call itself failed) — not proof
+            // the customer wasn't charged. Leave the registration untouched.
+            return response()->json([
+                'success' => true,
+                'status' => 'pending',
+                'message' => 'Payment pending. Please approve the MoMo prompt.',
+            ]);
+        }
+
+        // Amount mismatch guard. Most gateways lock the amount in server-side
+        // at initiation, so this is a no-op for them; it matters for Payaza,
+        // whose Web Checkout SDK sets the charge amount client-side.
+        $verifiedAmount = data_get($verification, 'data.amount');
+        $expectedAmount = (float) $registration->amount;
+        if ($verifiedAmount !== null && $expectedAmount > 0 && round((float) $verifiedAmount, 2) < round($expectedAmount, 2)) {
+            Log::error('AFA verify: verified amount is less than expected registration amount - refusing to fulfil', [
+                'registration_id' => $registration->id,
+                'reference' => $paymentReference,
+                'expected_amount' => $expectedAmount,
+                'verified_amount' => $verifiedAmount,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'status' => 'failed',
+                'message' => 'Payment amount mismatch. Please contact support.',
             ]);
         }
 
@@ -424,14 +571,14 @@ class AfaRegistrationController extends Controller
             ?? $request->get('externalref')
             ?? $request->get('externalRef');
 
-        if (!$reference) {
+        if (! $reference) {
             return redirect()->route('storefront.index')->with('error', 'Invalid payment reference.');
         }
 
         // Find the registration by payment reference
         $registration = AfaRegistration::where('payment_reference', $reference)->first();
 
-        if (!$registration) {
+        if (! $registration) {
             return redirect()->route('storefront.index')->with('error', 'Registration not found.');
         }
 
@@ -440,47 +587,42 @@ class AfaRegistrationController extends Controller
             return redirect()->route('afa.success', $registration->reference);
         }
 
-        // Verify payment with the active default gateway
-        $verificationResult = $this->paymentService->checkPaymentStatus($reference);
+        // Verify against the gateway that actually created this registration —
+        // never whichever gateway is currently the admin default.
+        $verificationResult = $this->paymentService->checkPaymentStatusForGateway($reference, $registration->payment_gateway);
 
-        if ($verificationResult['success']) {
-            $paymentStatus = strtolower((string) data_get($verificationResult, 'data.status', ''));
+        $state = PaymentVerificationState::from($verificationResult);
 
-            if ($paymentStatus === 'pending' || $paymentStatus === 'unknown') {
-                return redirect()->route('storefront.vendor', $registration->vendor->vendor_code)
-                    ->with('success', 'Payment pending. Please approve the MoMo prompt or try again shortly.');
+        if ($state === PaymentVerificationState::FAILED) {
+            // Authoritative terminal failure from the gateway. Do not overwrite
+            // a completed payment if this callback is replayed.
+            if ($registration->payment_status !== AfaRegistration::PAYMENT_COMPLETED) {
+                $registration->update([
+                    'payment_status' => AfaRegistration::PAYMENT_FAILED,
+                    'status' => AfaRegistration::STATUS_CANCELLED,
+                ]);
             }
 
-            if ($paymentStatus && ! in_array($paymentStatus, ['success', 'successful', 'completed'], true)) {
-                // Payment verification returned a terminal non-success state.
-                if ($registration->payment_status !== AfaRegistration::PAYMENT_COMPLETED) {
-                    $registration->update([
-                        'payment_status' => AfaRegistration::PAYMENT_FAILED,
-                        'status' => AfaRegistration::STATUS_CANCELLED,
-                    ]);
-                }
-
-                return redirect()->route('storefront.vendor', $registration->vendor->vendor_code)
-                    ->with('error', 'Payment failed. Please try again.');
-            }
-
-            // Use dedicated AFA payment service to handle completion
-            $this->afaPaymentService->completeRegistration($registration);
-
-            return redirect()->route('afa.success', $registration->reference);
+            return redirect()->route('storefront.vendor', $registration->vendor->vendor_code)
+                ->with('error', 'Payment failed. Please try again.');
         }
 
-        // Payment verification failed
-        // Do not overwrite a completed payment if the callback is replayed.
-        if ($registration->payment_status !== AfaRegistration::PAYMENT_COMPLETED) {
-            $registration->update([
-                'payment_status' => AfaRegistration::PAYMENT_FAILED,
-                'status' => AfaRegistration::STATUS_CANCELLED,
-            ]);
+        if ($state !== PaymentVerificationState::SUCCESS) {
+            // PENDING (gateway says still processing) or UNKNOWN (the verify
+            // call itself failed — network/timeout/malformed response).
+            // Neither is proof the customer wasn't charged: previously this
+            // branch unconditionally marked the registration FAILED on any
+            // verification-call error, which is exactly the "network failure
+            // == payment failure" bug the reconciliation audit flagged. Leave
+            // the registration untouched instead.
+            return redirect()->route('storefront.vendor', $registration->vendor->vendor_code)
+                ->with('success', 'Payment pending. Please approve the MoMo prompt or try again shortly.');
         }
 
-        return redirect()->route('storefront.vendor', $registration->vendor->vendor_code)
-            ->with('error', 'Payment verification failed. Please try again.');
+        // Use dedicated AFA payment service to handle completion
+        $this->afaPaymentService->completeRegistration($registration);
+
+        return redirect()->route('afa.success', $registration->reference);
     }
 
     /**
@@ -511,7 +653,7 @@ class AfaRegistrationController extends Controller
             ->with('vendor:id,name')
             ->first();
 
-        if (!$registration) {
+        if (! $registration) {
             return response()->json([
                 'success' => false,
                 'message' => 'No registration found with this reference or phone number.',

@@ -3,26 +3,47 @@
 namespace App\Http\Controllers;
 
 use App\Models\Vendor;
+use App\Models\WalletTopup;
+use App\Services\Payments\CheckoutIntentGuard;
 use App\Services\PaymentService;
 use App\Services\WalletService;
+use App\Support\PaymentVerificationState;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Cache;
-use App\Models\WalletTopup;
-use Illuminate\Support\Facades\DB;
 
 class VendorWalletController extends Controller
 {
     protected PaymentService $paymentService;
+
     protected WalletService $walletService;
 
-    public function __construct(?PaymentService $paymentService = null, ?WalletService $walletService = null)
+    protected CheckoutIntentGuard $intentGuard;
+
+    public function __construct(?PaymentService $paymentService = null, ?WalletService $walletService = null, ?CheckoutIntentGuard $intentGuard = null)
     {
-        $this->paymentService = $paymentService ?? new PaymentService();
-        $this->walletService = $walletService ?? new WalletService();
+        $this->paymentService = $paymentService ?? new PaymentService;
+        $this->walletService = $walletService ?? new WalletService;
+        $this->intentGuard = $intentGuard ?? app(CheckoutIntentGuard::class);
+    }
+
+    private function topupIsSuccess(WalletTopup $t): bool
+    {
+        return $t->status === 'completed';
+    }
+
+    private function topupIsTerminalFailure(WalletTopup $t): bool
+    {
+        return $t->status === 'failed';
+    }
+
+    private function topupHasGateway(WalletTopup $t): bool
+    {
+        return (bool) $t->payment_gateway && (bool) $t->reference;
     }
 
     // Initiate top-up via existing gateway; callback_url will point to `wallet.topup.callback`
@@ -36,9 +57,51 @@ class VendorWalletController extends Controller
             'return_url' => 'nullable|url',
             'payer_phone' => 'nullable|string',
             'network' => 'nullable|string',
+            // Phase 4: identifies one payment ATTEMPT for one top-up intent.
+            // Optional for backward compatibility — see CheckoutIntentGuard.
+            'idempotency_key' => 'nullable|string|max:100',
         ]);
 
         $vendorId = (int) $vendor->id;
+        $idempotencyKey = $validated['idempotency_key'] ?? null;
+        $intentScope = CheckoutIntentGuard::scopeForVendor($vendorId);
+
+        $intentDecision = $this->intentGuard->evaluate(
+            WalletTopup::class,
+            $intentScope,
+            $idempotencyKey,
+            fn (WalletTopup $t) => $this->topupIsSuccess($t),
+            fn (WalletTopup $t) => $this->topupIsTerminalFailure($t),
+            fn (WalletTopup $t) => $this->topupHasGateway($t),
+        );
+
+        if ($intentDecision['action'] === CheckoutIntentGuard::ALREADY_SUCCEEDED) {
+            $existing = $intentDecision['payable'];
+
+            return response()->json([
+                'success' => true,
+                'status' => 'completed',
+                'message' => 'Top-up already processed.',
+                'reference' => $existing->reference,
+            ]);
+        }
+
+        if ($intentDecision['action'] === CheckoutIntentGuard::STILL_PENDING) {
+            $existing = $intentDecision['payable'];
+
+            return response()->json([
+                'success' => true,
+                'status' => 'confirming',
+                'message' => "We're still confirming your previous top-up. Please don't pay again yet.",
+                'reference' => $existing->reference,
+                'payment_type' => 'wallet_topup',
+            ]);
+        }
+
+        if ($intentDecision['action'] === CheckoutIntentGuard::RETRY_AFTER_FAILURE && $idempotencyKey) {
+            $idempotencyKey = $this->intentGuard->freshKeyAfterFailure($idempotencyKey);
+        }
+
         $reference = Str::uuid()->toString();
 
         // Persist a short-lived mapping so callbacks that don't return metadata
@@ -49,13 +112,56 @@ class VendorWalletController extends Controller
         ], now()->addHours(6));
 
         // Also persist a DB record for stronger auditability and reconciliation.
-        WalletTopup::create([
-            'reference' => $reference,
-            'vendor_id' => $vendorId,
-            'amount' => (float) $validated['amount'],
-            'metadata' => ['purpose' => 'wallet_topup'],
-            'status' => 'initiated',
-        ]);
+        // Race-safe: two concurrent top-up submissions for the same intent can
+        // create at most one row here — see CheckoutIntentGuard::createOrReuse().
+        $creationResult = $this->intentGuard->createOrReuse(
+            WalletTopup::class,
+            $intentScope,
+            $idempotencyKey,
+            fn (?string $key) => WalletTopup::create([
+                'reference' => $reference,
+                'vendor_id' => $vendorId,
+                'amount' => (float) $validated['amount'],
+                'metadata' => ['purpose' => 'wallet_topup'],
+                'status' => 'initiated',
+                'idempotency_scope' => $key ? $intentScope : null,
+                'idempotency_key' => $key,
+            ]),
+            fn (WalletTopup $t) => $this->topupIsSuccess($t),
+            fn (WalletTopup $t) => $this->topupIsTerminalFailure($t),
+            fn (WalletTopup $t) => $this->topupHasGateway($t),
+        );
+
+        if ($creationResult['action'] === CheckoutIntentGuard::ALREADY_SUCCEEDED) {
+            Cache::forget("wallet_topup:{$reference}");
+            $existing = $creationResult['payable'];
+
+            return response()->json([
+                'success' => true,
+                'status' => 'completed',
+                'message' => 'Top-up already processed.',
+                'reference' => $existing->reference,
+            ]);
+        }
+
+        if ($creationResult['action'] === CheckoutIntentGuard::STILL_PENDING) {
+            Cache::forget("wallet_topup:{$reference}");
+            $existing = $creationResult['payable'];
+
+            return response()->json([
+                'success' => true,
+                'status' => 'confirming',
+                'message' => "We're still confirming your previous top-up. Please don't pay again yet.",
+                'reference' => $existing->reference,
+                'payment_type' => 'wallet_topup',
+            ]);
+        }
+
+        if ($creationResult['action'] === CheckoutIntentGuard::RETRY_AFTER_FAILURE) {
+            Cache::forget("wallet_topup:{$reference}");
+
+            return response()->json(['success' => false, 'message' => 'Please try again.'], 409);
+        }
 
         $callbackUrl = route('vendor.wallet.topup.callback', ['reference' => $reference]);
 
@@ -70,7 +176,7 @@ class VendorWalletController extends Controller
         $payerPhone = $request->input('payer_phone') ?? $request->input('phone') ?? null;
         if ($payerPhone && is_string($payerPhone) && trim($payerPhone) !== '') {
             $metadata['phone_number'] = trim((string) $payerPhone);
-        } elseif ($vendor && !empty(trim((string) $vendor->phone_number))) {
+        } elseif ($vendor && ! empty(trim((string) $vendor->phone_number))) {
             $metadata['phone_number'] = trim((string) $vendor->phone_number);
         }
 
@@ -87,6 +193,7 @@ class VendorWalletController extends Controller
             // Clean up the DB record and cache if gateway rejected the initiation
             WalletTopup::where('reference', $reference)->delete();
             Cache::forget("wallet_topup:{$reference}");
+
             return response()->json(['success' => false, 'message' => $result['message'] ?? 'Failed to initiate top-up'], 400);
         }
 
@@ -105,6 +212,16 @@ class VendorWalletController extends Controller
             }
             $reference = $gatewayReference;
         }
+
+        // Persist which gateway actually created this top-up so it can always
+        // be verified against that gateway specifically — never whichever
+        // gateway happens to be the platform default later. GatewayManager::
+        // genericPayment() sets 'gateway_name' from the config it resolved at
+        // initiation time (see PaymentReconciliationService audit's wallet-
+        // topup schema gap).
+        WalletTopup::where('reference', $reference)->update([
+            'payment_gateway' => $result['gateway_name'] ?? null,
+        ]);
 
         // Auto-detect flow_type: gateways like BulkClix/Moolre set it explicitly to 'inline'.
         // Paystack (redirect) returns an authorization_url but never sets flow_type, so we
@@ -126,38 +243,76 @@ class VendorWalletController extends Controller
     // Callback/capture endpoint for top-up (gateway should call or redirect here)
     public function topupCallback(Request $request, string $reference)
     {
-        // Check payment status via PaymentService
-        $status = $this->paymentService->checkPaymentStatus($reference);
+        // Look up the record BEFORE verifying, so we can verify against the
+        // gateway that actually created this top-up rather than whichever
+        // gateway is currently the platform default.
+        $topupRecord = WalletTopup::where('reference', $reference)->first();
 
-        if (! ($status['success'] ?? false)) {
-            Log::info('Wallet topup: payment not successful', ['reference' => $reference, 'status' => $status]);
+        $status = $this->verifyWalletTopupReference($reference, $topupRecord);
+
+        if ($status === null) {
+            // No stored gateway to verify against — either a legacy top-up
+            // predating the payment_gateway column, or (rare) no record found
+            // at all. Per the reconciliation-hardening audit: never guess the
+            // gateway and never fall back to whichever gateway is currently
+            // default. Leave it unresolved for manual review rather than
+            // reporting a false outcome either way.
+            Log::warning('Wallet topup callback: no reliable gateway to verify against, leaving unresolved', [
+                'reference' => $reference,
+                'topup_id' => $topupRecord?->id,
+            ]);
+
             if ($request->wantsJson() || $request->ajax()) {
-                return response()->json(['success' => false, 'message' => 'Payment not successful.']);
+                return response()->json(['success' => true, 'status' => 'pending', 'message' => 'Payment pending confirmation.']);
             }
-            return redirect(url('/vendor/wallet?tab=topups'))->with('status', 'Payment not successful.');
+
+            return redirect(url('/vendor/wallet?tab=topups'))->with('status', 'Payment pending confirmation.');
         }
 
+        $verificationState = PaymentVerificationState::from($status);
+
+        if ($verificationState === PaymentVerificationState::FAILED) {
+            // Authoritative terminal failure from the gateway. Idempotent: lock
+            // the row and never overwrite an already-completed top-up (a
+            // failure verification racing a just-credited success must lose).
+            DB::transaction(function () use ($topupRecord, $status) {
+                $locked = WalletTopup::whereKey($topupRecord->id)->lockForUpdate()->first();
+                if ($locked && $locked->status !== 'completed') {
+                    $locked->update(['status' => 'failed', 'gateway_response' => $status]);
+                }
+            });
+
+            Log::info('Wallet topup: payment failed', ['reference' => $reference, 'status' => $status]);
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'status' => 'failed', 'message' => 'Payment failed.']);
+            }
+
+            return redirect(url('/vendor/wallet?tab=topups'))->with('status', 'Payment failed.');
+        }
+
+        if ($verificationState !== PaymentVerificationState::SUCCESS) {
+            // PENDING (gateway says still processing) or UNKNOWN (the verify
+            // call itself failed — network/timeout/malformed response).
+            // Neither is proof the vendor wasn't charged: leave the record
+            // untouched rather than reporting a failure that may not be true.
+            Log::info('Wallet topup: verification unresolved, leaving pending', ['reference' => $reference, 'status' => $status]);
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json(['success' => true, 'status' => 'pending', 'message' => 'Payment pending confirmation.']);
+            }
+
+            return redirect(url('/vendor/wallet?tab=topups'))->with('status', 'Payment pending confirmation.');
+        }
+
+        // $topupRecord is guaranteed non-null with a known payment_gateway
+        // here — verifyWalletTopupReference() returns null otherwise, and
+        // that case already returned above.
         $data = $status['data'] ?? ($status['response'] ?? []);
         $meta = $data['metadata'] ?? ($status['metadata'] ?? []);
-
-        // If metadata is missing, try our DB record first, then cache mapping.
-        $topupRecord = WalletTopup::where('reference', $reference)->first();
-        if ($topupRecord) {
-            $meta = array_merge($meta ?? [], [
-                'vendor_id' => $topupRecord->vendor_id,
-                'purpose' => $meta['purpose'] ?? ($topupRecord->metadata['purpose'] ?? 'wallet_topup'),
-            ]);
-            $data['amount'] = $data['amount'] ?? $topupRecord->amount;
-        } else {
-            $cached = Cache::get("wallet_topup:{$reference}");
-            if ($cached && is_array($cached)) {
-                $meta = array_merge($meta ?? [], [
-                    'vendor_id' => $cached['vendor_id'],
-                    'purpose' => $meta['purpose'] ?? 'wallet_topup',
-                ]);
-                $data['amount'] = $data['amount'] ?? $cached['amount'];
-            }
-        }
+        $meta = array_merge($meta ?? [], [
+            'vendor_id' => $topupRecord->vendor_id,
+            'purpose' => $meta['purpose'] ?? ($topupRecord->metadata['purpose'] ?? 'wallet_topup'),
+        ]);
+        $data['amount'] = $data['amount'] ?? $topupRecord->amount;
 
         // Ensure this was initiated as a wallet topup and vendor_id present
 
@@ -166,141 +321,48 @@ class VendorWalletController extends Controller
             if ($request->wantsJson() || $request->ajax()) {
                 return response()->json(['success' => false, 'message' => 'Missing vendor metadata.']);
             }
+
             return redirect(url('/vendor/wallet?tab=topups'))->with('status', 'Missing vendor metadata.');
         }
 
         $vendorId = (int) ($meta['vendor_id'] ?? 0);
         $amount = (float) ($data['amount'] ?? ($status['amount'] ?? 0));
 
-
         if ($amount <= 0 || $vendorId <= 0) {
             Log::warning('Wallet topup callback invalid data', ['reference' => $reference, 'status' => $status]);
             if ($request->wantsJson() || $request->ajax()) {
                 return response()->json(['success' => false, 'message' => 'Invalid top-up data.']);
             }
+
             return redirect(url('/vendor/wallet?tab=topups'))->with('status', 'Invalid top-up data.');
         }
 
-        // SECURITY GUARDS: ensure the initiation record exists and is unused
-        if (! $topupRecord) {
-            // If gateway provided authoritative metadata, create an audit record on-the-fly
-            $gwMeta = $status['data']['metadata'] ?? null;
-            if (is_array($gwMeta) && ! empty($gwMeta['vendor_id']) && ($gwMeta['purpose'] ?? null) === 'wallet_topup') {
-                $topupRecord = WalletTopup::create([
-                    'reference' => $reference,
-                    'vendor_id' => $gwMeta['vendor_id'],
-                    'amount' => $amount,
-                    'status' => 'initiated',
-                    'metadata' => $gwMeta,
-                ]);
-                Log::info('Created fallback WalletTopup from gateway metadata', ['reference' => $reference, 'topup_id' => $topupRecord->id]);
-                } else {
-                    Log::warning('Wallet topup callback reference not found in DB', ['reference' => $reference, 'status' => $status]);
-                    if ($request->wantsJson() || $request->ajax()) {
-                        return response()->json(['success' => false, 'message' => 'Unknown top-up reference.']);
-                    }
-                    return redirect(url('/vendor/wallet?tab=topups'))->with('status', 'Unknown top-up reference.');
-                }
-        }
-
-        // Idempotency: if already completed, respond success (no double-credit)
-
+        // Idempotency fast-path (non-authoritative; the authoritative check
+        // happens under lock inside the transaction below, to close the race
+        // between this read and the credit).
         if ($topupRecord->status === 'completed') {
             Log::info('Wallet topup callback already processed', ['reference' => $reference]);
             if ($request->wantsJson() || $request->ajax()) {
                 return response()->json(['success' => true, 'message' => 'Top-up already processed.']);
             }
+
             return redirect(url('/vendor/wallet?tab=topups'))->with('status', 'Top-up already processed.');
         }
 
-        // Amount mismatch protection: gateway amount must match initiation amount
-        $initiatedAmount = (float) $topupRecord->amount;
-        // compare rounded to 2 decimals to avoid floating point noise
-
-        if (round($amount, 2) < round($initiatedAmount, 2)) {
-            Log::error('Wallet topup amount mismatch', ['reference' => $reference, 'initiated' => $initiatedAmount, 'reported' => $amount, 'status' => $status]);
-            if ($request->wantsJson() || $request->ajax()) {
-                return response()->json(['success' => false, 'message' => 'Amount mismatch.']);
-            }
-            return redirect(url('/vendor/wallet?tab=topups'))->with('status', 'Amount mismatch.');
-        }
-
-        // Credit vendor wallet and ledger in a transaction and mark topup completed.
-        // Always credit the originally requested amount, ignoring additional gateway fees.
-        $credited = false;
-        DB::transaction(function () use ($vendorId, $initiatedAmount, $reference, &$credited) {
-            $credited = $this->walletService->creditVendor($vendorId, $initiatedAmount, ['reference' => $reference]);
-            if ($credited) {
-                // update DB topup record if present
-                $topupRecord = WalletTopup::where('reference', $reference)->first();
-                if ($topupRecord) {
-                    $topupRecord->update([
-                        'status' => 'completed',
-                        'gateway_response' => $this->paymentService->checkPaymentStatus($reference),
-                    ]);
-                }
-                // remove cached mapping
-                Cache::forget("wallet_topup:{$reference}");
-                // Invalidate the balance cache so the next call to balance() returns fresh data
-                Cache::forget("vendor:{$vendorId}:topups_available");
-            }
-        });
+        // Single authoritative completion pipeline — shared with topupStatus()
+        // and the automatic PaymentReconciliationService. It re-derives the
+        // credited amount from the locked WalletTopup row itself (never from
+        // $status) and re-applies the amount-mismatch guard, lock, and
+        // idempotency check internally, so a racing duplicate call can never
+        // credit twice.
+        $credited = $this->walletService->completeTopup($topupRecord, $status);
 
         if (! $credited) {
             if ($request->wantsJson() || $request->ajax()) {
                 return response()->json(['success' => false, 'message' => 'Failed to credit wallet.']);
             }
+
             return redirect(url('/vendor/wallet?tab=topups'))->with('status', 'Failed to credit wallet.');
-        }
-
-        // Create vendor in-app notification and admin notification + send emails
-        try {
-            $vendor = \App\Models\Vendor::find($vendorId);
-            if ($vendor) {
-                // Vendor in-app notification (DB)
-                \App\Models\VendorNotification::create([
-                    'vendor_id' => $vendor->id,
-                    'type' => 'wallet_topup',
-                    'title' => 'Wallet topped up',
-                    'message' => "Your wallet was topped up with GHS " . number_format($amount, 2) . ". Reference: {$reference}",
-                    'data' => [
-                        'amount' => $amount,
-                        'reference' => $reference,
-                    ],
-                ]);
-
-                // Admin in-app notification
-                \App\Models\AdminNotification::create([
-                    'type' => 'vendor_wallet_topup',
-                    'title' => 'Vendor wallet topped up',
-                    'message' => "Vendor {$vendor->name} topped up wallet with GHS " . number_format($amount, 2) . ". Reference: {$reference}",
-                    'vendor_id' => $vendor->id,
-                    'data' => [
-                        'vendor_id' => $vendor->id,
-                        'amount' => $amount,
-                        'reference' => $reference,
-                    ],
-                ]);
-
-                // Send emails via existing mail system
-                try {
-                    \Illuminate\Support\Facades\Mail::to($vendor->email)->send(new \App\Mail\VendorWalletTopupMail($vendor, $amount, $reference));
-                } catch (\Throwable $e) {
-                    Log::warning('Failed to send vendor topup email', ['err' => $e->getMessage(), 'vendor_id' => $vendor->id]);
-                }
-
-                // Notify admins by email - find any admin emails from config or env
-                $adminEmail = config('mail.admin_email') ?? env('ADMIN_EMAIL');
-                if ($adminEmail) {
-                    try {
-                        \Illuminate\Support\Facades\Mail::to($adminEmail)->send(new \App\Mail\AdminVendorWalletTopupMail($vendor, $amount, $reference));
-                    } catch (\Throwable $e) {
-                        Log::warning('Failed to send admin topup email', ['err' => $e->getMessage()]);
-                    }
-                }
-            }
-        } catch (\Throwable $e) {
-            Log::warning('Failed to create notifications for wallet topup', ['err' => $e->getMessage(), 'reference' => $reference]);
         }
 
         if ($request->wantsJson() || $request->ajax()) {
@@ -375,6 +437,7 @@ class VendorWalletController extends Controller
                 'reference' => $reference,
                 'ip' => $request->ip(),
             ]);
+
             return response()->json(['success' => false, 'message' => 'Top-up not found.'], 404);
         }
 
@@ -386,6 +449,7 @@ class VendorWalletController extends Controller
                     'reference' => $reference,
                     'ip' => $request->ip(),
                 ]);
+
                 return response()->json(['success' => false, 'message' => 'Top-up not found.'], 404);
             }
         }
@@ -400,6 +464,24 @@ class VendorWalletController extends Controller
             ]);
         }
 
+        if (! $topup || ! $topup->payment_gateway) {
+            // No reliable gateway to verify against — either a legacy top-up
+            // predating the payment_gateway column, or a reference we've
+            // never recorded. Never guess the gateway and never fall back to
+            // whichever gateway is currently default: leave it pending for
+            // manual review rather than reporting a possibly-false outcome.
+            Log::warning('Wallet topup status: no reliable gateway to verify against, leaving unresolved', [
+                'reference' => $reference,
+                'topup_id' => $topup?->id,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'status' => 'pending',
+                'reference' => $reference,
+            ]);
+        }
+
         // Cache gateway verification for 10 seconds to reduce API calls during polling.
         // Multiple concurrent polls for the same reference will use cached result,
         // dramatically reducing load on payment gateway during frontend polling loops.
@@ -407,88 +489,50 @@ class VendorWalletController extends Controller
             $result = Cache::remember(
                 "topup_status:{$reference}",
                 now()->addSeconds(10),
-                fn() => $this->paymentService->checkPaymentStatus($reference)
+                fn () => $this->verifyWalletTopupReference($reference, $topup)
             );
         } catch (\Throwable $e) {
             return response()->json(['success' => false, 'message' => 'Verification failed', 'error' => $e->getMessage()], 500);
         }
 
-        // Normalize status field
-        $rawStatus = null;
-        if (is_array($result)) {
-            $rawStatus = $result['status'] ?? $result['data']['status'] ?? $result['data']['payment_status'] ?? $result['message'] ?? null;
-        }
+        // Normalize status. This used to substring-match the raw message text
+        // (falling back to $result['message'] when no explicit status field was
+        // present) for words like "fail"/"error" — which meant a plain network
+        // timeout, whose message is literally "Error verifying payment.", was
+        // reported to the polling UI as a failed top-up. PaymentVerificationState
+        // never looks at message text: only an explicit, authoritative terminal
+        // status from the gateway can produce 'failed'/'cancelled'. Anything
+        // else — including the verify call itself throwing — stays 'pending'.
+        $verificationState = PaymentVerificationState::from($result);
 
-        $normalized = 'pending';
-        $low = is_string($rawStatus) ? strtolower($rawStatus) : '';
-        if (strpos($low, 'complete') !== false || strpos($low, 'success') !== false) {
+        if ($verificationState === PaymentVerificationState::SUCCESS) {
             $normalized = 'completed';
-        } elseif (strpos($low, 'cancel') !== false) {
-            $normalized = 'cancelled';
-        } elseif (strpos($low, 'fail') !== false || strpos($low, 'error') !== false) {
-            $normalized = 'failed';
+        } elseif ($verificationState === PaymentVerificationState::FAILED) {
+            // Preserve the existing 'cancelled' vs 'failed' distinction the UI
+            // shows different copy for, without going back to matching on
+            // arbitrary message text.
+            $rawStatus = strtolower((string) data_get($result, 'data.status', ''));
+            $normalized = str_contains($rawStatus, 'cancel') ? 'cancelled' : 'failed';
+
+            // Persist the authoritative failure — idempotent: lock and never
+            // overwrite an already-completed top-up.
+            DB::transaction(function () use ($topup, $result) {
+                $locked = WalletTopup::whereKey($topup->id)->lockForUpdate()->first();
+                if ($locked && $locked->status !== 'completed') {
+                    $locked->update(['status' => 'failed', 'gateway_response' => $result]);
+                }
+            });
+        } else {
+            $normalized = 'pending';
         }
 
-        // If gateway indicates the payment is completed, attempt to reconcile
-        // and credit the vendor now (idempotent). This makes client-side
-        // polling useful: the UI can detect completed state and the DB will
-        // reflect the credited top-up so balance endpoints return the new value.
+        // If gateway indicates the payment is completed, credit the vendor now
+        // via the single authoritative completion pipeline — shared with
+        // topupCallback() and the automatic PaymentReconciliationService. This
+        // makes client-side polling useful: the UI can detect completed state
+        // and the DB reflects the credited top-up immediately.
         if ($normalized === 'completed') {
-            $data = $result['data'] ?? ($result['response'] ?? []);
-            $meta = $data['metadata'] ?? ($result['metadata'] ?? []);
-
-            // Try to find existing DB record or cached mapping
-            $topupRecord = WalletTopup::where('reference', $reference)->first();
-            if (! $topupRecord) {
-                $cached = Cache::get("wallet_topup:{$reference}");
-                if ($cached && is_array($cached) && (int) ($cached['vendor_id'] ?? 0) === (int) $vendor->id) {
-                    $topupRecord = WalletTopup::create([
-                        'reference' => $reference,
-                        'vendor_id' => $cached['vendor_id'],
-                        'amount' => $cached['amount'],
-                        'status' => 'initiated',
-                        'metadata' => ['purpose' => 'wallet_topup'],
-                    ]);
-                } elseif (is_array($meta) && ! empty($meta['vendor_id']) && (int) $meta['vendor_id'] === (int) $vendor->id) {
-                    // If gateway provided metadata, create a DB record from it
-                    $topupRecord = WalletTopup::create([
-                        'reference' => $reference,
-                        'vendor_id' => (int) $meta['vendor_id'],
-                        'amount' => (float) ($data['amount'] ?? ($result['amount'] ?? 0)),
-                        'status' => 'initiated',
-                        'metadata' => $meta,
-                    ]);
-                }
-            }
-
-            // If we have a record and it's not completed, attempt to credit
-            if ($topupRecord && $topupRecord->status !== 'completed') {
-                $vendorId = (int) $topupRecord->vendor_id;
-                $reportedAmount = (float) ($data['amount'] ?? 0);
-                $initiatedAmount = (float) $topupRecord->amount;
-
-                if ($vendorId > 0 && $initiatedAmount > 0 && round($reportedAmount, 2) >= round($initiatedAmount, 2)) {
-                    $credited = false;
-                    DB::transaction(function () use ($vendorId, $initiatedAmount, $reference, &$credited, $result) {
-                        $credited = $this->walletService->creditVendor($vendorId, $initiatedAmount, ['reference' => $reference]);
-                        if ($credited) {
-                            $tr = WalletTopup::where('reference', $reference)->first();
-                            if ($tr) {
-                                $tr->update([
-                                    'status' => 'completed',
-                                    'gateway_response' => $result,
-                                ]);
-                            }
-                            Cache::forget("wallet_topup:{$reference}");
-                            Cache::forget("vendor:{$vendorId}:topups_available");
-                        }
-                    });
-                    if ($credited) {
-                        // Recompute available topups briefly in cache
-                        Cache::forget("vendor:{$topupRecord->vendor_id}:topups_available");
-                    }
-                }
-            }
+            $this->walletService->completeTopup($topup, $result);
         }
 
         return response()->json([
@@ -497,6 +541,24 @@ class VendorWalletController extends Controller
             'raw' => $result,
             'reference' => $reference,
         ]);
+    }
+
+    /**
+     * Verify a wallet top-up reference against the gateway that actually
+     * created it. Returns null (never guesses a gateway, never falls back to
+     * the current platform default) when the record has no reliably known
+     * gateway — a legacy row from before the payment_gateway column existed,
+     * or no record found at all.
+     */
+    private function verifyWalletTopupReference(string $reference, ?WalletTopup $topupRecord): ?array
+    {
+        $gatewayName = $topupRecord?->payment_gateway;
+
+        if (! $gatewayName) {
+            return null;
+        }
+
+        return $this->paymentService->checkPaymentStatusForGateway($reference, $gatewayName);
     }
 
     private function resolveAuthenticatedVendor(): Vendor

@@ -18,6 +18,9 @@
         isSubmitting: false,
         currentVendor: @json($currentVendor ?? null),
         paymentMethod: 'gateway',
+        // Phase 4 duplicate-charge prevention: fingerprint of the checkout
+        // intent currently in flight (see components/checkout_intent.blade.php).
+        activeIntentFingerprint: null,
         
         init() {
             this.allProducts = JSON.parse(document.getElementById('products-data').textContent);
@@ -113,6 +116,15 @@
                 const form = event.target;
                 const formData = new FormData(form);
 
+                // Phase 4 duplicate-charge prevention: the SAME key is
+                // resubmitted for a double-click/duplicate-POST/refresh of
+                // this exact intent, so the server can recognise a retry
+                // instead of starting a second charge.
+                this.activeIntentFingerprint = ['order', this.selectedProduct?.vendor_id, this.selectedProduct?.id, this.selectedProduct?.reseller_product_id || '', this.recipientPhone].join(':');
+                if (window.XtraCheckoutIntent) {
+                    formData.set('idempotency_key', window.XtraCheckoutIntent.getKey(this.activeIntentFingerprint));
+                }
+
                 const response = await fetch(form.action, {
                     method: 'POST',
                     body: formData,
@@ -124,8 +136,38 @@
 
                 const data = await response.json();
 
+                // Phase 4: an existing attempt for this SAME intent is still
+                // financially ambiguous — the server deliberately did NOT
+                // start a second charge. Never say "failed" here; keep
+                // confirming the existing reference via the same inline
+                // polling UI used for in-flight inline-gateway payments.
+                if (data.success && data.status === 'confirming' && data.reference) {
+                    InlinePaymentManager.open({
+                        reference: data.reference,
+                        authorization_url: null,
+                        gateway_name: null,
+                    }, (status) => {
+                        this.isSubmitting = false;
+                        if (status === 'paid' || status === 'failed') {
+                            window.XtraCheckoutIntent?.clear(this.activeIntentFingerprint);
+                        }
+                    });
+                    return;
+                }
+
+                // Payaza Web Checkout SDK: opens Payaza's own popup, then re-verifies
+                // server-side before treating the payment as complete (see
+                // components/inline_payment_manager.blade.php for the security notes).
+                if (data.flow_type === 'payaza') {
+                    InlinePaymentManager.openPayaza({
+                        reference: data.reference,
+                        checkout_config: data.checkout_config,
+                        verify_url: data.verify_url,
+                    }, (status) => {
+                        this.isSubmitting = false;
+                    });
+                } else if (data.flow_type === 'inline') {
                 // Unified inline flow: backends return `flow_type: 'inline'` for inline gateways
-                if (data.flow_type === 'inline') {
                     // Use InlinePaymentManager (shared module) for all inline gateways
                     InlinePaymentManager.open({
                         reference: data.reference,
@@ -139,8 +181,13 @@
                     // Non-inline redirect flow
                     window.location.href = data.authorization_url;
                 } else if (data.success) {
+                    // Terminal success — free this fingerprint's cached key.
+                    window.XtraCheckoutIntent?.clear(this.activeIntentFingerprint);
                     window.location.href = data.redirect || '/checkout/success';
                 } else {
+                    // A confirmed failure (never merely "still confirming") —
+                    // safe to let the next submit mint a brand new intent key.
+                    window.XtraCheckoutIntent?.clear(this.activeIntentFingerprint);
                     alert(data.message || 'Payment failed. Please try again.');
                     this.isSubmitting = false;
                 }

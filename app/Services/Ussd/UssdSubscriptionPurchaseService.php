@@ -7,6 +7,7 @@ use App\Models\UssdPlan;
 use App\Models\UssdSubscription;
 use App\Models\UssdSubscriptionEvent;
 use App\Models\Vendor;
+use App\Services\Payments\CheckoutIntentGuard;
 use App\Services\PaymentService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -33,12 +34,43 @@ class UssdSubscriptionPurchaseService
     public function __construct(
         private readonly PaymentService $paymentService,
         private readonly UssdSubscriptionService $subscriptions,
+        private readonly CheckoutIntentGuard $intentGuard,
     ) {}
+
+    private function isSuccess(UssdSubscription $s): bool
+    {
+        return $s->status === UssdSubscription::STATUS_ACTIVE;
+    }
+
+    /**
+     * Phase 5: failPayment() now sets status = STATUS_PAYMENT_FAILED
+     * directly (see its docblock — previously it only recorded an event,
+     * leaving `status` at pending_payment forever). The event check remains
+     * as a fallback for rows that failed before this change shipped and
+     * were never re-verified since — those never got backfilled (no
+     * migration was needed/added for a purely additive status value), so
+     * they still only carry the event.
+     */
+    private function isTerminallyFailed(UssdSubscription $s): bool
+    {
+        if ($s->status === UssdSubscription::STATUS_PAYMENT_FAILED) {
+            return true;
+        }
+
+        return UssdSubscriptionEvent::where('ussd_subscription_id', $s->id)
+            ->where('event', UssdSubscriptionEvent::PAYMENT_FAILED)
+            ->exists();
+    }
+
+    private function hasGateway(UssdSubscription $s): bool
+    {
+        return (bool) $s->payment_gateway && (bool) $s->payment_reference;
+    }
 
     /**
      * Create a pending subscription and hand the vendor off to the gateway.
      *
-     * @return array{success: bool, message?: string, reference?: string, authorization_url?: ?string, flow_type?: string, gateway_name?: ?string, subscription?: UssdSubscription}
+     * @return array{success: bool, message?: string, status?: string, reference?: string, authorization_url?: ?string, flow_type?: string, gateway_name?: ?string, checkout_config?: ?array, subscription?: UssdSubscription}
      */
     public function initiate(Vendor $vendor, UssdPlan $plan, array $options = []): array
     {
@@ -46,20 +78,120 @@ class UssdSubscriptionPurchaseService
             return ['success' => false, 'message' => 'This plan is not available for purchase.'];
         }
 
+        $idempotencyKey = isset($options['idempotency_key']) && is_string($options['idempotency_key']) && $options['idempotency_key'] !== ''
+            ? $options['idempotency_key']
+            : null;
+        $intentScope = CheckoutIntentGuard::scopeForVendor((int) $vendor->id);
+
+        // Phase 4: never initialize a second charge while an earlier attempt
+        // for the SAME checkout intent is still financially ambiguous — see
+        // CheckoutIntentGuard for the full design.
+        $intentDecision = $this->intentGuard->evaluate(
+            UssdSubscription::class,
+            $intentScope,
+            $idempotencyKey,
+            fn (UssdSubscription $s) => $this->isSuccess($s),
+            fn (UssdSubscription $s) => $this->isTerminallyFailed($s),
+            fn (UssdSubscription $s) => $this->hasGateway($s),
+        );
+
+        if ($intentDecision['action'] === CheckoutIntentGuard::ALREADY_SUCCEEDED) {
+            $existing = $intentDecision['payable'];
+
+            return [
+                'success' => true,
+                'status' => 'paid',
+                'message' => 'Subscription already active.',
+                'reference' => $existing->payment_reference,
+                'authorization_url' => null,
+                'flow_type' => 'already_active',
+                'gateway_name' => $existing->payment_gateway,
+                'subscription' => $existing,
+            ];
+        }
+
+        if ($intentDecision['action'] === CheckoutIntentGuard::STILL_PENDING) {
+            $existing = $intentDecision['payable'];
+
+            return [
+                'success' => true,
+                'status' => 'confirming',
+                'message' => "We're still confirming your previous payment. Please don't pay again yet.",
+                'reference' => $existing->payment_reference,
+                'authorization_url' => null,
+                'flow_type' => 'confirming',
+                'gateway_name' => $existing->payment_gateway,
+                'subscription' => $existing,
+            ];
+        }
+
+        if ($intentDecision['action'] === CheckoutIntentGuard::RETRY_AFTER_FAILURE && $idempotencyKey) {
+            $idempotencyKey = $this->intentGuard->freshKeyAfterFailure($idempotencyKey);
+        }
+
         $reference = (string) Str::uuid();
 
         // Snapshot price and allowance now. Editing the plan later must never
         // change what this vendor paid for or how many sessions they received.
-        $subscription = UssdSubscription::create([
-            'vendor_id' => $vendor->id,
-            'ussd_plan_id' => $plan->id,
-            'status' => UssdSubscription::STATUS_PENDING_PAYMENT,
-            'extension_code' => $plan->extension_code,
-            'price_paid' => $plan->price,
-            'total_sessions' => $plan->included_sessions,
-            'payment_reference' => $reference,
-            'metadata' => ['purpose' => self::PURPOSE],
-        ]);
+        // Race-safe: two concurrent purchase submissions for the same intent
+        // can create at most one row here — see CheckoutIntentGuard::createOrReuse().
+        $creationResult = $this->intentGuard->createOrReuse(
+            UssdSubscription::class,
+            $intentScope,
+            $idempotencyKey,
+            fn (?string $key) => UssdSubscription::create([
+                'vendor_id' => $vendor->id,
+                'ussd_plan_id' => $plan->id,
+                'status' => UssdSubscription::STATUS_PENDING_PAYMENT,
+                'extension_code' => $plan->extension_code,
+                'price_paid' => $plan->price,
+                'total_sessions' => $plan->included_sessions,
+                'payment_reference' => $reference,
+                'metadata' => ['purpose' => self::PURPOSE],
+                'idempotency_scope' => $key ? $intentScope : null,
+                'idempotency_key' => $key,
+            ]),
+            fn (UssdSubscription $s) => $this->isSuccess($s),
+            fn (UssdSubscription $s) => $this->isTerminallyFailed($s),
+            fn (UssdSubscription $s) => $this->hasGateway($s),
+        );
+
+        if ($creationResult['action'] === CheckoutIntentGuard::ALREADY_SUCCEEDED) {
+            $existing = $creationResult['payable'];
+
+            return [
+                'success' => true,
+                'status' => 'paid',
+                'message' => 'Subscription already active.',
+                'reference' => $existing->payment_reference,
+                'authorization_url' => null,
+                'flow_type' => 'already_active',
+                'gateway_name' => $existing->payment_gateway,
+                'subscription' => $existing,
+            ];
+        }
+
+        if ($creationResult['action'] === CheckoutIntentGuard::STILL_PENDING) {
+            $existing = $creationResult['payable'];
+
+            return [
+                'success' => true,
+                'status' => 'confirming',
+                'message' => "We're still confirming your previous payment. Please don't pay again yet.",
+                'reference' => $existing->payment_reference,
+                'authorization_url' => null,
+                'flow_type' => 'confirming',
+                'gateway_name' => $existing->payment_gateway,
+                'subscription' => $existing,
+            ];
+        }
+
+        if ($creationResult['action'] === CheckoutIntentGuard::RETRY_AFTER_FAILURE) {
+            return ['success' => false, 'message' => 'Please try again.'];
+        }
+
+        // PROCEED: a fresh subscription for this intent was just created.
+        $subscription = $creationResult['payable'];
 
         // Some gateways do not echo custom metadata back on the callback.
         $this->cacheReference($reference, $vendor->id, $subscription->id, (float) $plan->price);
@@ -115,6 +247,9 @@ class UssdSubscriptionPurchaseService
             'authorization_url' => $authorizationUrl,
             'flow_type' => $result['flow_type'] ?? ($authorizationUrl ? 'redirect' : 'inline'),
             'gateway_name' => $result['gateway_name'] ?? null,
+            // Only present for gateways that launch a client-side SDK popup
+            // (currently Payaza) — see PayazaPaymentService::initiatePayment().
+            'checkout_config' => $result['checkout_config'] ?? null,
             'subscription' => $subscription->fresh(),
         ];
     }
@@ -146,7 +281,9 @@ class UssdSubscriptionPurchaseService
             return ['success' => false, 'message' => 'This subscription can no longer be activated.'];
         }
 
-        $verification = $this->paymentService->checkPaymentStatus($reference);
+        // Verify against the gateway that actually created this subscription's
+        // payment — never whichever gateway is currently the admin default.
+        $verification = $this->paymentService->checkPaymentStatusForGateway($reference, $subscription->payment_gateway);
 
         if (! ($verification['success'] ?? false) || ! $this->isSettled($verification)) {
             // Only an explicit terminal status from the gateway counts as a
@@ -216,10 +353,20 @@ class UssdSubscriptionPurchaseService
     /**
      * Read-only status probe for client-side polling of an inline (MoMo) purchase.
      *
-     * Unlike verifyAndActivate(), this never records a PAYMENT_FAILED event while
-     * the payment is merely still pending — a "not settled yet" gateway response
-     * during polling is normal, not a failure. It only activates (idempotently,
-     * via verifyAndActivate) once the gateway confirms settlement.
+     * A "not settled yet" gateway response during polling is normal, not a
+     * failure — never surfaced as one. Phase 5: this used to only ever
+     * report 'paid' or 'pending', because it only delegated to
+     * verifyAndActivate() (the one place that can detect and record a
+     * confirmed terminal failure) when the gateway looked settled — so a
+     * genuine provider-confirmed failure (or an amount mismatch) discovered
+     * mid-poll was silently reported as 'pending' forever, unlike every
+     * other payable type's status-polling endpoint, which does surface
+     * 'failed'. Now always delegates to verifyAndActivate(), which already
+     * implements the correct contract on its own (activate on confirmed
+     * success, fail only on confirmed terminal failure — idempotently, see
+     * failPayment()'s own guard — and no-op on anything still ambiguous) —
+     * this also drops what used to be a second, redundant gateway verify
+     * call on the settled path.
      *
      * @return array{status: string, subscription: ?UssdSubscription}
      */
@@ -235,18 +382,26 @@ class UssdSubscriptionPurchaseService
             return ['status' => 'paid', 'subscription' => $subscription];
         }
 
-        $verification = $this->paymentService->checkPaymentStatus($reference);
-
-        if (($verification['success'] ?? false) && $this->isSettled($verification)) {
-            $result = $this->verifyAndActivate($reference);
-
-            return [
-                'status' => ($result['success'] ?? false) ? 'paid' : 'pending',
-                'subscription' => $subscription->fresh(),
-            ];
+        if ($this->isTerminallyFailed($subscription)) {
+            return ['status' => 'failed', 'subscription' => $subscription];
         }
 
-        return ['status' => 'pending', 'subscription' => $subscription];
+        if (! in_array($subscription->status, [UssdSubscription::STATUS_PENDING_PAYMENT, UssdSubscription::STATUS_PAID], true)) {
+            // Some other terminal state (e.g. cancelled) — nothing to poll for.
+            return ['status' => 'pending', 'subscription' => $subscription];
+        }
+
+        $this->verifyAndActivate($reference);
+        $subscription->refresh();
+
+        return [
+            'status' => match (true) {
+                $subscription->status === UssdSubscription::STATUS_ACTIVE => 'paid',
+                $this->isTerminallyFailed($subscription) => 'failed',
+                default => 'pending',
+            },
+            'subscription' => $subscription,
+        ];
     }
 
     private function resolveSubscription(string $reference): ?UssdSubscription
@@ -303,6 +458,13 @@ class UssdSubscriptionPurchaseService
         if ($alreadyFailed) {
             return;
         }
+
+        // Phase 5: normalize the terminal outcome onto `status` itself,
+        // matching every other payable type's contract. Never mutates a
+        // subscription that is already ACTIVE/PAID (failPayment() is only
+        // ever reached from verifyAndActivate()'s PENDING_PAYMENT/PAID
+        // branch above, before activation occurs).
+        $subscription->forceFill(['status' => UssdSubscription::STATUS_PAYMENT_FAILED])->save();
 
         $this->recordEvent($subscription, $subscription->vendor_id, $subscription->ussd_plan_id,
             UssdSubscriptionEvent::PAYMENT_FAILED, $eventDescription, $context);
