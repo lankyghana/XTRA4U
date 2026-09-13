@@ -5,10 +5,10 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\PaymentGatewayConfig;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class PaymentGatewayController extends Controller
@@ -50,7 +50,7 @@ class PaymentGatewayController extends Controller
     public function store(Request $request)
     {
         $availableGateways = PaymentGatewayConfig::getAvailableGateways();
-        
+
         $request->validate([
             'gateway_name' => ['required', Rule::in(array_keys($availableGateways))],
             'gateway_type' => ['required', Rule::in(array_keys(PaymentGatewayConfig::getTypes()))],
@@ -61,7 +61,7 @@ class PaymentGatewayController extends Controller
 
         // Validate gateway supports the selected type
         $gatewayInfo = $availableGateways[$request->gateway_name];
-        if (!in_array($request->gateway_type, $gatewayInfo['types'])) {
+        if (! in_array($request->gateway_type, $gatewayInfo['types'])) {
             return back()->withErrors(['gateway_type' => 'Selected gateway does not support this type.']);
         }
 
@@ -86,6 +86,8 @@ class PaymentGatewayController extends Controller
         ) {
             return back()->withErrors(['is_default' => 'This gateway cannot be set as the default payment collection gateway because it does not support generic (AFA) payments.']);
         }
+
+        $this->validatePayazaPayoutPin($request, $request->gateway_name, $request->gateway_type);
 
         // Build config data from form inputs
         $configData = [];
@@ -134,6 +136,7 @@ class PaymentGatewayController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Failed to create payment gateway config', ['error' => $e->getMessage()]);
+
             return back()->withErrors(['error' => 'Failed to create gateway configuration.']);
         }
     }
@@ -155,12 +158,14 @@ class PaymentGatewayController extends Controller
     public function update(Request $request, PaymentGatewayConfig $gateway)
     {
         $availableGateways = PaymentGatewayConfig::getAvailableGateways();
-        
+
         $request->validate([
             'environment' => ['required', Rule::in([PaymentGatewayConfig::ENV_SANDBOX, PaymentGatewayConfig::ENV_LIVE])],
             'is_active' => 'boolean',
             'is_default' => 'boolean',
         ]);
+
+        $this->validatePayazaPayoutPin($request, $gateway->gateway_name, $gateway->gateway_type);
 
         // Build config data from form inputs
         $gatewayInfo = $availableGateways[$gateway->gateway_name];
@@ -172,15 +177,14 @@ class PaymentGatewayController extends Controller
         if (is_array($fieldsForType)) {
             foreach (array_keys($fieldsForType) as $field) {
                 $value = $request->input("config.{$field}");
-                // For secret/key-like fields, treat empty string as "no change".
+                // For secret/key/PIN-like fields, treat empty string as "no
+                // change" — otherwise leaving a sensitive field blank on an
+                // edit would overwrite the existing encrypted value with ''.
                 if (
                     $value !== null
-                    && !(
+                    && ! (
                         $value === ''
-                        && (
-                            str_contains($field, 'secret')
-                            || str_contains($field, 'key')
-                        )
+                        && $this->isSensitiveConfigField($field)
                     )
                 ) {
                     $configData[$field] = $value;
@@ -198,16 +202,19 @@ class PaymentGatewayController extends Controller
                 && (empty($capabilities['supports_collection']) || empty($capabilities['supports_generic']))
             ) {
                 DB::rollBack();
+
                 return back()->withErrors(['is_default' => 'This gateway cannot be set as the default payment collection gateway because it does not support generic (AFA) payments.']);
             }
 
             // Safety: do not allow enabling a gateway for a flow it doesn't support.
             if ($gateway->gateway_type === PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION && $request->boolean('is_active') && empty($capabilities['supports_collection'])) {
                 DB::rollBack();
+
                 return back()->withErrors(['is_active' => 'This gateway is not wired for checkout collections in this system.']);
             }
             if ($gateway->gateway_type === PaymentGatewayConfig::TYPE_SMS && $request->boolean('is_active') && empty($capabilities['supports_sms'])) {
                 DB::rollBack();
+
                 return back()->withErrors(['is_active' => 'This gateway is not wired for SMS in this system.']);
             }
 
@@ -238,6 +245,7 @@ class PaymentGatewayController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Failed to update payment gateway config', ['error' => $e->getMessage()]);
+
             return back()->withErrors(['error' => 'Failed to update gateway configuration.']);
         }
     }
@@ -266,6 +274,7 @@ class PaymentGatewayController extends Controller
                 ->with('success', 'Payment gateway configuration deleted successfully.');
         } catch (\Exception $e) {
             Log::error('Failed to delete payment gateway config', ['error' => $e->getMessage()]);
+
             return back()->withErrors(['error' => 'Failed to delete gateway configuration.']);
         }
     }
@@ -278,16 +287,16 @@ class PaymentGatewayController extends Controller
         try {
             if (
                 $gateway->gateway_type === PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION
-                && (!$gateway->supports_collection || !$gateway->supports_generic)
+                && (! $gateway->supports_collection || ! $gateway->supports_generic)
             ) {
                 return back()->withErrors(['error' => 'This gateway cannot be set as the default payment collection gateway because it does not support generic (AFA) payments.']);
             }
 
-            if ($gateway->gateway_type === PaymentGatewayConfig::TYPE_PAYOUT && !$gateway->supports_payout) {
+            if ($gateway->gateway_type === PaymentGatewayConfig::TYPE_PAYOUT && ! $gateway->supports_payout) {
                 return back()->withErrors(['error' => 'This gateway cannot be set as the default payout gateway because it does not support payouts.']);
             }
 
-            if ($gateway->gateway_type === PaymentGatewayConfig::TYPE_SMS && !$gateway->supports_sms) {
+            if ($gateway->gateway_type === PaymentGatewayConfig::TYPE_SMS && ! $gateway->supports_sms) {
                 return back()->withErrors(['error' => 'This gateway cannot be set as the default SMS gateway because it is not wired for SMS.']);
             }
 
@@ -297,6 +306,7 @@ class PaymentGatewayController extends Controller
                 ->with('success', 'Gateway set as default successfully.');
         } catch (\Exception $e) {
             Log::error('Failed to set default payment gateway', ['error' => $e->getMessage()]);
+
             return back()->withErrors(['error' => 'Failed to set gateway as default.']);
         }
     }
@@ -308,14 +318,14 @@ class PaymentGatewayController extends Controller
     {
         try {
             // Prevent activating unsupported flows.
-            if (!$gateway->is_active) {
-                if ($gateway->gateway_type === PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION && !$gateway->supports_collection) {
+            if (! $gateway->is_active) {
+                if ($gateway->gateway_type === PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION && ! $gateway->supports_collection) {
                     return back()->withErrors(['error' => 'This gateway is not wired for checkout collections in this system.']);
                 }
-                if ($gateway->gateway_type === PaymentGatewayConfig::TYPE_PAYOUT && !$gateway->supports_payout) {
+                if ($gateway->gateway_type === PaymentGatewayConfig::TYPE_PAYOUT && ! $gateway->supports_payout) {
                     return back()->withErrors(['error' => 'This gateway does not support payouts.']);
                 }
-                if ($gateway->gateway_type === PaymentGatewayConfig::TYPE_SMS && !$gateway->supports_sms) {
+                if ($gateway->gateway_type === PaymentGatewayConfig::TYPE_SMS && ! $gateway->supports_sms) {
                     return back()->withErrors(['error' => 'This gateway is not wired for SMS in this system.']);
                 }
             }
@@ -332,13 +342,15 @@ class PaymentGatewayController extends Controller
                 }
             }
 
-            $gateway->update(['is_active' => !$gateway->is_active]);
+            $gateway->update(['is_active' => ! $gateway->is_active]);
 
             $status = $gateway->is_active ? 'activated' : 'deactivated';
+
             return redirect()->route('admin.payment-gateways.index')
                 ->with('success', "Gateway {$status} successfully.");
         } catch (\Exception $e) {
             Log::error('Failed to toggle payment gateway status', ['error' => $e->getMessage()]);
+
             return back()->withErrors(['error' => 'Failed to toggle gateway status.']);
         }
     }
@@ -350,7 +362,7 @@ class PaymentGatewayController extends Controller
     {
         try {
             $isConfigured = $gateway->isConfigured();
-            
+
             if ($isConfigured) {
                 // You can add more specific tests here for each gateway type
                 return response()->json([
@@ -365,6 +377,7 @@ class PaymentGatewayController extends Controller
             }
         } catch (\Exception $e) {
             Log::error('Failed to test payment gateway config', ['error' => $e->getMessage()]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Error testing gateway configuration.',
@@ -374,15 +387,22 @@ class PaymentGatewayController extends Controller
 
     /**
      * Update .env file with gateway configuration
+     *
+     * SECURITY: this writes plaintext credentials into .env for the gateways
+     * explicitly listed in the switch below. Payaza is deliberately NOT one
+     * of them — its transaction_pin (and its collection secret_key) must stay
+     * encrypted-at-rest only, per the security requirements around the
+     * payout PIN. Do not add a `case 'payaza':` here.
      */
     private function updateEnvFile(PaymentGatewayConfig $gateway)
     {
-        if (!$gateway->is_active || !$gateway->is_default) {
+        if (! $gateway->is_active || ! $gateway->is_default) {
             return; // Only update .env for active default gateways
         }
 
         $envPath = base_path('.env');
         $envContent = File::get($envPath);
+        $originalEnvContent = $envContent;
         $configData = $gateway->config_data;
 
         try {
@@ -431,7 +451,6 @@ class PaymentGatewayController extends Controller
                     }
                     break;
 
-
                 case 'flutterwave':
                     if (isset($configData['public_key'])) {
                         $envContent = $this->setEnvValue($envContent, 'FLUTTERWAVE_PUBLIC_KEY', $configData['public_key']);
@@ -478,8 +497,19 @@ class PaymentGatewayController extends Controller
                     break;
             }
 
-            File::put($envPath, $envContent);
-            Artisan::call('config:clear');
+            // Skip the write entirely when nothing actually changed (e.g. Payaza,
+            // which has no case above and so never touches $envContent). Writing
+            // .env unconditionally — even byte-for-byte identical content — still
+            // bumps its mtime, and `php artisan serve` polls that mtime to decide
+            // when to restart its server subprocess. That restart kills whatever
+            // request is in flight, which is this very save — the admin's browser
+            // sees the connection reset before the response (and the DB commit
+            // just above) ever completes. See ServeCommand::handle()'s env-change
+            // watcher for the mechanism this is avoiding.
+            if ($envContent !== $originalEnvContent) {
+                File::put($envPath, $envContent);
+                Artisan::call('config:clear');
+            }
         } catch (\Exception $e) {
             Log::error('Failed to update .env file', ['error' => $e->getMessage()]);
         }
@@ -493,6 +523,7 @@ class PaymentGatewayController extends Controller
         if (preg_match("/^{$key}=([^\n]*)/m", $content, $matches)) {
             return $matches[1];
         }
+
         return '';
     }
 
@@ -506,7 +537,48 @@ class PaymentGatewayController extends Controller
         if (preg_match($pattern, $content)) {
             return preg_replace($pattern, $replacement, $content);
         } else {
-            return $content . "\n{$replacement}";
+            return $content."\n{$replacement}";
+        }
+    }
+
+    /**
+     * Fields whose value must never be overwritten by a blank form submission
+     * — leaving one of these empty on an edit means "keep the existing
+     * encrypted value", not "clear it". Extended beyond secret/key fields to
+     * cover the Payaza payout transaction PIN.
+     */
+    private function isSensitiveConfigField(string $field): bool
+    {
+        return str_contains($field, 'secret')
+            || str_contains($field, 'key')
+            || str_contains($field, 'pin');
+    }
+
+    /**
+     * Validate the Payaza payout transaction PIN, if one was submitted.
+     * A no-op for every other gateway/type combination. Never included in
+     * the resulting validation-error message beyond a generic description —
+     * the submitted PIN value itself is never echoed back.
+     */
+    private function validatePayazaPayoutPin(Request $request, ?string $gatewayName, ?string $gatewayType): void
+    {
+        if ($gatewayName !== PaymentGatewayConfig::GATEWAY_PAYAZA || $gatewayType !== PaymentGatewayConfig::TYPE_PAYOUT) {
+            return;
+        }
+
+        $request->validate([
+            'config.transaction_pin' => ['nullable', 'digits:6'],
+        ]);
+
+        $pin = (string) $request->input('config.transaction_pin', '');
+
+        // Blank means "leave the existing PIN unchanged" (see isSensitiveConfigField())
+        // — only validate the stricter pattern rule when a new value was actually typed.
+        // The rule itself lives once, on the model (also re-checked by isConfigured()).
+        if ($pin !== '' && ! PaymentGatewayConfig::isValidPayazaTransactionPin($pin)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'config.transaction_pin' => 'The transaction PIN must be 6 digits with no repeated or sequential pattern.',
+            ]);
         }
     }
 }

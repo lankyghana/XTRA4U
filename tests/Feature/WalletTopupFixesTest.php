@@ -3,8 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\Vendor;
-use App\Models\WalletTopup;
 use App\Models\WalletLedger;
+use App\Models\WalletTopup;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
@@ -58,7 +58,7 @@ class WalletTopupFixesTest extends TestCase
         $vendor = Vendor::factory()->create();
         $this->actingAs($vendor, 'vendor');
 
-        $reference = 'TEST-REF-' . uniqid();
+        $reference = 'TEST-REF-'.uniqid();
         $callCount = 0;
 
         // Create a topup record
@@ -67,15 +67,17 @@ class WalletTopupFixesTest extends TestCase
             'amount' => 50.00,
             'status' => 'initiated',
             'reference' => $reference,
+            'payment_gateway' => 'paystack',
             'metadata' => ['purpose' => 'wallet_topup'],
         ]);
 
         // Mock PaymentService to track calls
         $this->mock(\App\Services\PaymentService::class, function ($mock) use ($reference, &$callCount) {
-            $mock->shouldReceive('checkPaymentStatus')
-                ->with($reference)
+            $mock->shouldReceive('checkPaymentStatusForGateway')
+                ->with($reference, 'paystack')
                 ->andReturnUsing(function () use (&$callCount) {
                     $callCount++;
+
                     return [
                         'success' => true,
                         'data' => [
@@ -122,7 +124,7 @@ class WalletTopupFixesTest extends TestCase
             'vendor_id' => $vendor->id,
             'amount' => 100.00,
             'status' => 'completed',
-            'reference' => 'TEST-LOCK-' . uniqid(),
+            'reference' => 'TEST-LOCK-'.uniqid(),
             'metadata' => ['purpose' => 'wallet_topup'],
             'consumed' => 0,
         ]);
@@ -162,7 +164,7 @@ class WalletTopupFixesTest extends TestCase
      */
     public function test_wallet_topup_callback_is_rate_limited()
     {
-        $reference = 'TEST-CB-' . uniqid();
+        $reference = 'TEST-CB-'.uniqid();
 
         // Make 10 requests - all should succeed
         for ($i = 0; $i < 10; $i++) {
@@ -186,7 +188,7 @@ class WalletTopupFixesTest extends TestCase
     public function test_complete_topup_flow_with_all_fixes_confirms_deposits_reflect()
     {
         $vendor = Vendor::factory()->create(['wallet_balance' => 0.00]);
-        $reference = 'E2E-TEST-' . uniqid();
+        $reference = 'E2E-TEST-'.uniqid();
 
         // Step 1: Create a top-up record (simulating initiated top-up)
         WalletTopup::create([
@@ -194,16 +196,18 @@ class WalletTopupFixesTest extends TestCase
             'amount' => 75.50,
             'status' => 'initiated',
             'reference' => $reference,
+            'payment_gateway' => 'paystack',
             'metadata' => ['purpose' => 'wallet_topup'],
         ]);
 
         // Step 2: Mock gateway verification
         $this->mock(\App\Services\PaymentService::class, function ($mock) use ($reference, $vendor) {
-            $mock->shouldReceive('checkPaymentStatus')
-                ->with($reference)
+            $mock->shouldReceive('checkPaymentStatusForGateway')
+                ->with($reference, 'paystack')
                 ->andReturn([
                     'success' => true,
                     'data' => [
+                        'status' => 'success',
                         'amount' => 75.50,
                         'metadata' => [
                             'vendor_id' => $vendor->id,

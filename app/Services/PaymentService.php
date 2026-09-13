@@ -84,6 +84,10 @@ class PaymentService
                 'authorization_url' => $result['authorization_url'] ?? null,
                 'gateway_name' => $result['gateway_name'] ?? null,
                 'order_id' => $order->id,
+                // Only ever populated by gateways that launch a client-side SDK
+                // popup (currently Payaza) — see PayazaPaymentService::requestPayment().
+                'flow_type' => $result['flow_type'] ?? null,
+                'checkout_config' => $result['checkout_config'] ?? null,
             ];
         }
 
@@ -742,103 +746,64 @@ class PaymentService
     }
 
     /**
-     * Handle payment webhook callback
-     */
-    public function handleWebhook(string $reference): array
-    {
-        $result = $this->gatewayManager->verifyCollection($reference);
-
-        if (! $result['success']) {
-            return $result;
-        }
-
-        $order = Order::where('payment_reference', $reference)->first();
-        if (! $order) {
-            Log::error('Webhook: Order not found', ['reference' => $reference]);
-
-            return [
-                'success' => false,
-                'message' => 'Order not found',
-            ];
-        }
-
-        // Prevent duplicate processing
-        if (in_array($order->payment_status, ['paid', 'completed'], true)) {
-            $gatewayTransactionId = $this->extractGatewayTransactionId($result);
-            if (is_string($gatewayTransactionId) && $gatewayTransactionId !== '') {
-                Transaction::where('order_id', $order->id)
-                    ->whereNull('gateway_transaction_id')
-                    ->update(['gateway_transaction_id' => $gatewayTransactionId]);
-            }
-
-            Log::info('Webhook: Order already completed', ['order_id' => $order->id]);
-
-            return [
-                'success' => true,
-                'message' => 'Order already processed',
-                'order_id' => $order->id,
-            ];
-        }
-
-        // Backfill gateway transaction/tax id on verification if it wasn't available at initiation.
-        $gatewayTransactionId = $this->extractGatewayTransactionId($result);
-        if (is_string($gatewayTransactionId) && $gatewayTransactionId !== '') {
-            Transaction::where('order_id', $order->id)
-                ->whereNull('gateway_transaction_id')
-                ->update(['gateway_transaction_id' => $gatewayTransactionId]);
-        }
-
-        $paymentStatus = strtolower($result['data']['status'] ?? '');
-        if ($paymentStatus === 'success') {
-            $this->completeOrder($order);
-            Log::info('Webhook: Payment completed', [
-                'order_id' => $order->id,
-                'reference' => $reference,
-            ]);
-
-            return [
-                'success' => true,
-                'message' => 'Payment processed successfully',
-                'order_id' => $order->id,
-            ];
-        } elseif ($paymentStatus === 'pending' || $paymentStatus === 'unknown') {
-            Log::info('Webhook: Payment pending', [
-                'order_id' => $order->id,
-                'reference' => $reference,
-                'status' => $paymentStatus,
-            ]);
-
-            return [
-                'success' => true,
-                'message' => 'Payment pending',
-                'order_id' => $order->id,
-            ];
-        } else {
-            $order->update([
-                'payment_status' => 'failed',
-                'status' => 'Failed',
-            ]);
-            $this->markOrderTransactionsFailed($order);
-            Log::info('Webhook: Payment failed', [
-                'order_id' => $order->id,
-                'reference' => $reference,
-                'status' => $paymentStatus,
-            ]);
-
-            return [
-                'success' => true,
-                'message' => 'Payment failure recorded',
-                'order_id' => $order->id,
-            ];
-        }
-    }
-
-    /**
      * Check payment status
      */
     public function checkPaymentStatus(string $reference): array
     {
         return $this->gatewayManager->verifyCollection($reference);
+    }
+
+    /**
+     * Verify a payment against the SPECIFIC gateway that created it. Use this
+     * instead of checkPaymentStatus() whenever the caller already has (or can
+     * look up) the payable's own `payment_gateway` value — i.e. for any
+     * already-initialized Order/AfaRegistration/ResultCheckerOrder/
+     * UssdSubscription. checkPaymentStatus() remains available for surfaces
+     * that do not persist their originating gateway (currently: wallet
+     * top-ups — see WalletTopup schema gap noted in the reconciliation audit).
+     */
+    public function checkPaymentStatusForGateway(string $reference, ?string $gatewayName): array
+    {
+        return $this->gatewayManager->verifyCollectionWithGateway($gatewayName, $reference);
+    }
+
+    /**
+     * Look up which gateway a given payment reference was actually created
+     * under, by checking every payable table that stores one. Used by
+     * endpoints (like PaymentStatusController) that only receive a bare
+     * reference and don't already have the owning record loaded.
+     *
+     * Deliberately does NOT infer the gateway from the reference's format —
+     * only ever reads the persisted `payment_gateway` column. Returns null
+     * when no matching payable is found (caller should treat verification as
+     * unresolved, not fall back to guessing a gateway).
+     */
+    public function resolvePayableGateway(string $reference): ?string
+    {
+        $order = Order::where('payment_reference', $reference)->first(['payment_gateway']);
+        if ($order) {
+            return $order->payment_gateway;
+        }
+
+        $afa = \App\Models\AfaRegistration::query()
+            ->where('payment_reference', $reference)
+            ->orWhere('reference', $reference)
+            ->first(['payment_gateway']);
+        if ($afa) {
+            return $afa->payment_gateway;
+        }
+
+        $resultChecker = \App\Models\ResultCheckerOrder::where('payment_reference', $reference)->first(['payment_gateway']);
+        if ($resultChecker) {
+            return $resultChecker->payment_gateway;
+        }
+
+        $ussd = \App\Models\UssdSubscription::where('payment_reference', $reference)->first(['payment_gateway']);
+        if ($ussd) {
+            return $ussd->payment_gateway;
+        }
+
+        return null;
     }
 
     /**
@@ -1022,13 +987,6 @@ class PaymentService
         ], $attributes));
     }
 
-    private function markOrderTransactionsFailed(Order $order): void
-    {
-        Transaction::where('order_id', $order->id)
-            ->whereNotIn('payment_status', ['completed', 'successful'])
-            ->update(['payment_status' => 'failed']);
-    }
-
     /**
      * Get available payment gateways
      */
@@ -1088,6 +1046,7 @@ class PaymentService
             $payload['transactionid'] ?? null,
             data_get($payload, 'data.transaction_id'),
             data_get($payload, 'data.transactionid'),
+            data_get($payload, 'data.payaza_reference'),
             data_get($payload, 'data.id'),
             data_get($payload, 'data.data.transaction_id'),
             data_get($payload, 'data.data.transactionid'),

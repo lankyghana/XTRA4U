@@ -11,7 +11,11 @@
     
     <!-- Styles & Scripts -->
     @vite(['resources/css/app.css', 'resources/js/app.js'])
-    
+
+    {{-- Phase 4 duplicate-charge prevention: shared idempotency-key cache
+         (window.XtraCheckoutIntent) used by USSD/wallet purchase forms. --}}
+    @include('components.checkout_intent')
+
     @stack('styles')
 </head>
 <body class="font-sans antialiased bg-gray-50" x-data="{ sidebarOpen: false }">

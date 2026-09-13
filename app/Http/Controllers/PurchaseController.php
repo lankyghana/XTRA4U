@@ -10,6 +10,7 @@ use App\Models\ResellerProduct;
 use App\Models\Transaction;
 use App\Models\Vendor;
 use App\Models\VendorNotification;
+use App\Services\Payments\CheckoutIntentGuard;
 use App\Services\PaymentService;
 use App\Services\WalletService;
 use Illuminate\Http\Request;
@@ -23,11 +24,34 @@ class PurchaseController extends Controller
 {
     protected PaymentService $paymentService;
 
-    public function __construct(?PaymentService $paymentService = null)
+    protected CheckoutIntentGuard $intentGuard;
+
+    public function __construct(?PaymentService $paymentService = null, ?CheckoutIntentGuard $intentGuard = null)
     {
         // Allow PaymentService to be injected (helpful for tests). If not provided,
         // fall back to the default implementation with GatewayManager.
         $this->paymentService = $paymentService ?? new PaymentService;
+        $this->intentGuard = $intentGuard ?? app(CheckoutIntentGuard::class);
+    }
+
+    /**
+     * Same Order-surface classifiers CheckoutController uses — this
+     * controller creates rows in the same `orders` table via the same
+     * lifecycle, so "done"/"failed"/"has a gateway to check" must agree.
+     */
+    private function orderIsSuccess(Order $order): bool
+    {
+        return in_array($order->payment_status, ['paid', 'completed'], true);
+    }
+
+    private function orderIsTerminalFailure(Order $order): bool
+    {
+        return $order->payment_status === 'failed';
+    }
+
+    private function orderHasGateway(Order $order): bool
+    {
+        return (bool) $order->payment_gateway && (bool) $order->payment_reference;
     }
 
     public function store(Request $request)
@@ -42,7 +66,61 @@ class PurchaseController extends Controller
             'vendor_service_id' => 'required|exists:products,id',
             'is_reseller_product' => 'nullable|boolean',
             'reseller_product_id' => 'nullable|exists:reseller_products,id',
+            // Phase 4: identifies one payment ATTEMPT for one checkout intent.
+            // Optional for backward compatibility — see CheckoutIntentGuard.
+            'idempotency_key' => 'nullable|string|max:100',
         ]);
+
+        $idempotencyKey = $validated['idempotency_key'] ?? null;
+        // VendorQuickBuyController reuses this action by building a bare
+        // internal Request (Request::create() + Container::call()) that
+        // never passes through the session middleware — $request->session()
+        // throws on it. Fall back to a vendor-scoped intent (quick-buy is
+        // always vendor-authenticated) rather than crashing; the auth guard
+        // is resolved from the container's session store, not this specific
+        // Request instance, so it still works correctly here.
+        $intentScope = $request->hasSession()
+            ? CheckoutIntentGuard::scopeForSession($request->session()->getId())
+            : CheckoutIntentGuard::scopeForVendor((int) (auth('vendor')->id() ?? 0));
+
+        $intentDecision = $this->intentGuard->evaluate(
+            Order::class,
+            $intentScope,
+            $idempotencyKey,
+            fn (Order $o) => $this->orderIsSuccess($o),
+            fn (Order $o) => $this->orderIsTerminalFailure($o),
+            fn (Order $o) => $this->orderHasGateway($o),
+        );
+
+        if ($intentDecision['action'] === CheckoutIntentGuard::ALREADY_SUCCEEDED) {
+            $existing = $intentDecision['payable'];
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Order paid and processed.',
+                'order_id' => $existing->id,
+                'redirect' => route('checkout.success', ['order' => $existing->id]),
+            ]);
+        }
+
+        if ($intentDecision['action'] === CheckoutIntentGuard::STILL_PENDING) {
+            $existing = $intentDecision['payable'];
+
+            // Never initialize a second charge while the first is still
+            // financially ambiguous.
+            return response()->json([
+                'success' => true,
+                'status' => 'confirming',
+                'message' => "We're still confirming your previous payment. Please don't pay again yet.",
+                'order_id' => $existing->id,
+                'reference' => $existing->payment_reference,
+                'verify_url' => route('checkout.verify'),
+            ]);
+        }
+
+        if ($intentDecision['action'] === CheckoutIntentGuard::RETRY_AFTER_FAILURE && $idempotencyKey) {
+            $idempotencyKey = $this->intentGuard->freshKeyAfterFailure($idempotencyKey);
+        }
 
         $isResellerOrder = $validated['is_reseller_product'] ?? false;
 
@@ -88,96 +166,147 @@ class PurchaseController extends Controller
 
         if ($payWithWallet && auth('vendor')->check()) {
             $walletService = new WalletService;
+            $payingVendor = auth('vendor')->user();
 
-            // Wrap the vendor wallet purchase in a DB transaction and lock the vendor row
-            return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $validated, $isResellerOrder, $resellerProduct, $walletService) {
-                $payingVendor = auth('vendor')->user();
+            // Resolve the authoritative base price. If this is a reseller product,
+            // we intentionally IGNORE reseller markup and treat the owner vendor's
+            // base price as canonical for wallet purchases initiated by vendors.
+            // Deliberately resolved OUTSIDE any lock/transaction — it depends only
+            // on product data, never on the vendor's wallet balance.
+            if ($isResellerOrder && isset($validated['reseller_product_id'])) {
+                $walletResellerProduct = ResellerProduct::with(['product', 'ownerVendor'])
+                    ->where('id', $validated['reseller_product_id'])
+                    ->where('is_active', true)
+                    ->first();
+
+                if (! $walletResellerProduct || ! $walletResellerProduct->product || ! $walletResellerProduct->product->is_active) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'vendor_service_id' => 'The selected reseller product is unavailable.',
+                    ]);
+                }
+
+                $walletBasePrice = (float) $walletResellerProduct->base_price;
+                $walletOwnerVendorId = $walletResellerProduct->owner_vendor_id;
+                $walletProduct = $walletResellerProduct->product;
+            } else {
+                $walletProduct = Product::query()
+                    ->where('id', $validated['vendor_service_id'])
+                    ->where('vendor_id', $validated['vendor_id'])
+                    ->where('is_active', true)
+                    ->first();
+
+                if (! $walletProduct) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'vendor_service_id' => 'The selected vendor service is unavailable.',
+                    ]);
+                }
+
+                $walletBasePrice = (float) $walletProduct->price;
+                $walletOwnerVendorId = $walletProduct->vendor_id;
+                $walletResellerProduct = null;
+            }
+
+            // Platform fee is charged upfront as 2% of base price.
+            $walletPlatformFee = round($walletBasePrice * 0.02, 2);
+            $walletCharge = round($walletBasePrice + $walletPlatformFee, 2);
+
+            // Build order attributes. For reseller (affiliate) listings, the
+            // paying vendor (reseller) should be the `vendor_id` so the order
+            // appears on their dashboard. The owner vendor (product owner)
+            // is recorded in `owner_vendor_id` so accounting records earnings
+            // against them.
+            $orderAttrs = [
+                'recipient_phone_number' => $validated['recipient_phone_number'],
+                'mobile_money_number' => $validated['mobile_money_number'] ?? $validated['recipient_phone_number'],
+                'service_purchased' => $walletProduct->name,
+                'amount_paid' => $walletCharge,
+                'base_price' => $walletBasePrice,
+                'platform_commission' => $walletPlatformFee,
+                'vendor_service_id' => $walletProduct->id,
+                'status' => 'Pending',
+                'payment_status' => 'unpaid',
+                'payment_source' => 'wallet',
+            ];
+
+            if ($isResellerOrder && $walletResellerProduct) {
+                // Paying vendor is the reseller (the authenticated vendor)
+                $orderAttrs['vendor_id'] = $payingVendor->id;
+                $orderAttrs['is_reseller_order'] = true;
+                $orderAttrs['reseller_vendor_id'] = $payingVendor->id;
+                $orderAttrs['owner_vendor_id'] = $walletOwnerVendorId;
+                $orderAttrs['reseller_product_id'] = $walletResellerProduct->id;
+            } else {
+                // Regular direct order - vendor is the product owner
+                $orderAttrs['vendor_id'] = $walletOwnerVendorId;
+                $orderAttrs['is_reseller_order'] = false;
+            }
+
+            // Phase 5 fix: resolve the SAME graceful idempotency outcome every
+            // other payment path already uses, and create the order via
+            // createOrReuse() (safe against a genuine concurrent double-click
+            // — the DB unique index on (idempotency_scope, idempotency_key) is
+            // what actually prevents two rows/two debits) BEFORE ever locking
+            // the vendor row or touching the wallet. A concurrent duplicate
+            // submission can therefore never reach the debit step twice, and
+            // the loser gets the same friendly existing/in-progress/success
+            // response as the gateway-payment path — never a raw SQL/
+            // constraint exception.
+            $creationResult = $this->intentGuard->createOrReuse(
+                Order::class,
+                $intentScope,
+                $idempotencyKey,
+                fn (?string $key) => Order::create(array_merge($orderAttrs, [
+                    'idempotency_scope' => $key ? $intentScope : null,
+                    'idempotency_key' => $key,
+                ])),
+                fn (Order $o) => $this->orderIsSuccess($o),
+                fn (Order $o) => $this->orderIsTerminalFailure($o),
+                fn (Order $o) => $this->orderHasGateway($o),
+            );
+
+            if ($creationResult['action'] === CheckoutIntentGuard::ALREADY_SUCCEEDED) {
+                $existing = $creationResult['payable'];
+
+                return $request->expectsJson()
+                    ? response()->json(['success' => true, 'message' => 'Order paid with wallet and processed', 'order_id' => $existing->id])
+                    : redirect()->route('checkout.success', ['order' => $existing->id])->with('success', 'Order paid with wallet and processed');
+            }
+
+            if ($creationResult['action'] === CheckoutIntentGuard::STILL_PENDING) {
+                // A wallet debit has no gateway to re-poll — it is synchronous
+                // by design — so "still pending" here only ever means another
+                // concurrent request for this exact intent is mid-flight.
+                $message = 'Your previous purchase is still being processed. Please wait a moment before trying again.';
+
+                return $request->expectsJson()
+                    ? response()->json(['success' => true, 'status' => 'confirming', 'message' => $message])
+                    : back()->with('status', $message);
+            }
+
+            if ($creationResult['action'] === CheckoutIntentGuard::RETRY_AFTER_FAILURE) {
+                // See CheckoutController::process() for why this is vanishingly
+                // rare and deliberately never reuses someone else's failed row.
+                return $request->expectsJson()
+                    ? response()->json(['success' => false, 'message' => 'Please try again.'], 409)
+                    : back()->withErrors(['wallet' => 'Please try again.']);
+            }
+
+            // PROCEED: a fresh Order row for this intent was just created and
+            // is uniquely ours — safe to lock the vendor and debit now.
+            $order = $creationResult['payable'];
+
+            return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $order, $walletCharge, $walletBasePrice, $walletPlatformFee, $walletService, $payingVendor) {
                 $lockedVendor = \App\Models\Vendor::whereKey($payingVendor->id)->lockForUpdate()->first();
 
                 if (! $lockedVendor) {
                     throw \Illuminate\Validation\ValidationException::withMessages(['vendor' => 'Vendor authentication required']);
                 }
 
-                // Resolve the authoritative base price. If this is a reseller product,
-                // we intentionally IGNORE reseller markup and treat the owner vendor's
-                // base price as canonical for wallet purchases initiated by vendors.
-                if ($isResellerOrder && isset($validated['reseller_product_id'])) {
-                    $resellerProduct = ResellerProduct::with(['product', 'ownerVendor'])
-                        ->where('id', $validated['reseller_product_id'])
-                        ->where('is_active', true)
-                        ->first();
-
-                    if (! $resellerProduct || ! $resellerProduct->product || ! $resellerProduct->product->is_active) {
-                        throw \Illuminate\Validation\ValidationException::withMessages([
-                            'vendor_service_id' => 'The selected reseller product is unavailable.',
-                        ]);
-                    }
-
-                    $basePrice = (float) $resellerProduct->base_price;
-                    $ownerVendorId = $resellerProduct->owner_vendor_id;
-                    $product = $resellerProduct->product;
-                } else {
-                    $product = Product::query()
-                        ->where('id', $validated['vendor_service_id'])
-                        ->where('vendor_id', $validated['vendor_id'])
-                        ->where('is_active', true)
-                        ->first();
-
-                    if (! $product) {
-                        throw \Illuminate\Validation\ValidationException::withMessages([
-                            'vendor_service_id' => 'The selected vendor service is unavailable.',
-                        ]);
-                    }
-
-                    $basePrice = (float) $product->price;
-                    $ownerVendorId = $product->vendor_id;
-                }
-
-                // Platform fee is charged upfront as 2% of base price.
-                $platformFee = round($basePrice * 0.02, 2);
-                $walletCharge = round($basePrice + $platformFee, 2);
-
-                // Create the order record first (Pending). We set fields so the
-                // vendor-wallet-specific completion flow can operate without invoking
-                // reseller/affiliate pipelines.
-                // Build order attributes. For reseller (affiliate) listings, the
-                // paying vendor (reseller) should be the `vendor_id` so the order
-                // appears on their dashboard. The owner vendor (product owner)
-                // is recorded in `owner_vendor_id` so accounting records earnings
-                // against them.
-                $orderAttrs = [
-                    'recipient_phone_number' => $validated['recipient_phone_number'],
-                    'mobile_money_number' => $validated['mobile_money_number'] ?? $validated['recipient_phone_number'],
-                    'service_purchased' => $product->name,
-                    'amount_paid' => $walletCharge,
-                    'base_price' => $basePrice,
-                    'platform_commission' => $platformFee,
-                    'vendor_service_id' => $product->id,
-                    'status' => 'Pending',
-                    'payment_status' => 'unpaid',
-                    'payment_source' => 'wallet',
-                ];
-
-                if ($isResellerOrder && isset($resellerProduct)) {
-                    // Paying vendor is the reseller (the authenticated vendor)
-                    $orderAttrs['vendor_id'] = $lockedVendor->id;
-                    $orderAttrs['is_reseller_order'] = true;
-                    $orderAttrs['reseller_vendor_id'] = $lockedVendor->id;
-                    $orderAttrs['owner_vendor_id'] = $ownerVendorId;
-                    $orderAttrs['reseller_product_id'] = $resellerProduct->id;
-                } else {
-                    // Regular direct order - vendor is the product owner
-                    $orderAttrs['vendor_id'] = $ownerVendorId;
-                    $orderAttrs['is_reseller_order'] = false;
-                }
-
-                $order = Order::create($orderAttrs);
-
                 // Debit using WalletService (which itself uses transactions/locks)
                 $debited = $walletService->debitVendorFromTopups($lockedVendor->id, $walletCharge, [
                     'type' => 'vendor_wallet_order',
-                    'base_price' => $basePrice,
-                    'platform_fee' => $platformFee,
+                    'base_price' => $walletBasePrice,
+                    'platform_fee' => $walletPlatformFee,
                     'order_id' => $order->id,
                 ]);
 
@@ -207,22 +336,79 @@ class PurchaseController extends Controller
             });
         }
 
-        // Create order with pending status first
-        $order = Order::create([
-            'recipient_phone_number' => $validated['recipient_phone_number'],
-            'mobile_money_number' => $validated['mobile_money_number'] ?? $validated['recipient_phone_number'],
-            'service_purchased' => $product->name,
-            'amount_paid' => (float) $price,
-            'vendor_id' => $validated['vendor_id'],
-            'vendor_service_id' => $product->id,
-            'status' => 'Pending',
-            'payment_status' => 'unpaid',
-            'payment_source' => $payWithWallet ? 'wallet' : null,
-            'reseller_product_id' => $resellerProduct?->id ?? null,
-            'owner_vendor_id' => $resellerProduct?->owner_vendor_id ?? null,
-            'reseller_vendor_id' => $isResellerOrder ? $validated['vendor_id'] : null,
-            'is_reseller_order' => $isResellerOrder,
-        ]);
+        // Create order with pending status first. Race-safe: two concurrent
+        // submissions of the same checkout intent can create at most one row
+        // here — see CheckoutIntentGuard::createOrReuse().
+        $creationResult = $this->intentGuard->createOrReuse(
+            Order::class,
+            $intentScope,
+            $idempotencyKey,
+            fn (?string $key) => Order::create([
+                'recipient_phone_number' => $validated['recipient_phone_number'],
+                'mobile_money_number' => $validated['mobile_money_number'] ?? $validated['recipient_phone_number'],
+                'service_purchased' => $product->name,
+                'amount_paid' => (float) $price,
+                'vendor_id' => $validated['vendor_id'],
+                'vendor_service_id' => $product->id,
+                'status' => 'Pending',
+                'payment_status' => 'unpaid',
+                'payment_source' => $payWithWallet ? 'wallet' : null,
+                'reseller_product_id' => $resellerProduct?->id ?? null,
+                'owner_vendor_id' => $resellerProduct?->owner_vendor_id ?? null,
+                'reseller_vendor_id' => $isResellerOrder ? $validated['vendor_id'] : null,
+                'is_reseller_order' => $isResellerOrder,
+                'idempotency_scope' => $key ? $intentScope : null,
+                'idempotency_key' => $key,
+            ]),
+            fn (Order $o) => $this->orderIsSuccess($o),
+            fn (Order $o) => $this->orderIsTerminalFailure($o),
+            fn (Order $o) => $this->orderHasGateway($o),
+        );
+
+        if ($creationResult['action'] === CheckoutIntentGuard::ALREADY_SUCCEEDED) {
+            $existing = $creationResult['payable'];
+
+            return $request->expectsJson()
+                ? response()->json([
+                    'success' => true,
+                    'message' => 'Order paid and processed.',
+                    'order_id' => $existing->id,
+                    'redirect' => route('checkout.success', ['order' => $existing->id]),
+                ])
+                : redirect()->route('checkout.success', ['order' => $existing->id]);
+        }
+
+        if ($creationResult['action'] === CheckoutIntentGuard::STILL_PENDING) {
+            $existing = $creationResult['payable'];
+            $message = "We're still confirming your previous payment. Please don't pay again yet.";
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'status' => 'confirming',
+                    'message' => $message,
+                    'order_id' => $existing->id,
+                    'reference' => $existing->payment_reference,
+                    'redirect' => route('checkout.show').'?payment_pending=1&reference='.$existing->payment_reference,
+                ]);
+            }
+
+            return redirect()->route('checkout.show')
+                ->with('payment_pending', true)
+                ->with('payment_reference', $existing->payment_reference)
+                ->with('payment_message', $message);
+        }
+
+        if ($creationResult['action'] === CheckoutIntentGuard::RETRY_AFTER_FAILURE) {
+            // See CheckoutController::process() for why this is vanishingly
+            // rare and deliberately never reuses someone else's failed row.
+            return $request->expectsJson()
+                ? response()->json(['success' => false, 'message' => 'Please try again.'], 409)
+                : back()->withErrors(['payment' => 'Please try again.']);
+        }
+
+        // PROCEED: a fresh Order row for this intent was just created.
+        $order = $creationResult['payable'];
 
         // If wallet was used, run existing PaymentService pipeline to complete the order
         if ($payWithWallet) {

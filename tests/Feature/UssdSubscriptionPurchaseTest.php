@@ -53,7 +53,13 @@ class UssdSubscriptionPurchaseTest extends TestCase
         $mock = Mockery::mock(PaymentService::class);
         $mock->shouldReceive('isReady')->andReturn(true);
         $mock->shouldReceive('initiateGenericPayment')->andReturnUsing(fn () => $this->initiateResult);
-        $mock->shouldReceive('checkPaymentStatus')->andReturnUsing(function (string $reference) {
+        // UssdSubscriptionPurchaseService now verifies against the subscription's
+        // own stored gateway rather than the current default (see the payment
+        // reconciliation hardening) — it calls checkPaymentStatusForGateway(),
+        // not checkPaymentStatus(). The gateway argument is accepted but
+        // ignored here: this double dispatches purely on reference, which is
+        // sufficient for what these tests exercise.
+        $mock->shouldReceive('checkPaymentStatusForGateway')->andReturnUsing(function (string $reference, ?string $gatewayName = null) {
             $this->verifiedReferences[] = $reference;
 
             return $this->verifications[$reference] ?? ['success' => false, 'message' => 'Not found'];
@@ -238,7 +244,9 @@ class UssdSubscriptionPurchaseTest extends TestCase
 
         $this->hitCallback('ussd-ref-3');
 
-        $this->assertSame(UssdSubscription::STATUS_PENDING_PAYMENT, UssdSubscription::firstOrFail()->status);
+        // Phase 5: failPayment() now normalizes onto an explicit terminal
+        // status instead of leaving the row at pending_payment forever.
+        $this->assertSame(UssdSubscription::STATUS_PAYMENT_FAILED, UssdSubscription::firstOrFail()->status);
         $this->assertDatabaseHas('ussd_subscription_events', ['event' => UssdSubscriptionEvent::PAYMENT_FAILED]);
     }
 
@@ -250,7 +258,7 @@ class UssdSubscriptionPurchaseTest extends TestCase
 
         $this->hitCallback('ussd-ref-4');
 
-        $this->assertSame(UssdSubscription::STATUS_PENDING_PAYMENT, UssdSubscription::firstOrFail()->status);
+        $this->assertSame(UssdSubscription::STATUS_PAYMENT_FAILED, UssdSubscription::firstOrFail()->status);
     }
 
     public function test_pending_gateway_status_on_callback_never_notifies_failure(): void
@@ -399,6 +407,35 @@ class UssdSubscriptionPurchaseTest extends TestCase
         $this->assertDatabaseMissing('ussd_subscription_events', [
             'event' => UssdSubscriptionEvent::PAYMENT_FAILED,
         ]);
+    }
+
+    /**
+     * Phase 5: checkStatus() used to only ever report 'paid' or 'pending' —
+     * a provider-confirmed terminal failure discovered mid-poll was silently
+     * reported as 'pending' forever, unlike every other payable type's
+     * status-polling endpoint. It now delegates to verifyAndActivate() (the
+     * single place that can detect a confirmed failure) unconditionally.
+     */
+    public function test_status_endpoint_reports_failed_on_a_confirmed_terminal_failure(): void
+    {
+        $vendor = Vendor::factory()->create();
+        $this->pendingSubscription($vendor, $this->starter(), 'ussd-poll-fail');
+        $this->settles('ussd-poll-fail', 80.00, 'failed');
+
+        $this->actingAs($vendor, 'vendor')
+            ->getJson(route('vendor.ussd.subscription.status', ['reference' => 'ussd-poll-fail']))
+            ->assertOk()
+            ->assertJson(['success' => true, 'status' => 'failed']);
+
+        $this->assertSame(UssdSubscription::STATUS_PAYMENT_FAILED, UssdSubscription::firstOrFail()->status);
+
+        // Idempotent: polling again must not re-notify or re-fail.
+        $this->actingAs($vendor, 'vendor')
+            ->getJson(route('vendor.ussd.subscription.status', ['reference' => 'ussd-poll-fail']))
+            ->assertOk()
+            ->assertJson(['success' => true, 'status' => 'failed']);
+
+        $this->assertSame(1, UssdSubscriptionEvent::where('event', UssdSubscriptionEvent::PAYMENT_FAILED)->count());
     }
 
     public function test_status_endpoint_blocks_cross_vendor_access(): void

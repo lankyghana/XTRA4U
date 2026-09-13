@@ -428,6 +428,9 @@ document.addEventListener('DOMContentLoaded', function() {
     let pollTimer = null;
     let verifyInFlight = false;
     let activeReference = null;
+    // Phase 4 duplicate-charge prevention: fingerprint of the checkout
+    // intent currently in flight (see components/checkout_intent.blade.php).
+    let activeIntentFingerprint = null;
 
     const csrf = () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
@@ -552,12 +555,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     setMessage(data.message || 'Payment confirmed. Redirecting…', 'success');
                     showOverlay(data.message || 'Payment confirmed. Redirecting…');
                     stopPolling();
+                    window.XtraCheckoutIntent?.clear(activeIntentFingerprint);
                     window.location.href = data.redirect;
                     return;
                 }
 
                 if (data?.status === 'failed') {
                     stopPolling();
+                    window.XtraCheckoutIntent?.clear(activeIntentFingerprint);
                     showFailure(data.message || 'Payment failed. Please try again.');
                     return;
                 }
@@ -589,6 +594,15 @@ document.addEventListener('DOMContentLoaded', function() {
         if (requiresInlineMomo) {
             if (payerPhoneValue) fd.set('payer_phone', payerPhoneValue);
             if (payerNetworkValue) fd.set('payer_network', payerNetworkValue);
+        }
+
+        // Phase 4 duplicate-charge prevention: the SAME key is resubmitted
+        // for a double-click/duplicate-POST/refresh of this exact intent
+        // (identified by the registrant's own ID number), so the server can
+        // recognise a retry instead of starting a second charge.
+        activeIntentFingerprint = 'afa:' + form.action + ':' + (fd.get('id_number') || '');
+        if (window.XtraCheckoutIntent) {
+            fd.set('idempotency_key', window.XtraCheckoutIntent.getKey(activeIntentFingerprint));
         }
 
         try {
@@ -623,8 +637,54 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             const data = await res.json();
+
+            // Phase 4: an existing attempt for this SAME intent is still
+            // financially ambiguous — the server deliberately did NOT start
+            // a second charge. Never say "failed" here; keep confirming the
+            // existing reference instead.
+            if (data?.success && data?.status === 'confirming') {
+                setMessage(data.message || "We're still confirming your previous payment. Please don't pay again yet.", 'info');
+                if (data?.reference && verifyRoute) {
+                    showOverlay('Waiting for payment confirmation…');
+                    stopPolling();
+                    activeReference = data.reference;
+                    poll(data.reference, 0);
+                } else if (proceedBtn) {
+                    proceedBtn.disabled = false;
+                }
+                return;
+            }
+
             if (data?.success) {
+                // Payaza Web Checkout SDK: opens its own popup, then re-verifies
+                // server-side via verifyRoute before completing the registration
+                // (see components/inline_payment_manager.blade.php for the
+                // security notes — the SDK's own callback is never trusted).
+                if (data?.flow_type === 'payaza' && data?.checkout_config && window.InlinePaymentManager) {
+                    setMessage('', 'info');
+                    window.InlinePaymentManager.openPayaza({
+                        reference: data.reference,
+                        checkout_config: data.checkout_config,
+                        verify_url: verifyRoute,
+                    }, function (status) {
+                        if (status === 'failed') {
+                            showFailure('Payment failed. Please try again.');
+                        } else if (status === 'timeout') {
+                            showFailure('Payment confirmation timed out. Please check your payment provider or try again.');
+                        } else if (status === 'sdk_unavailable') {
+                            // No payment was ever attempted — the checkout SDK itself
+                            // failed to load/initialise.
+                            showFailure('Unable to load the payment service. Please try again or choose another payment method.');
+                        } else if (proceedBtn) {
+                            proceedBtn.disabled = false;
+                        }
+                    });
+                    return;
+                }
+
                 if (data?.redirect) {
+                    // Terminal success — free this fingerprint's cached key.
+                    window.XtraCheckoutIntent?.clear(activeIntentFingerprint);
                     window.location.href = data.redirect;
                     return;
                 }
@@ -641,6 +701,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 hideOverlay();
                 setMessage(data.message || 'Submitted.', 'success');
             } else {
+                // A confirmed failure (never merely "still confirming") —
+                // safe to let the next submit mint a brand new intent key.
+                window.XtraCheckoutIntent?.clear(activeIntentFingerprint);
                 hideOverlay();
                 setMessage(data?.message || 'Submission failed.', 'error');
                 if (proceedBtn) proceedBtn.disabled = false;

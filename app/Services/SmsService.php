@@ -24,9 +24,33 @@ class SmsService
 
     protected ?string $vasKey;
 
+    /**
+     * Whether initialize() has run. Loading the active SMS gateway config is
+     * deferred to first use rather than done in the constructor: SmsService
+     * sits behind several other services in the container graph (e.g.
+     * ResultCheckerService -> PaymentReconciliationService), and those
+     * services' constructors can be resolved well before the app is ready
+     * to query the database (bootstrapping, other tests' setup). Since SMS
+     * sending is the only thing that actually needs this config, deferring
+     * it until dispatch()/isConfigured()/etc. are called avoids that
+     * entirely, with no change to runtime behavior once actually used.
+     */
+    private bool $initialized = false;
+
+    private ?PaymentGatewayConfig $explicitConfig;
+
     public function __construct(?PaymentGatewayConfig $config = null)
     {
-        $this->config = $config ?? PaymentGatewayConfig::getDefault(PaymentGatewayConfig::TYPE_SMS);
+        $this->explicitConfig = $config;
+    }
+
+    private function initialize(): void
+    {
+        if ($this->initialized) {
+            return;
+        }
+
+        $this->config = $this->explicitConfig ?? PaymentGatewayConfig::getDefault(PaymentGatewayConfig::TYPE_SMS);
 
         if ($this->config && $this->config->gateway_name === PaymentGatewayConfig::GATEWAY_MOOLRE) {
             // ── Moolre SMS ──────────────────────────────────────────────────
@@ -53,6 +77,8 @@ class SmsService
             $this->apiUser = null;
             $this->vasKey = null;
         }
+
+        $this->initialized = true;
     }
 
     /**
@@ -102,6 +128,8 @@ class SmsService
      */
     protected function dispatch(string $to, string $message): bool
     {
+        $this->initialize();
+
         return $this->gateway === 'moolre'
             ? $this->sendViaMoolre($to, $message)
             : $this->sendViaBulkClix($to, $message);
@@ -259,6 +287,8 @@ class SmsService
      */
     public function isConfigured(): bool
     {
+        $this->initialize();
+
         if ($this->gateway === 'moolre') {
             return ! empty($this->vasKey) && ! empty($this->apiUser) && ! empty($this->baseUrl);
         }
@@ -271,6 +301,8 @@ class SmsService
      */
     public function getEnvironment(): string
     {
+        $this->initialize();
+
         return $this->config?->environment ?? 'sandbox';
     }
 
@@ -279,6 +311,8 @@ class SmsService
      */
     public function getGateway(): string
     {
+        $this->initialize();
+
         return $this->gateway;
     }
 }

@@ -52,6 +52,11 @@
                 orderRoute: opts.orderRoute || '',
                 resultCheckerOrderRoute: opts.resultCheckerOrderRoute || '',
                 initialCategory: opts.initialCategory || null,
+                // Phase 4 duplicate-charge prevention: the fingerprint of the
+                // checkout intent currently in flight, so its cached
+                // idempotency key can be cleared once it reaches a terminal
+                // outcome (paid or confirmed-failed).
+                activeIntentFingerprint: null,
 
                 // Getters
                 get filteredServices() {
@@ -321,6 +326,7 @@
                             customer_phone: this.recipientPhone,
                             customer_name: ''
                         };
+                        this.activeIntentFingerprint = ['rc', this.vendorId, this.selectedPackage.service_id, this.quantity, this.recipientPhone].join(':');
                     } else {
                         payload = {
                             vendor_id: this.vendorId,
@@ -336,6 +342,17 @@
                             reseller_product_id: this.selectedPackage?.reseller_product_id || null,
                             original_product_id: this.selectedPackage?.original_product_id || this.selectedPackage?.id,
                         };
+                        this.activeIntentFingerprint = ['order', this.vendorId, this.selectedPackage?.id, this.selectedPackage?.reseller_product_id || '', this.recipientPhone].join(':');
+                    }
+
+                    // Phase 4 duplicate-charge prevention: the SAME key is
+                    // resubmitted for a double-click/duplicate-POST/refresh of
+                    // this exact intent, so the server can recognise a retry
+                    // instead of starting a second charge. Cleared below on
+                    // any terminal outcome so a genuinely new purchase (even
+                    // of the identical product) always gets a fresh key.
+                    if (window.XtraCheckoutIntent) {
+                        payload.idempotency_key = window.XtraCheckoutIntent.getKey(this.activeIntentFingerprint);
                     }
 
                     if (this.requiresInlineMomo) {
@@ -374,7 +391,52 @@
                         }
 
                         const resp = await res.json();
+
+                        // Phase 4: an existing attempt for this SAME intent is
+                        // still financially ambiguous — the server deliberately
+                        // did NOT start a second charge. Never say "failed"
+                        // here; just keep confirming the existing reference.
+                        if (resp.success && resp.status === 'confirming') {
+                            this.paymentInitiating = false;
+                            this.orderMessage = resp.message || "We're still confirming your previous payment. Please don't pay again yet.";
+                            if (resp.reference && this.verifyRoute) {
+                                this.startPaymentPolling(resp.reference);
+                            } else {
+                                this.submitting = false;
+                            }
+                            return;
+                        }
+
                         if (resp.success) {
+                            // Payaza Web Checkout SDK: opens its own popup, then re-verifies
+                            // server-side via resp.verify_url before completing the order
+                            // (see components/inline_payment_manager.blade.php — the SDK's
+                            // own callback/onClose is never trusted). Shared by both the
+                            // regular product/package flow and the result-checker flow:
+                            // each initiate endpoint returns its own correct verify_url.
+                            if (resp.flow_type === 'payaza' && resp.checkout_config && window.InlinePaymentManager) {
+                                this.paymentInitiating = false;
+                                this.orderMessage = resp.message || 'Complete payment in the popup window.';
+                                window.InlinePaymentManager.openPayaza({
+                                    reference: resp.reference,
+                                    checkout_config: resp.checkout_config,
+                                    verify_url: resp.verify_url,
+                                }, (status) => {
+                                    this.submitting = false;
+                                    if (status === 'failed') {
+                                        this.showPaymentFailure('Payment failed. Please try again.');
+                                    } else if (status === 'timeout') {
+                                        this.showPaymentFailure('Payment confirmation timed out. Please check your payment provider or try again.');
+                                    } else if (status === 'sdk_unavailable') {
+                                        // No payment was ever attempted — the checkout SDK itself
+                                        // failed to load/initialise. Keep this message distinct
+                                        // from an actual payment failure.
+                                        this.showPaymentFailure('Unable to load the payment service. Please try again or choose another payment method.');
+                                    }
+                                });
+                                return;
+                            }
+
                             // Inline gateways (e.g. BulkClix): do not redirect away; poll for completion.
                             if (this.requiresInlineMomo && resp.reference && this.verifyRoute) {
                                 this.paymentInitiating = false;
@@ -384,6 +446,10 @@
                             }
 
                             if (resp.redirect) {
+                                // Terminal success — free this fingerprint's
+                                // cached key so a future, genuinely new
+                                // purchase never gets treated as a reuse.
+                                window.XtraCheckoutIntent?.clear(this.activeIntentFingerprint);
                                 window.location.href = resp.redirect;
                                 return;
                             }
@@ -396,8 +462,12 @@
                                 return;
                             }
 
+                            window.XtraCheckoutIntent?.clear(this.activeIntentFingerprint);
                             this.orderMessage = resp.message || 'Order submitted successfully';
                         } else {
+                            // A confirmed failure (never merely "still confirming") — safe to
+                            // let the next submit mint a brand new intent key.
+                            window.XtraCheckoutIntent?.clear(this.activeIntentFingerprint);
                             this.orderMessage = resp.message || 'Order failed';
                         }
                     } catch (err) {
@@ -493,11 +563,15 @@
                                         clearTimeout(this.paymentPollTimer);
                                         this.paymentPollTimer = null;
                                     }
+                                    // Terminal success — free this intent's cached key.
+                                    window.XtraCheckoutIntent?.clear(this.activeIntentFingerprint);
                                     window.location.href = data.redirect;
                                     return;
                                 }
 
                                 if (data?.status === 'failed') {
+                                    // Confirmed terminal failure — safe to let the next submit mint a new key.
+                                    window.XtraCheckoutIntent?.clear(this.activeIntentFingerprint);
                                     this.stopPaymentPolling(data.message || 'Payment failed. Please try again.');
                                     return;
                                 }
@@ -615,6 +689,16 @@
         })();
     </script>
     
+    {{-- Shared inline-payment/Payaza-popup module. Included once here so every
+         page extending this layout (vendor storefront, the platform-service
+         pages, AFA registration) can call window.InlinePaymentManager without
+         each including it separately. --}}
+    @include('components.inline_payment_manager')
+
+    {{-- Phase 4 duplicate-charge prevention: shared idempotency-key cache
+         (window.XtraCheckoutIntent) used by every checkout submit handler. --}}
+    @include('components.checkout_intent')
+
     @stack('scripts')
 </body>
 </html>

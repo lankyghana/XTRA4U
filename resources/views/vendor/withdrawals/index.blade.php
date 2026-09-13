@@ -427,6 +427,13 @@
                                     setLoading(true);
                                     showMessage('');
 
+                                    // Phase 4 duplicate-charge prevention: the SAME key is
+                                    // resubmitted for a double-click/duplicate-POST/refresh of
+                                    // this exact intent, so the server can recognise a retry
+                                    // instead of starting a second charge. Cleared on any
+                                    // terminal outcome below.
+                                    const intentFingerprint = 'wallet_topup:' + amount;
+
                                     try {
                                         const payload = { vendor_id: '{{ $vendor->id }}', amount: amount };
                                         const payerEl = document.getElementById('wallet-topup-phone');
@@ -438,6 +445,9 @@
                                             payload.network = String(netEl.value).trim();
                                         }
                                         if (gatewayHidden && gatewayHidden.value) payload.gateway = gatewayHidden.value;
+                                        if (window.XtraCheckoutIntent) {
+                                            payload.idempotency_key = window.XtraCheckoutIntent.getKey(intentFingerprint);
+                                        }
 
                                         const resp = await fetch('{{ route('vendor.wallet.topup') }}', {
                                             method: 'POST',
@@ -450,6 +460,32 @@
                                         });
                                         const data = await resp.json();
 
+                                        // Phase 4: an existing attempt for this SAME intent is
+                                        // still financially ambiguous — the server deliberately
+                                        // did NOT start a second charge. Never say "failed" here;
+                                        // keep confirming the existing reference.
+                                        if (data.success && data.status === 'confirming') {
+                                            showMessage(data.message || "We're still confirming your previous top-up. Please don't pay again yet.", 'success');
+                                            if (data.reference) {
+                                                pollTopupStatus(data.reference, amount, intentFingerprint);
+                                            }
+                                            setLoading(false);
+                                            inProgress = false;
+                                            return;
+                                        }
+
+                                        if (data.success && data.status === 'completed') {
+                                            window.XtraCheckoutIntent?.clear(intentFingerprint);
+                                            const summary = await refreshWalletSummary(false);
+                                            amountInput.value = '';
+                                            if (gatewayHidden) gatewayHidden.value = '';
+                                            gatewayButtons.forEach(b => b.classList.remove('ring','ring-2','ring-violet-400'));
+                                            showDepositSuccessModal(amount, summary?.topupBalance);
+                                            setLoading(false);
+                                            inProgress = false;
+                                            return;
+                                        }
+
                                         // Use shared InlinePaymentManager for inline flows
                                         if (data.flow_type === 'inline') {
                                             InlinePaymentManager.open({
@@ -461,12 +497,14 @@
                                                 no_redirect: true
                                             }, async (status) => {
                                                 if (status === 'paid' || status === 'completed') {
+                                                    window.XtraCheckoutIntent?.clear(intentFingerprint);
                                                     const summary = await refreshWalletSummary(false);
                                                     amountInput.value = '';
                                                     if (gatewayHidden) gatewayHidden.value = '';
                                                     gatewayButtons.forEach(b => b.classList.remove('ring','ring-2','ring-violet-400'));
                                                     showDepositSuccessModal(amount, summary?.topupBalance);
                                                 } else if (status === 'failed') {
+                                                    window.XtraCheckoutIntent?.clear(intentFingerprint);
                                                     showMessage('Top-up failed. Please try again or contact support.', 'error');
                                                 }
                                             });
@@ -487,8 +525,9 @@
                                         if (data.success) {
                                             if (data.reference) {
                                                 showMessage('Payment initiated. Waiting for confirmation...', 'success');
-                                                pollTopupStatus(data.reference, amount);
+                                                pollTopupStatus(data.reference, amount, intentFingerprint);
                                             } else {
+                                                window.XtraCheckoutIntent?.clear(intentFingerprint);
                                                 const summary = await refreshWalletSummary(false);
                                                 amountInput.value = '';
                                                 if (gatewayHidden) gatewayHidden.value = '';
@@ -500,6 +539,9 @@
                                             return;
                                         }
 
+                                        // A confirmed failure (never merely "still confirming") —
+                                        // safe to let the next submit mint a brand new intent key.
+                                        window.XtraCheckoutIntent?.clear(intentFingerprint);
                                         setLoading(false);
                                         inProgress = false;
                                         showMessage(data.message || 'Failed to initiate top-up', 'error');
@@ -528,7 +570,7 @@
                                 }
 
                                 // Poll a top-up reference until the gateway/callback marks it completed or failed.
-                                async function pollTopupStatus(reference, amount) {
+                                async function pollTopupStatus(reference, amount, intentFingerprint = null) {
                                     const pollInterval = 2500; // ms
                                     const timeoutMs = 120000; // 2 minutes
                                     const started = Date.now();
@@ -550,6 +592,7 @@
                                                 }
 
                                                 if (j.status === 'completed') {
+                                                    window.XtraCheckoutIntent?.clear(intentFingerprint);
                                                     const summary = await refreshWalletSummary(false);
                                                     amountInput.value = '';
                                                     if (gatewayHidden) gatewayHidden.value = '';
@@ -559,11 +602,13 @@
                                                 }
 
                                                 if (j.status === 'failed') {
+                                                    window.XtraCheckoutIntent?.clear(intentFingerprint);
                                                     showMessage('Top-up failed. Please try again or contact support.', 'error');
                                                     return;
                                                 }
 
                                                 if (j.status === 'cancelled') {
+                                                    window.XtraCheckoutIntent?.clear(intentFingerprint);
                                                     showMessage('Top-up was cancelled. Please try again when ready.', 'error');
                                                     return;
                                                 }
@@ -636,9 +681,15 @@
                                         // Trigger the same API used by the page
                                         modalConfirm.disabled = true;
                                         feedbackEl.textContent = '';
+                                        // Phase 4 duplicate-charge prevention — see the main
+                                        // top-up form above for the full explanation.
+                                        const modalIntentFingerprint = 'wallet_topup:' + amt;
                                         try {
                                             const payload = { vendor_id: '{{ $vendor->id }}', amount: amt, payer_phone: phone };
                                             if (net) payload.network = net;
+                                            if (window.XtraCheckoutIntent) {
+                                                payload.idempotency_key = window.XtraCheckoutIntent.getKey(modalIntentFingerprint);
+                                            }
 
                                             const resp = await fetch('{{ route('vendor.wallet.topup') }}', {
                                                 method: 'POST',
@@ -651,20 +702,32 @@
                                             });
 
                                             const data = await resp.json();
+
+                                            // Phase 4: an existing attempt for this SAME intent is
+                                            // still financially ambiguous — never say "failed" here.
+                                            if (data.success && data.status === 'confirming') {
+                                                feedbackEl.textContent = data.message || "We're still confirming your previous top-up. Please don't pay again yet.";
+                                                if (data.reference) pollTopupStatus(data.reference, amt, modalIntentFingerprint);
+                                                modalConfirm.disabled = false;
+                                                return;
+                                            }
+
                                             if (data.flow_type === 'inline') {
                                                 feedbackEl.textContent = 'Processing payment, waiting for confirmation...';
                                                 InlinePaymentManager.open({ reference: data.reference, authorization_url: data.authorization_url ?? null, gateway_name: data.gateway_name ?? null }, async (status) => {
                                                     if (status === 'paid') {
+                                                        window.XtraCheckoutIntent?.clear(modalIntentFingerprint);
                                                         feedbackEl.textContent = 'Wallet topped up successfully.';
                                                         await refreshWalletSummary(true);
                                                         closeTopupModal();
                                                     } else if (status === 'failed') {
+                                                        window.XtraCheckoutIntent?.clear(modalIntentFingerprint);
                                                         feedbackEl.textContent = 'Top-up failed. Please try again.';
                                                     }
                                                     modalConfirm.disabled = false;
                                                 });
                                                 if (data.reference) {
-                                                    pollTopupStatus(data.reference);
+                                                    pollTopupStatus(data.reference, amt, modalIntentFingerprint);
                                                 }
                                                 return;
                                             }
@@ -678,8 +741,9 @@
                                             if (data.success) {
                                                 if (data.reference) {
                                                     feedbackEl.textContent = 'Payment initiated. Waiting for confirmation...';
-                                                    pollTopupStatus(data.reference);
+                                                    pollTopupStatus(data.reference, amt, modalIntentFingerprint);
                                                 } else {
+                                                    window.XtraCheckoutIntent?.clear(modalIntentFingerprint);
                                                     feedbackEl.textContent = 'Wallet topped up successfully.';
                                                     await refreshWalletSummary(true);
                                                     closeTopupModal();
@@ -687,6 +751,9 @@
                                                 modalConfirm.disabled = false;
                                                 return;
                                             }
+
+                                            // A confirmed failure — safe to let the next submit mint a new key.
+                                            window.XtraCheckoutIntent?.clear(modalIntentFingerprint);
 
                                             modalConfirm.disabled = false;
                                             feedbackEl.textContent = data.message || 'Failed to initiate top-up';

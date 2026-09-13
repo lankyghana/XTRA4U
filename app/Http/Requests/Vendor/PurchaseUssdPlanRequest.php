@@ -28,6 +28,9 @@ class PurchaseUssdPlanRequest extends FormRequest
             'plan_id' => ['required', 'integer', 'exists:ussd_plans,id'],
             'payer_phone' => ['nullable', 'string', 'max:20', 'regex:/^[0-9+\s-]+$/'],
             'network' => ['nullable', 'string', 'max:20', 'alpha_dash'],
+            // Phase 4: identifies one payment ATTEMPT for one checkout intent.
+            // Optional for backward compatibility — see CheckoutIntentGuard.
+            'idempotency_key' => ['nullable', 'string', 'max:100'],
         ];
     }
 

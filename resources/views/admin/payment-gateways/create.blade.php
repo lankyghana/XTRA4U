@@ -154,18 +154,19 @@ function updateConfigFields() {
         fieldsHtml += '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">';
 
         Object.entries(configFields).forEach(([key, label]) => {
-            const isSecret = key.includes('secret') || key.includes('key');
+            const isSecret = key.includes('secret') || key.includes('key') || key.includes('pin');
             const inputType = isSecret ? 'password' : 'text';
             const placeholder = gatewayInfo.default_config && gatewayInfo.default_config[key] || '';
-            
+
             fieldsHtml += `
                 <div>
                     <label for="config_${key}" class="block text-sm font-medium text-gray-700 mb-1">${label}</label>
-                    <input type="${inputType}" 
-                           name="config[${key}]" 
+                    <input type="${inputType}"
+                           name="config[${key}]"
                            id="config_${key}"
                            placeholder="${placeholder}"
                            value="{{ old('config.${key}') }}"
+                           autocomplete="off"
                            class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
             `;

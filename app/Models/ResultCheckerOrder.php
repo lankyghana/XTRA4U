@@ -2,14 +2,15 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class ResultCheckerOrder extends Model
 {
     use HasFactory;
+
     protected $table = 'result_checker_orders';
 
     protected $fillable = [
@@ -28,6 +29,12 @@ class ResultCheckerOrder extends Model
         'paid_at',
         'fulfilled_at',
         'sms_sent_at',
+        'reconciliation_attempts',
+        'last_reconciliation_at',
+        'next_reconciliation_at',
+        'reconciliation_note',
+        'idempotency_scope',
+        'idempotency_key',
     ];
 
     protected $casts = [
@@ -38,6 +45,8 @@ class ResultCheckerOrder extends Model
         'paid_at' => 'datetime',
         'fulfilled_at' => 'datetime',
         'sms_sent_at' => 'datetime',
+        'last_reconciliation_at' => 'datetime',
+        'next_reconciliation_at' => 'datetime',
     ];
 
     public function vendor(): BelongsTo

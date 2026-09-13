@@ -36,6 +36,12 @@ class Order extends Model
         'affiliate_chain_snapshot',
         'is_reseller_order',
         'external_fulfillment_provider_used',
+        'reconciliation_attempts',
+        'last_reconciliation_at',
+        'next_reconciliation_at',
+        'reconciliation_note',
+        'idempotency_scope',
+        'idempotency_key',
     ];
 
     protected $casts = [
@@ -55,6 +61,8 @@ class Order extends Model
         'external_fulfillment_completed_at' => 'datetime',
         'external_fulfillment_delivered_at' => 'datetime',
         'external_fulfillment_last_status_check_at' => 'datetime',
+        'last_reconciliation_at' => 'datetime',
+        'next_reconciliation_at' => 'datetime',
     ];
 
     public function vendor(): BelongsTo
@@ -120,7 +128,7 @@ class Order extends Model
         $packageSize = data_get($this->service, 'decoded_description.size');
 
         if (is_string($packageSize) && trim($packageSize) !== '') {
-            return $serviceName . ' - ' . trim($packageSize);
+            return $serviceName.' - '.trim($packageSize);
         }
 
         return $serviceName;

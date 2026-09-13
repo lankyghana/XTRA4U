@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\PaymentGatewayConfig;
+use App\Models\Product;
 use App\Models\Vendor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -11,6 +12,17 @@ use Tests\TestCase;
 class CheckoutPayerPhoneRequirementsTest extends TestCase
 {
     use RefreshDatabase;
+
+    private function product(Vendor $vendor, float $price = 1.50): Product
+    {
+        return Product::create([
+            'vendor_id' => $vendor->id,
+            'name' => 'Test Package',
+            'description' => json_encode(['category' => 'data']),
+            'price' => $price,
+            'is_active' => true,
+        ]);
+    }
 
     public function test_checkout_allows_missing_payer_phone_for_redirect_gateways(): void
     {
@@ -34,6 +46,7 @@ class CheckoutPayerPhoneRequirementsTest extends TestCase
         ]);
 
         $vendor = Vendor::factory()->create();
+        $product = $this->product($vendor);
 
         Http::fake(function ($request) {
             if ((string) $request->url() === 'https://api.paystack.co/transaction/initialize') {
@@ -64,7 +77,7 @@ class CheckoutPayerPhoneRequirementsTest extends TestCase
             // Intentionally omit payer_phone for redirect gateways.
             'is_reseller_product' => 0,
             'reseller_product_id' => null,
-            'original_product_id' => null,
+            'original_product_id' => $product->id,
         ];
 
         $resp = $this->postJson(route('checkout.process'), $payload);
@@ -97,6 +110,7 @@ class CheckoutPayerPhoneRequirementsTest extends TestCase
         ]);
 
         $vendor = Vendor::factory()->create();
+        $product = $this->product($vendor);
 
         Http::fake(function ($request) {
             $url = (string) $request->url();
@@ -132,7 +146,7 @@ class CheckoutPayerPhoneRequirementsTest extends TestCase
             // Intentionally omit payer_phone.
             'is_reseller_product' => 0,
             'reseller_product_id' => null,
-            'original_product_id' => null,
+            'original_product_id' => $product->id,
         ];
 
         $resp = $this->postJson(route('checkout.process'), $payload);
@@ -141,8 +155,8 @@ class CheckoutPayerPhoneRequirementsTest extends TestCase
         $resp->assertJson([
             'success' => true,
         ]);
-		$this->assertNotEmpty($resp->json('reference'));
-		$this->assertNotEmpty($resp->json('verify_url'));
-		$this->assertNull($resp->json('redirect'));
+        $this->assertNotEmpty($resp->json('reference'));
+        $this->assertNotEmpty($resp->json('verify_url'));
+        $this->assertNull($resp->json('redirect'));
     }
 }

@@ -85,6 +85,7 @@ class UssdSubscriptionController extends Controller
         $result = $this->purchases->initiate($vendor, $plan, [
             'payer_phone' => $request->input('payer_phone'),
             'network' => $request->input('network'),
+            'idempotency_key' => $request->input('idempotency_key'),
         ]);
 
         if (! ($result['success'] ?? false)) {
@@ -94,10 +95,12 @@ class UssdSubscriptionController extends Controller
         if ($request->wantsJson() || $request->ajax()) {
             return response()->json([
                 'success' => true,
+                'status' => $result['status'] ?? null,
                 'reference' => $result['reference'],
                 'authorization_url' => $result['authorization_url'],
                 'flow_type' => $result['flow_type'],
                 'gateway_name' => $result['gateway_name'],
+                'checkout_config' => $result['checkout_config'] ?? null,
                 'payment_type' => UssdSubscriptionPurchaseService::PURPOSE,
             ]);
         }

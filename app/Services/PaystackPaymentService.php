@@ -1,10 +1,12 @@
 <?php
+
 namespace App\Services;
 
 use App\Contracts\Gateways\CollectsPayments;
 use App\Contracts\Gateways\HandlesGenericPayments;
 use App\Models\Order;
 use App\Models\PaymentGatewayConfig;
+use App\Support\PaymentVerificationState;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -13,14 +15,17 @@ use Illuminate\Support\Facades\Log;
 class PaystackPaymentService implements CollectsPayments, HandlesGenericPayments
 {
     protected string $publicKey;
+
     protected string $secretKey;
+
     protected string $paymentUrl;
+
     protected ?PaymentGatewayConfig $config;
 
     public function __construct(?PaymentGatewayConfig $config = null)
     {
         $this->config = $config ?? PaymentGatewayConfig::getDefault(PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION);
-        
+
         if ($this->config && $this->config->gateway_name === PaymentGatewayConfig::GATEWAY_PAYSTACK) {
             $this->publicKey = $this->config->getConfig('public_key', '');
             $this->secretKey = $this->config->getConfig('secret_key', '');
@@ -96,7 +101,8 @@ class PaystackPaymentService implements CollectsPayments, HandlesGenericPayments
     private function generateReference(?int $orderId = null): string
     {
         $suffix = $orderId !== null ? (string) $orderId : (string) time();
-        return 'XTRA4U-' . strtoupper(uniqid()) . '-' . $suffix;
+
+        return 'XTRA4U-'.strtoupper(uniqid()).'-'.$suffix;
     }
 
     /**
@@ -108,49 +114,49 @@ class PaystackPaymentService implements CollectsPayments, HandlesGenericPayments
      * this method; each handles its own pre/post logic around the shared call.
      *
      * @param  array  $payload  Already-built Paystack payload (email, amount, reference, …)
-     * @return array  ['success' => bool, 'message' => string, 'reference' => string,
-     *                 'authorization_url' => string|null, …]
+     * @return array ['success' => bool, 'message' => string, 'reference' => string,
+     *               'authorization_url' => string|null, …]
      */
     private function callPaystackInitialize(array $payload): array
     {
         try {
             $response = $this->getHttpClient()
-                ->post($this->paymentUrl . '/transaction/initialize', $payload);
+                ->post($this->paymentUrl.'/transaction/initialize', $payload);
             $data = $response->json();
 
             if ($response->successful() && ($data['status'] ?? false)) {
                 return [
-                    'success'           => true,
-                    'message'           => $data['message'] ?? 'Payment initialized.',
-                    'reference'         => $payload['reference'],
+                    'success' => true,
+                    'message' => $data['message'] ?? 'Payment initialized.',
+                    'reference' => $payload['reference'],
                     'authorization_url' => $data['data']['authorization_url'] ?? null,
-                    'flow_type'         => 'redirect', // Paystack is always a redirect gateway
+                    'flow_type' => 'redirect', // Paystack is always a redirect gateway
                 ];
             }
 
             Log::warning('Paystack transaction/initialize failed', [
-                'payload'     => $payload,
-                'body'        => $response->body(),
-                'json'        => $data,
+                'payload' => $payload,
+                'body' => $response->body(),
+                'json' => $data,
                 'http_status' => $response->status(),
             ]);
 
             return [
-                'success'     => false,
-                'message'     => $data['message'] ?? 'Failed to initialize payment.',
-                'reference'   => $payload['reference'],
+                'success' => false,
+                'message' => $data['message'] ?? 'Failed to initialize payment.',
+                'reference' => $payload['reference'],
                 'http_status' => $response->status(),
-                'errors'      => $data['data'] ?? null,
+                'errors' => $data['data'] ?? null,
             ];
         } catch (\Exception $e) {
             Log::error('Paystack transaction/initialize exception', [
                 'payload' => $payload,
-                'error'   => $e->getMessage(),
+                'error' => $e->getMessage(),
             ]);
 
             return [
-                'success'   => false,
-                'message'   => 'Error initializing payment: ' . $e->getMessage(),
+                'success' => false,
+                'message' => 'Error initializing payment: '.$e->getMessage(),
                 'reference' => $payload['reference'],
             ];
         }
@@ -165,9 +171,9 @@ class PaystackPaymentService implements CollectsPayments, HandlesGenericPayments
         $reference = $this->generateReference($order->id);
 
         $payload = [
-            'email'        => $email,
-            'amount'       => self::toKobo($amount), // Paystack expects amount in kobo/pesewas
-            'reference'    => $reference,
+            'email' => $email,
+            'amount' => self::toKobo($amount), // Paystack expects amount in kobo/pesewas
+            'reference' => $reference,
             'callback_url' => route('payment.callback'),
         ];
 
@@ -177,8 +183,8 @@ class PaystackPaymentService implements CollectsPayments, HandlesGenericPayments
             // Persist reference for later verification
             $order->update([
                 'payment_reference' => $reference,
-                'payment_status'    => 'pending',
-                'payment_gateway'   => 'paystack',
+                'payment_status' => 'pending',
+                'payment_gateway' => 'paystack',
             ]);
         } else {
             // Log order context on failure (callPaystackInitialize logs payload-level detail)
@@ -197,16 +203,17 @@ class PaystackPaymentService implements CollectsPayments, HandlesGenericPayments
         // cached the result, return it instantly without a round-trip to Paystack.
         // The webhook fires *before* the user is redirected back, so in the normal
         // happy path this cache entry will already exist.
-        $cacheKey = 'paystack_verify:' . $reference;
+        $cacheKey = 'paystack_verify:'.$reference;
         $cached = Cache::get($cacheKey);
         if (is_array($cached) && ($cached['success'] ?? false)) {
             Log::debug('Paystack verifyPayment: serving from cache', ['reference' => $reference]);
+
             return $cached;
         }
 
         try {
             $response = $this->getHttpClient()
-                ->get($this->paymentUrl . '/transaction/verify/' . $reference);
+                ->get($this->paymentUrl.'/transaction/verify/'.$reference);
             $data = $response->json();
             if ($response->successful() && ($data['status'] ?? false)) {
                 $payloadData = $data['data'] ?? [];
@@ -221,18 +228,34 @@ class PaystackPaymentService implements CollectsPayments, HandlesGenericPayments
                     'data' => $payloadData,
                 ];
 
-                // Cache the successful result so subsequent calls (e.g. repeated
-                // callback page loads) skip the API entirely.
-                Cache::put($cacheKey, $result, now()->addMinutes(15));
+                // Phase 5 fix: this used to cache ANY authoritative response
+                // here — including a merely-'pending' or even a 'failed'
+                // transaction status — for a full 15 minutes, keyed only on
+                // $response->successful() && the API call itself succeeding.
+                // A payment that later genuinely settled (success or a
+                // provider-confirmed failure) could stay masked behind a
+                // stale 'pending' read for up to 15 minutes, for every
+                // caller sharing this cache key: checkout.verify polling,
+                // PaymentReconciliationService, and CheckoutIntentGuard's
+                // own synchronous re-check all read through this same cache.
+                // Only a genuinely settled SUCCESS is safe to cache — it can
+                // never legitimately change again — mirroring exactly what
+                // PaystackWebhookController itself already caches under the
+                // same key (only after confirming charge.success).
+                if (PaymentVerificationState::isSuccess($result)) {
+                    Cache::put($cacheKey, $result, now()->addMinutes(15));
+                }
 
                 return $result;
             }
+
             return [
                 'success' => false,
                 'message' => $data['message'] ?? 'Failed to verify payment.',
             ];
         } catch (\Exception $e) {
             Log::error('Paystack Verify Exception', ['error' => $e->getMessage()]);
+
             return [
                 'success' => false,
                 'message' => 'Error verifying payment.',
@@ -249,11 +272,11 @@ class PaystackPaymentService implements CollectsPayments, HandlesGenericPayments
         $reference = $reference ?? $this->generateReference();
 
         $payload = [
-            'email'        => $email,
-            'amount'       => self::toKobo($amount), // Paystack expects amount in kobo/pesewas
-            'reference'    => $reference,
+            'email' => $email,
+            'amount' => self::toKobo($amount), // Paystack expects amount in kobo/pesewas
+            'reference' => $reference,
             'callback_url' => $callbackUrl,
-            'metadata'     => $metadata,
+            'metadata' => $metadata,
         ];
 
         return $this->callPaystackInitialize($payload);
@@ -264,7 +287,7 @@ class PaystackPaymentService implements CollectsPayments, HandlesGenericPayments
      */
     public function isConfigured(): bool
     {
-        return !empty($this->publicKey) && !empty($this->secretKey) && !empty($this->paymentUrl);
+        return ! empty($this->publicKey) && ! empty($this->secretKey) && ! empty($this->paymentUrl);
     }
 
     /**

@@ -27,6 +27,23 @@ class UssdSubscription extends Model
 
     public const STATUS_CANCELLED = 'cancelled';
 
+    /**
+     * Phase 5: a provider-confirmed terminal failure of the ORIGINAL purchase
+     * attempt (never assigned for mere network/verification uncertainty —
+     * see UssdSubscriptionPurchaseService::failPayment(), the only writer).
+     * Deliberately distinct from STATUS_CANCELLED, which means something
+     * different for this model: an ACTIVE/PAID/SUSPENDED subscription that
+     * was superseded by a renewal or explicitly cancelled — never "a purchase
+     * that never activated". Conflating the two would make occupiesSlot()/
+     * LIVE_STATUSES ambiguous and would misreport a failed purchase as "your
+     * subscription was cancelled" in the admin UI. Before this, a failed
+     * payment left `status` at STATUS_PENDING_PAYMENT forever (only a
+     * ussd_subscription_events row recorded it) — every payable type other
+     * than this one already reaches an explicit terminal status on
+     * confirmed failure; this brings USSD in line with that same contract.
+     */
+    public const STATUS_PAYMENT_FAILED = 'payment_failed';
+
     public const STATUSES = [
         self::STATUS_PENDING_PAYMENT,
         self::STATUS_PAID,
@@ -34,6 +51,7 @@ class UssdSubscription extends Model
         self::STATUS_EXPIRED,
         self::STATUS_SUSPENDED,
         self::STATUS_CANCELLED,
+        self::STATUS_PAYMENT_FAILED,
     ];
 
     /**
@@ -72,6 +90,12 @@ class UssdSubscription extends Model
         'notified_thresholds',
         'current_for_vendor_id',
         'metadata',
+        'reconciliation_attempts',
+        'last_reconciliation_at',
+        'next_reconciliation_at',
+        'reconciliation_note',
+        'idempotency_scope',
+        'idempotency_key',
     ];
 
     protected $casts = [
@@ -86,6 +110,8 @@ class UssdSubscription extends Model
         'expires_at' => 'datetime',
         'activated_at' => 'datetime',
         'cancelled_at' => 'datetime',
+        'last_reconciliation_at' => 'datetime',
+        'next_reconciliation_at' => 'datetime',
     ];
 
     public function vendor(): BelongsTo
