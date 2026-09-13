@@ -137,6 +137,7 @@ class SkdataplugClient implements ExternalFulfillmentClient, SupportsStatusPolli
                 'external_reference' => null,
                 'message'            => $message,
                 'raw'                => $body,
+                'http_status'        => $httpStatus,
             ];
         }
     }
