@@ -39,15 +39,59 @@ use Illuminate\Support\Facades\Log;
  * The exact duplicate amount is never guessed, never derived from a current
  * wallet-balance diff, and never recomputed from product pricing. It is read
  * straight off the `vendor_earning` column of each affected order's own
- * `transactions` rows (payment_type='order', payment_status IN
- * ('successful','completed')) grouped by `vendor_id` — the exact same
- * financial value PaymentService's own wallet increment used today, and the
- * same source `WalletService::reverseOrderEarnings()` already uses for its
- * own (differently-scoped) order-refund reversal. For a reseller order this
+ * `transactions` rows, grouped by `vendor_id` — the exact same financial
+ * value PaymentService's own wallet increment used today, and the same
+ * source `WalletService::reverseOrderEarnings()` already uses for its own
+ * (differently-scoped) order-refund reversal. For a reseller order this
  * naturally covers BOTH the owner-vendor row and the reseller-vendor row (and
  * every leg of a deeper multi-level chain, if present) — there is nothing
  * reseller-specific to special-case, because every vendor who earned
  * something on the order has their own Transaction row.
+ *
+ * A qualifying row is one where (see qualifyingEarningRowsQuery()):
+ *   - `payment_type = 'order'` (modern, explicitly tagged), OR
+ *   - `payment_type IS NULL`   (legacy — see below for why this is safe),
+ *   - `payment_status` IN ('successful', 'completed'),
+ *   - `vendor_earning > 0`,
+ *   - `vendor_id` IS NOT NULL.
+ *
+ * Why trusting a NULL `payment_type` here is safe: `payment_type` was added
+ * (migration `2025_12_25_030000_add_polymorphic_support_to_transactions`)
+ * long after `transactions.order_id` already existed, and its own backfill
+ * only reached rows that existed at that moment — rows written afterwards by
+ * two still-live legacy code paths never got it stamped:
+ *   1. `PaymentService`'s pending-placeholder `Transaction::create()` calls
+ *      (regular + reseller) set `order_id`/`vendor_id` but no `payment_type`;
+ *      `upsertOrderTransaction()` later finds that exact row by
+ *      (`order_id`, `vendor_id`) and `update()`s it in place to add the
+ *      final earning — its `$attributes` array never includes
+ *      `payment_type`, so the column stays NULL forever even once the row is
+ *      finalized.
+ *   2. `PurchaseController::paymentCallback()` (a separate, self-contained
+ *      synchronous purchase flow) creates the Order and its Transaction
+ *      row(s) directly with `order_id` set and never sets `payment_type`
+ *      either.
+ * Every OTHER payment type this app has (`afa_registration`,
+ * `result_checker`, `wallet_topup`, the USSD subscription purpose) is
+ * created by code that never touches `transactions.order_id` at all — it did
+ * not even become nullable until that same 2025-12-25 migration, specifically
+ * so those non-order rows could omit it. So `order_id` is, and has always
+ * been, exclusive to order-earning rows; scoping to the incident's own
+ * `order_id`s first (as `qualifyingEarningRowsQuery()` does) means a NULL
+ * `payment_type` row picked up here cannot possibly be an afa/result-checker/
+ * wallet-topup/USSD row — there is no code path that could have produced one
+ * with an `order_id`.
+ *
+ * `upsertOrderTransaction()`'s lookup-by-(`order_id`,`vendor_id`) (not by
+ * `payment_type`) is also why a genuine duplicate ROW for the same
+ * (order, vendor) pair — one legacy NULL row and one modern 'order' row both
+ * finalized — should not be possible through normal completion: it always
+ * finds and updates whichever row already exists for that pair instead of
+ * inserting a second one. As a defensive backstop anyway (see
+ * `analyze()`/`reverseOrder()`), if more than one qualifying finalized row is
+ * ever found for the same (order, vendor) pair, that whole order is pulled
+ * out of automatic handling and left for manual review rather than having
+ * its rows silently summed.
  *
  * This is a pure DATABASE STATE CLEANUP. It never talks to a payment gateway
  * or an external fulfillment provider, never dispatches a fulfillment job,
@@ -134,16 +178,53 @@ class PaymentsReverseLegacyDuplicateCredits extends Command
     }
 
     /**
+     * The exact set of `transactions` rows that represent a genuine
+     * per-vendor order-earning credit for the given affected order id(s).
+     * Shared by `analyze()` (read-only report) and `reverseOrder()`
+     * (re-derivation under lock at write time) so the two can never drift.
+     *
+     * `order_id` must always be scoped in FIRST by the caller (via
+     * `whereIn`/`where` on the returned builder is not enough on its own —
+     * every caller here passes affected/locked order ids already resolved
+     * from the incident-eligible `orders` query). See the class docblock for
+     * why a NULL `payment_type` is safe to trust once scoped that way.
+     *
+     * @param  \Illuminate\Support\Collection<int,int>|array<int,int>|int  $orderIds
+     */
+    private function qualifyingEarningRowsQuery($orderIds): \Illuminate\Database\Eloquent\Builder
+    {
+        return Transaction::query()
+            ->whereIn('order_id', is_iterable($orderIds) ? $orderIds : [$orderIds])
+            ->where(function ($query) {
+                $query->where('payment_type', 'order')->orWhereNull('payment_type');
+            })
+            ->whereIn('payment_status', ['successful', 'completed'])
+            ->where('vendor_earning', '>', 0)
+            ->whereNotNull('vendor_id');
+    }
+
+    /**
      * Gather the incident's affected orders and the exact per-(order,vendor)
-     * duplicate amount, split into "already reversed" and "still pending"
-     * buckets. Read-only — used for both the dry-run report and to decide,
-     * before ever writing, which vendors are safe to touch.
+     * duplicate amount, split into "already reversed", "still pending", and
+     * "anomalous" (see below) buckets. Read-only — used for both the
+     * dry-run report and to decide, before ever writing, which vendors are
+     * safe to touch.
+     *
+     * An order is "anomalous" when more than one qualifying finalized row
+     * exists for the same (order, vendor) pair — which the class docblock
+     * explains should not happen through normal completion. Rather than
+     * trust `SUM()` to silently combine rows that might not both represent
+     * the same single duplicated credit, such orders are pulled out of
+     * `pending_by_order_vendor` entirely (so `executeReversal()` never even
+     * considers them) and reported separately for manual review.
      *
      * @return array{
      *     order_ids: \Illuminate\Support\Collection<int,int>,
      *     pending_by_order_vendor: array<int,array<int,float>>,
      *     pending_by_vendor: array<int,float>,
      *     already_reversed_by_vendor: array<int,float>,
+     *     anomalous_by_vendor: array<int,float>,
+     *     anomalous_order_ids: array<int,int>,
      * }
      */
     private function analyze(Carbon $incidentStart, Carbon $incidentEnd): array
@@ -162,6 +243,8 @@ class PaymentsReverseLegacyDuplicateCredits extends Command
                 'pending_by_order_vendor' => [],
                 'pending_by_vendor' => [],
                 'already_reversed_by_vendor' => [],
+                'anomalous_by_vendor' => [],
+                'anomalous_order_ids' => [],
             ];
         }
 
@@ -172,16 +255,34 @@ class PaymentsReverseLegacyDuplicateCredits extends Command
 
         // The exact, already-persisted per-vendor earning for each affected
         // order — never a recomputation, never a current-balance diff.
-        $earningRows = Transaction::query()
-            ->whereIn('order_id', $orderIds)
-            ->where('payment_type', 'order')
-            ->whereIn('payment_status', ['successful', 'completed'])
-            ->where('vendor_earning', '>', 0)
+        $earningRows = $this->qualifyingEarningRowsQuery($orderIds)
             ->get(['order_id', 'vendor_id', 'vendor_earning']);
+
+        // Defensive duplicate-row detection (see class docblock): count how
+        // many qualifying rows exist per (order, vendor) pair before summing
+        // anything.
+        $rowCounts = [];
+        foreach ($earningRows as $row) {
+            $orderId = (int) $row->order_id;
+            $vendorId = (int) $row->vendor_id;
+            $rowCounts[$orderId][$vendorId] = ($rowCounts[$orderId][$vendorId] ?? 0) + 1;
+        }
+
+        $anomalousOrderIds = [];
+        foreach ($rowCounts as $orderId => $vendorCounts) {
+            foreach ($vendorCounts as $count) {
+                if ($count > 1) {
+                    $anomalousOrderIds[$orderId] = true;
+
+                    break;
+                }
+            }
+        }
 
         $pendingByOrderVendor = [];
         $pendingByVendor = [];
         $alreadyReversedByVendor = [];
+        $anomalousByVendor = [];
 
         foreach ($earningRows as $row) {
             $orderId = (int) $row->order_id;
@@ -189,6 +290,12 @@ class PaymentsReverseLegacyDuplicateCredits extends Command
             $amount = round((float) $row->vendor_earning, 2);
 
             if ($amount <= 0.0) {
+                continue;
+            }
+
+            if (isset($anomalousOrderIds[$orderId])) {
+                $anomalousByVendor[$vendorId] = round(($anomalousByVendor[$vendorId] ?? 0.0) + $amount, 2);
+
                 continue;
             }
 
@@ -207,6 +314,8 @@ class PaymentsReverseLegacyDuplicateCredits extends Command
             'pending_by_order_vendor' => $pendingByOrderVendor,
             'pending_by_vendor' => $pendingByVendor,
             'already_reversed_by_vendor' => $alreadyReversedByVendor,
+            'anomalous_by_vendor' => $anomalousByVendor,
+            'anomalous_order_ids' => array_keys($anomalousOrderIds),
         ];
     }
 
@@ -217,6 +326,7 @@ class PaymentsReverseLegacyDuplicateCredits extends Command
     {
         $vendorIds = collect(array_keys($analysis['pending_by_vendor']))
             ->merge(array_keys($analysis['already_reversed_by_vendor']))
+            ->merge(array_keys($analysis['anomalous_by_vendor']))
             ->unique()
             ->sort()
             ->values();
@@ -229,11 +339,14 @@ class PaymentsReverseLegacyDuplicateCredits extends Command
             $vendor = $vendors->get($vendorId);
             $pending = $analysis['pending_by_vendor'][$vendorId] ?? 0.0;
             $alreadyReversed = $analysis['already_reversed_by_vendor'][$vendorId] ?? 0.0;
-            $duplicateCredit = round($pending + $alreadyReversed, 2);
+            $anomalous = $analysis['anomalous_by_vendor'][$vendorId] ?? 0.0;
+            $duplicateCredit = round($pending + $alreadyReversed + $anomalous, 2);
             $currentBalance = $vendor ? (float) $vendor->wallet_balance : null;
 
             if (! $vendor) {
                 $result = 'SKIPPED';
+            } elseif ($pending <= 0.0 && $anomalous > 0.0) {
+                $result = 'ANOMALY - MANUAL REVIEW';
             } elseif ($pending <= 0.0) {
                 $result = 'ALREADY REVERSED';
             } elseif ($currentBalance >= $pending) {
@@ -336,13 +449,20 @@ class PaymentsReverseLegacyDuplicateCredits extends Command
 
             // Re-derive the exact duplicate amount fresh, under the lock —
             // never trust the precomputed figure for the write itself.
-            $currentEarnings = Transaction::where('order_id', $order->id)
-                ->where('payment_type', 'order')
-                ->whereIn('payment_status', ['successful', 'completed'])
-                ->where('vendor_earning', '>', 0)
+            $currentEarningRows = $this->qualifyingEarningRowsQuery($order->id)
                 ->get(['vendor_id', 'vendor_earning'])
-                ->groupBy('vendor_id')
-                ->map(fn ($rows) => round((float) $rows->sum('vendor_earning'), 2));
+                ->groupBy('vendor_id');
+
+            // Defensive backstop, re-checked here too even though analyze()
+            // already excludes anomalous orders from ever reaching this
+            // method: if a second qualifying row for the same (order,
+            // vendor) pair has appeared since analysis (e.g. a concurrent
+            // write), never silently sum them — skip for manual review.
+            if ($currentEarningRows->contains(fn ($rows) => $rows->count() > 1)) {
+                return null;
+            }
+
+            $currentEarnings = $currentEarningRows->map(fn ($rows) => round((float) $rows->sum('vendor_earning'), 2));
 
             if ($currentEarnings->isEmpty()) {
                 // Nothing to reverse, but still mark it so it is never
@@ -430,6 +550,8 @@ class PaymentsReverseLegacyDuplicateCredits extends Command
         $duplicateTotal = round(collect($vendorReport)->sum('duplicate_credit'), 2);
         $safeTotal = round(collect($vendorReport)->where('result', 'SAFE TO REVERSE')->sum('pending'), 2);
         $manualReviewTotal = round(collect($vendorReport)->where('result', 'INSUFFICIENT BALANCE')->sum('pending'), 2);
+        $anomalousTotal = round(collect($analysis['anomalous_by_vendor'])->sum(), 2);
+        $anomalousOrders = count($analysis['anomalous_order_ids']);
 
         $this->newLine();
         $this->table(
@@ -439,9 +561,14 @@ class PaymentsReverseLegacyDuplicateCredits extends Command
                 ['Affected vendors', count($vendorReport)],
                 ['Duplicate credit total', 'GHS '.number_format($duplicateTotal, 2)],
                 ['Safe-to-reverse total', 'GHS '.number_format($safeTotal, 2)],
-                ['Manual-review total', 'GHS '.number_format($manualReviewTotal, 2)],
+                ['Manual-review total (insufficient balance)', 'GHS '.number_format($manualReviewTotal, 2)],
+                ['Manual-review total (anomalous — multiple transaction rows)', $anomalousOrders.' order(s), GHS '.number_format($anomalousTotal, 2)],
             ]
         );
+
+        if ($anomalousOrders > 0) {
+            $this->warn("{$anomalousOrders} order(s) had more than one qualifying transaction row for the same vendor and were excluded from automatic reversal — investigate manually.");
+        }
 
         $this->newLine();
         if ($execute) {

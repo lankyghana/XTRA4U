@@ -92,6 +92,50 @@ class PaymentsReverseLegacyDuplicateCreditsCommandTest extends TestCase
         ]);
     }
 
+    /**
+     * A "legacy" order-earning row: same shape as `transaction()` but with
+     * `payment_type` (and the polymorphic columns) left NULL — reproducing
+     * rows written by PaymentService's pending-placeholder path or
+     * PurchaseController::paymentCallback()'s direct-create path, neither of
+     * which ever stamps `payment_type`. See the command's class docblock.
+     */
+    private function legacyTransaction(Order $order, Vendor $vendor, float $amount, float $commission, float $vendorEarning, string $paymentStatus = 'successful'): Transaction
+    {
+        return Transaction::create([
+            'order_id' => $order->id,
+            'vendor_id' => $vendor->id,
+            'recipient_phone' => $order->recipient_phone_number,
+            'amount' => $amount,
+            'commission_amount' => $commission,
+            'vendor_earning' => $vendorEarning,
+            'payment_status' => $paymentStatus,
+            // payment_type intentionally omitted — stays NULL.
+        ]);
+    }
+
+    /**
+     * A transaction of an unrelated payment type (afa_registration,
+     * result_checker, wallet_topup, ...) that happens to reference the same
+     * vendor. In real production this row would never carry the incident
+     * order's `order_id` (only order-earning rows ever populate that
+     * column), but this test still pins the id to the affected order to
+     * prove the payment_type half of the filter — not just the order_id
+     * scoping — actively excludes non-order rows.
+     */
+    private function unrelatedTypeTransaction(Order $order, Vendor $vendor, float $vendorEarning, string $paymentType): Transaction
+    {
+        return Transaction::create([
+            'order_id' => $order->id,
+            'vendor_id' => $vendor->id,
+            'recipient_phone' => $order->recipient_phone_number,
+            'amount' => $vendorEarning,
+            'commission_amount' => 0,
+            'vendor_earning' => $vendorEarning,
+            'payment_status' => 'successful',
+            'payment_type' => $paymentType,
+        ]);
+    }
+
     // -----------------------------------------------------------------
     // 1. Dry-run makes zero writes
     // -----------------------------------------------------------------
@@ -475,5 +519,177 @@ class PaymentsReverseLegacyDuplicateCreditsCommandTest extends TestCase
         $this->assertEquals(500.00, (float) $vendor->fresh()->wallet_balance);
         $this->assertNull($notOld->fresh()->duplicate_credit_reversed_at);
         $this->assertNull($differentDay->fresh()->duplicate_credit_reversed_at);
+    }
+
+    // -----------------------------------------------------------------
+    // 13. Legacy payment_type=NULL production-compatibility fix
+    // -----------------------------------------------------------------
+
+    public function test_legacy_null_payment_type_transaction_is_included(): void
+    {
+        // 336-NULL-row-style legacy transaction: no payment_type stamped at all.
+        $vendor = $this->vendor(500.00);
+        $order = $this->incidentOrder($vendor);
+        $this->legacyTransaction($order, $vendor, 102.04, 2.04, 100.00);
+
+        $this->artisan('payments:reverse-legacy-duplicate-credits', [
+            '--date' => self::INCIDENT_DATE,
+            '--execute' => true,
+        ])->assertExitCode(0);
+
+        $this->assertEquals(400.00, (float) $vendor->fresh()->wallet_balance, 'A legacy NULL payment_type row must be reversed exactly like a payment_type=order row.');
+        $this->assertNotNull($order->fresh()->duplicate_credit_reversed_at);
+        $this->assertDatabaseHas('wallet_ledgers', ['vendor_id' => $vendor->id, 'amount' => 100.00]);
+    }
+
+    public function test_modern_order_payment_type_transaction_is_included(): void
+    {
+        $vendor = $this->vendor(500.00);
+        $order = $this->incidentOrder($vendor);
+        $this->transaction($order, $vendor, 102.04, 2.04, 100.00); // payment_type = 'order'
+
+        $this->artisan('payments:reverse-legacy-duplicate-credits', [
+            '--date' => self::INCIDENT_DATE,
+            '--execute' => true,
+        ])->assertExitCode(0);
+
+        $this->assertEquals(400.00, (float) $vendor->fresh()->wallet_balance);
+    }
+
+    public function test_unrelated_transaction_types_are_excluded(): void
+    {
+        // 400 historical order earning + 100 duplicate + 120 unrelated-type earnings.
+        $vendor = $this->vendor(400.00 + 100.00 + 30.00 + 40.00 + 50.00);
+        $order = $this->incidentOrder($vendor);
+        $this->transaction($order, $vendor, 102.04, 2.04, 100.00);
+
+        // None of these must ever be swept into the reversal, even though
+        // they reference the same vendor (and, unrealistically, the same
+        // order id) — payment_type must positively exclude them.
+        $this->unrelatedTypeTransaction($order, $vendor, 30.00, 'afa_registration');
+        $this->unrelatedTypeTransaction($order, $vendor, 40.00, 'result_checker');
+        $this->unrelatedTypeTransaction($order, $vendor, 50.00, 'wallet_topup');
+
+        $this->artisan('payments:reverse-legacy-duplicate-credits', [
+            '--date' => self::INCIDENT_DATE,
+            '--execute' => true,
+        ])->assertExitCode(0);
+
+        // Only the 100 order-earning duplicate is reversed; the 120 in
+        // unrelated-type earnings survive untouched.
+        $this->assertEquals(520.00, (float) $vendor->fresh()->wallet_balance);
+        $this->assertDatabaseCount('wallet_ledgers', 1);
+        $this->assertDatabaseHas('wallet_ledgers', ['vendor_id' => $vendor->id, 'amount' => 100.00]);
+    }
+
+    public function test_mixed_legacy_and_modern_rows_calculate_correctly(): void
+    {
+        // Reseller order where the owner's row was never backfilled
+        // (legacy/NULL) but the reseller's row is a modern payment_type='order' row.
+        $owner = $this->vendor(1000.00); // 900 historical + 100 duplicate
+        $reseller = $this->vendor(250.00); // 200 historical + 50 duplicate
+
+        $order = $this->incidentOrder($owner, [
+            'is_reseller_order' => true,
+            'owner_vendor_id' => $owner->id,
+            'reseller_vendor_id' => $reseller->id,
+            'owner_earning' => 100.00,
+            'reseller_earning' => 50.00,
+        ]);
+        $this->legacyTransaction($order, $owner, 102.04, 2.04, 100.00);
+        $this->transaction($order, $reseller, 51.02, 1.02, 50.00);
+
+        $this->artisan('payments:reverse-legacy-duplicate-credits', [
+            '--date' => self::INCIDENT_DATE,
+            '--execute' => true,
+        ])->assertExitCode(0);
+
+        $this->assertEquals(900.00, (float) $owner->fresh()->wallet_balance, 'Legacy NULL leg must be reversed.');
+        $this->assertEquals(200.00, (float) $reseller->fresh()->wallet_balance, 'Modern order-typed leg must be reversed.');
+        $this->assertNotNull($order->fresh()->duplicate_credit_reversed_at);
+    }
+
+    public function test_expected_total_is_sum_of_both_representations(): void
+    {
+        // Reproduces the production dry-run undercount: one order with a
+        // payment_type='order' row (the 37/GHS 39.22-style bucket) and
+        // another with a legacy NULL row (the 336/GHS 2,057.21-style
+        // bucket). The report's duplicate-credit total must be the sum of
+        // BOTH, not just the modern one.
+        $vendorA = $this->vendor(500.00);
+        $orderA = $this->incidentOrder($vendorA);
+        $this->transaction($orderA, $vendorA, 102.04, 2.04, 100.00); // modern
+
+        $vendorB = $this->vendor(2100.00);
+        $orderB = $this->incidentOrder($vendorB);
+        $this->legacyTransaction($orderB, $vendorB, 2058.38, 1.17, 2057.21); // legacy
+
+        $this->artisan('payments:reverse-legacy-duplicate-credits', ['--date' => self::INCIDENT_DATE])
+            ->expectsOutputToContain('GHS 2,157.21')
+            ->assertExitCode(0);
+
+        // Confirm --execute actually moves the full combined total, not just
+        // the modern-typed slice.
+        $this->artisan('payments:reverse-legacy-duplicate-credits', [
+            '--date' => self::INCIDENT_DATE,
+            '--execute' => true,
+        ])->assertExitCode(0);
+
+        $this->assertEquals(400.00, (float) $vendorA->fresh()->wallet_balance);
+        $this->assertEquals(42.79, (float) $vendorB->fresh()->wallet_balance);
+
+        $totalReversed = (float) WalletLedger::where('source', PaymentsReverseLegacyDuplicateCredits::LEDGER_SOURCE)->sum('amount');
+        $this->assertEqualsWithDelta(2157.21, $totalReversed, 0.001);
+    }
+
+    public function test_running_command_twice_does_not_double_reverse_legacy_null_rows(): void
+    {
+        $vendor = $this->vendor(500.00);
+        $order = $this->incidentOrder($vendor);
+        $this->legacyTransaction($order, $vendor, 102.04, 2.04, 100.00);
+
+        $this->artisan('payments:reverse-legacy-duplicate-credits', [
+            '--date' => self::INCIDENT_DATE,
+            '--execute' => true,
+        ])->assertExitCode(0);
+
+        $this->assertEquals(400.00, (float) $vendor->fresh()->wallet_balance);
+
+        $this->artisan('payments:reverse-legacy-duplicate-credits', [
+            '--date' => self::INCIDENT_DATE,
+            '--execute' => true,
+        ])->assertExitCode(0);
+
+        $this->assertEquals(400.00, (float) $vendor->fresh()->wallet_balance, 'A second run must not subtract the legacy row twice.');
+        $this->assertDatabaseCount('wallet_ledgers', 1);
+    }
+
+    // -----------------------------------------------------------------
+    // 14. Duplicate transaction ROWS for the same (order, vendor) pair
+    // -----------------------------------------------------------------
+
+    public function test_order_with_duplicate_transaction_rows_for_same_vendor_is_excluded_from_auto_reversal(): void
+    {
+        // Anomaly: two separate qualifying finalized rows for the SAME
+        // (order, vendor) pair (one legacy NULL, one modern 'order') — the
+        // class docblock explains this should never happen via normal
+        // completion, so it must be routed to manual review instead of
+        // having both rows silently summed and over-reversed.
+        $vendor = $this->vendor(500.00);
+        $order = $this->incidentOrder($vendor);
+        $this->transaction($order, $vendor, 102.04, 2.04, 100.00);
+        $this->legacyTransaction($order, $vendor, 102.04, 2.04, 100.00);
+
+        $this->artisan('payments:reverse-legacy-duplicate-credits', [
+            '--date' => self::INCIDENT_DATE,
+            '--execute' => true,
+        ])
+            ->expectsOutputToContain('ANOMALY')
+            ->assertExitCode(0);
+
+        // Untouched — never summed/reversed automatically.
+        $this->assertEquals(500.00, (float) $vendor->fresh()->wallet_balance);
+        $this->assertNull($order->fresh()->duplicate_credit_reversed_at);
+        $this->assertDatabaseCount('wallet_ledgers', 0);
     }
 }
