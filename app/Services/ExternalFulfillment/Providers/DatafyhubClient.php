@@ -79,6 +79,7 @@ class DatafyhubClient implements ExternalFulfillmentClient
                 'external_reference' => null,
                 'message' => $this->limitMessage($message),
                 'raw' => $body,
+                'http_status' => $status,
             ];
         }
     }

@@ -82,6 +82,7 @@ class XpresPortalClient implements ExternalFulfillmentClient
         $lastErrorMessage = 'Unable to submit order to XpresPortal.';
         $lastRaw = null;
         $lastReference = null;
+        $lastHttpStatus = null;
 
         foreach ($endpoints as $url) {
             foreach ($payloadVariants as $payload) {
@@ -131,12 +132,30 @@ class XpresPortalClient implements ExternalFulfillmentClient
                     $lastErrorMessage = $this->buildErrorMessage($response->status(), $json ?? $response->body());
                     $lastRaw = $json;
                     $lastReference = $remoteReference;
+                    $lastHttpStatus = $response->status();
 
                     Log::warning('XpresPortal fulfillment attempt failed', [
                         'order_id' => $order->id,
                         'status' => $response->status(),
                         'endpoint' => $url,
                     ]);
+
+                    // A 409 means this endpoint understood the request and
+                    // rejected it as a conflict — it is a real order-creation
+                    // endpoint. Stop guessing further endpoint/payload
+                    // candidates: continuing could place a second order at a
+                    // different (also valid) endpoint alias for the same
+                    // recipient/reference.
+                    if ($response->status() === 409) {
+                        return [
+                            'success' => false,
+                            'status' => 'failed',
+                            'external_reference' => $remoteReference,
+                            'message' => $lastErrorMessage,
+                            'raw' => $json,
+                            'http_status' => 409,
+                        ];
+                    }
                 } catch (RequestException|ConnectionException $e) {
                     $lastErrorMessage = $this->limitMessage($e->getMessage());
 
@@ -155,6 +174,7 @@ class XpresPortalClient implements ExternalFulfillmentClient
             'external_reference' => $lastReference,
             'message' => $lastErrorMessage,
             'raw' => $lastRaw,
+            'http_status' => $lastHttpStatus,
         ];
     }
 
