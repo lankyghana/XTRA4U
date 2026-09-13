@@ -47,6 +47,21 @@ class ExternalFulfillmentStatusSynchronizer
     private const TERMINAL_LOCAL_STATUSES = ['Completed', 'Cancelled', 'Refunded'];
 
     /**
+     * Shared marker written by `fulfillment:close-manual-legacy` and
+     * `fulfillment:close-paid-legacy` into `reconciliation_note` when they
+     * administratively stamp `external_fulfillment_status = 'succeeded'` on
+     * a historical order. Those orders are not always in a
+     * TERMINAL_LOCAL_STATUSES `status` (a Processing/Pending order can be
+     * closed this way), so a late webhook or a polling response arriving
+     * afterward must still be refused here — otherwise a provider
+     * confirming "delivered" on one of these records would re-write
+     * fulfillment fields and, if auto-completion is enabled, silently flip
+     * `status` to 'Completed' for an order this reconciliation was
+     * expressly meant to leave untouched.
+     */
+    private const ADMINISTRATIVE_CLOSURE_NOTE_PREFIX = 'Fulfillment closed administratively';
+
+    /**
      * @param  array<string,mixed>  $context  Extra detail for the audit log (source, payload ids…).
      */
     public function apply(int $orderId, string $provider, string $rawStatus, array $context = []): string
@@ -76,6 +91,15 @@ class ExternalFulfillmentStatusSynchronizer
                 Log::warning('External fulfillment status sync: order not found', $logContext);
 
                 return self::OUTCOME_IGNORED;
+            }
+
+            // An administratively-closed order (fulfillment:close-manual-legacy
+            // / fulfillment:close-paid-legacy) must never be resubmitted or
+            // mutated by a late provider signal, regardless of `status`.
+            if (str_starts_with((string) $order->reconciliation_note, self::ADMINISTRATIVE_CLOSURE_NOTE_PREFIX)) {
+                Log::info('External fulfillment status sync: order administratively closed; ignoring', $logContext);
+
+                return self::OUTCOME_UNCHANGED;
             }
 
             // A provider callback must never resurrect or contradict an order

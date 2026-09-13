@@ -139,6 +139,18 @@ class SyncExternalFulfillmentStatuses implements ShouldBeUnique, ShouldQueue
     }
 
     /**
+     * Marker written by `fulfillment:close-manual-legacy` and
+     * `fulfillment:close-paid-legacy` into `reconciliation_note`. An order
+     * carrying it was administratively stamped 'succeeded' without ever
+     * being resubmitted, so it must never be polled: doing so would both
+     * contact the external provider and — if the provider confirms
+     * delivery and auto-completion is enabled — silently flip a
+     * Processing/Pending order's `status` to 'Completed', which that
+     * reconciliation deliberately left untouched.
+     */
+    private const ADMINISTRATIVE_CLOSURE_NOTE_PREFIX = 'Fulfillment closed administratively';
+
+    /**
      * Orders this provider accepted that have not reached a local terminal
      * state yet, throttled by how recently each was checked.
      */
@@ -154,6 +166,10 @@ class SyncExternalFulfillmentStatuses implements ShouldBeUnique, ShouldQueue
             ->whereIn('external_fulfillment_status', ['processing', 'succeeded'])
             ->whereNotNull('external_fulfillment_remote_reference')
             ->where('external_fulfillment_remote_reference', '!=', 'duplicate-order-detected')
+            ->where(function ($query) {
+                $query->whereNull('reconciliation_note')
+                    ->orWhere('reconciliation_note', 'not like', self::ADMINISTRATIVE_CLOSURE_NOTE_PREFIX.'%');
+            })
             ->where(function ($query) use ($vendorId) {
                 // Whoever owns fulfillment owns the provider credentials:
                 // the selling vendor normally, the product owner for reseller orders.
@@ -185,6 +201,10 @@ class SyncExternalFulfillmentStatuses implements ShouldBeUnique, ShouldQueue
             ->whereIn('external_fulfillment_provider_used', $pollable)
             ->whereIn('external_fulfillment_status', ['processing', 'succeeded'])
             ->whereNotNull('external_fulfillment_remote_reference')
+            ->where(function ($query) {
+                $query->whereNull('reconciliation_note')
+                    ->orWhere('reconciliation_note', 'not like', self::ADMINISTRATIVE_CLOSURE_NOTE_PREFIX.'%');
+            })
             ->where('created_at', '>=', now()->subHours($maxAgeHours))
             ->selectRaw('DISTINCT COALESCE(owner_vendor_id, vendor_id) as fulfilling_vendor_id')
             ->pluck('fulfilling_vendor_id')
