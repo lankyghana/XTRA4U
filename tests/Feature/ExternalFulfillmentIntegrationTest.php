@@ -17,6 +17,21 @@ class ExternalFulfillmentIntegrationTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * Delivering real goods now requires proof that a trusted payment source
+     * satisfied the order's immutable terms — `payment_status = paid` alone is
+     * deliberately not enough (see {@see \App\Support\PaymentIntegrity}).
+     * These fixtures stand in for orders a gateway already verified.
+     */
+    private function verified(Order $order): Order
+    {
+        $order->forceFill([
+            'payment_integrity_status' => \App\Support\PaymentIntegrity::VERIFIED,
+        ])->save();
+
+        return $order;
+    }
+
     private function enableExternalFulfillmentForVendor(Vendor $vendor, array $overrides = []): void
     {
         $defaults = [
@@ -45,7 +60,7 @@ class ExternalFulfillmentIntegrationTest extends TestCase
 
         $this->enableExternalFulfillmentForVendor($vendor);
 
-        $order = Order::create([
+        $order = $this->verified(Order::create([
             'recipient_phone_number' => '0240000000',
             'mobile_money_number' => '0240000000',
             'service_purchased' => 'TEST-SERVICE',
@@ -55,7 +70,7 @@ class ExternalFulfillmentIntegrationTest extends TestCase
             'payment_status' => 'paid',
             'payment_reference' => 'TEST-REF-EXT-1',
             'payment_gateway' => 'test',
-        ]);
+        ]));
 
         OrderCompleted::dispatch($order);
 
@@ -81,7 +96,7 @@ class ExternalFulfillmentIntegrationTest extends TestCase
             'external_fulfillment_enabled' => '0',
         ]);
 
-        $order = Order::create([
+        $order = $this->verified(Order::create([
             'recipient_phone_number' => '0240000000',
             'mobile_money_number' => '0240000000',
             'service_purchased' => 'TEST-SERVICE',
@@ -91,7 +106,7 @@ class ExternalFulfillmentIntegrationTest extends TestCase
             'payment_status' => 'paid',
             'payment_reference' => 'TEST-REF-EXT-2',
             'payment_gateway' => 'test',
-        ]);
+        ]));
 
         OrderCompleted::dispatch($order);
 
@@ -115,7 +130,7 @@ class ExternalFulfillmentIntegrationTest extends TestCase
 
         $this->enableExternalFulfillmentForVendor($vendor);
 
-        $order = Order::create([
+        $order = $this->verified(Order::create([
             'recipient_phone_number' => '0240000000',
             'mobile_money_number' => '0240000000',
             'service_purchased' => 'TEST-SERVICE',
@@ -125,7 +140,7 @@ class ExternalFulfillmentIntegrationTest extends TestCase
             'payment_status' => 'paid',
             'payment_reference' => 'TEST-REF-EXT-3',
             'payment_gateway' => 'test',
-        ]);
+        ]));
 
         $job = new ProcessExternalFulfillment($order->id);
         $job->handle();
@@ -181,7 +196,7 @@ class ExternalFulfillmentIntegrationTest extends TestCase
             'is_active' => true,
         ]);
 
-        $order = Order::create([
+        $order = $this->verified(Order::create([
             'recipient_phone_number' => '0591178627',
             'mobile_money_number' => '0591178627',
             'service_purchased' => $product->name,
@@ -192,7 +207,7 @@ class ExternalFulfillmentIntegrationTest extends TestCase
             'payment_status' => 'paid',
             'payment_reference' => 'TEST-REF-EXT-AT-1',
             'payment_gateway' => 'test',
-        ]);
+        ]));
 
         $job = new ProcessExternalFulfillment($order->id);
         $job->handle();
@@ -235,7 +250,7 @@ class ExternalFulfillmentIntegrationTest extends TestCase
             'is_active' => true,
         ]);
 
-        $order = Order::create([
+        $order = $this->verified(Order::create([
             'recipient_phone_number' => '0591178627',
             'mobile_money_number' => '0591178627',
             'service_purchased' => $product->name,
@@ -246,7 +261,7 @@ class ExternalFulfillmentIntegrationTest extends TestCase
             'payment_status' => 'paid',
             'payment_reference' => 'TEST-REF-EXT-AT-2',
             'payment_gateway' => 'test',
-        ]);
+        ]));
 
         $job = new ProcessExternalFulfillment($order->id);
         $job->handle();
@@ -281,7 +296,7 @@ class ExternalFulfillmentIntegrationTest extends TestCase
 
         $this->enableExternalFulfillmentForVendor($vendor);
 
-        $order = Order::create([
+        $order = $this->verified(Order::create([
             'recipient_phone_number' => '0240000000',
             'mobile_money_number' => '0240000000',
             'service_purchased' => 'TEST-SERVICE',
@@ -291,7 +306,7 @@ class ExternalFulfillmentIntegrationTest extends TestCase
             'payment_status' => 'paid',
             'payment_reference' => 'TEST-REF-EXT-409',
             'payment_gateway' => 'test',
-        ]);
+        ]));
 
         $job = new ProcessExternalFulfillment($order->id);
         $job->handle();
@@ -327,7 +342,7 @@ class ExternalFulfillmentIntegrationTest extends TestCase
 
         $this->enableExternalFulfillmentForVendor($vendor);
 
-        $order = Order::create([
+        $order = $this->verified(Order::create([
             'recipient_phone_number' => '0240000000',
             'mobile_money_number' => '0240000000',
             'service_purchased' => 'TEST-SERVICE',
@@ -337,7 +352,7 @@ class ExternalFulfillmentIntegrationTest extends TestCase
             'payment_status' => 'paid',
             'payment_reference' => 'TEST-REF-EXT-409-MAX',
             'payment_gateway' => 'test',
-        ]);
+        ]));
 
         Order::whereKey($order->id)->update(['external_fulfillment_attempts' => 143]);
 
@@ -370,7 +385,7 @@ class ExternalFulfillmentIntegrationTest extends TestCase
 
         $this->enableExternalFulfillmentForVendor($owner);
 
-        $order = Order::create([
+        $order = $this->verified(Order::create([
             'recipient_phone_number' => '0240000000',
             'mobile_money_number' => '0240000000',
             'service_purchased' => 'TEST-SERVICE',
@@ -383,7 +398,7 @@ class ExternalFulfillmentIntegrationTest extends TestCase
             'payment_status' => 'paid',
             'payment_reference' => 'TEST-REF-EXT-4',
             'payment_gateway' => 'test',
-        ]);
+        ]));
 
         OrderCompleted::dispatch($order);
 
@@ -412,7 +427,7 @@ class ExternalFulfillmentIntegrationTest extends TestCase
         // Even if reseller somehow has settings, they must not be eligible.
         $this->enableExternalFulfillmentForVendor($reseller);
 
-        $order = Order::create([
+        $order = $this->verified(Order::create([
             'recipient_phone_number' => '0240000000',
             'mobile_money_number' => '0240000000',
             'service_purchased' => 'TEST-SERVICE',
@@ -422,7 +437,7 @@ class ExternalFulfillmentIntegrationTest extends TestCase
             'payment_status' => 'paid',
             'payment_reference' => 'TEST-REF-EXT-5',
             'payment_gateway' => 'test',
-        ]);
+        ]));
 
         OrderCompleted::dispatch($order);
 
