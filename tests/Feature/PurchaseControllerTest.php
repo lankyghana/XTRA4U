@@ -176,26 +176,30 @@ class PurchaseControllerTest extends TestCase
             ],
         ];
 
+        // The legacy session-token callback is DISABLED. It used to create an
+        // order and a 'completed' transaction purely from a session payload
+        // whose `payment_status` it believed, with no gateway verification
+        // anywhere in it — an unverified completion path. Nothing in the
+        // application has written `purchase.tokens` for a long time, so this
+        // removes no working functionality; it closes a latent bypass of the
+        // payment integrity invariant.
         $callbackResponse = $this->withSession(['purchase.tokens' => $sessionTokens])
             ->get(route('purchase.callback', ['token' => $token]));
 
-        $callbackResponse->assertOk();
+        $callbackResponse->assertStatus(410);
 
+        // The order created by store() is still pending payment, and no
+        // 'completed' transaction was conjured from the session payload.
         $order = Order::first();
         $this->assertNotNull($order);
         $this->assertEquals($product->name, $order->service_purchased);
         $this->assertEquals($product->id, $order->vendor_service_id);
         $this->assertEquals($product->price, (float) $order->amount_paid);
-        // Depending on flow the order created during the initial store() call
-        // may remain Pending while the callback creates a separate record.
-        // Accept either Completed or Pending here but ensure the transaction
-        // shows a completed payment.
-        $this->assertContains($order->status, ['Completed', 'Pending']);
+        $this->assertSame('Pending', $order->status);
+        $this->assertSame('unpaid', $order->payment_status);
 
-        // Ensure a completed transaction was recorded for this vendor and amount.
-        $this->assertDatabaseHas('transactions', [
+        $this->assertDatabaseMissing('transactions', [
             'vendor_id' => $vendor->id,
-            'amount' => $product->price,
             'payment_status' => 'completed',
         ]);
     }
