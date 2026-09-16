@@ -35,6 +35,14 @@ class AdminNotification extends Model
     const TYPE_NEW_PRODUCT = 'new_product';
     const TYPE_AFFILIATE_ORDER = 'affiliate_order';
 
+    /**
+     * A payment was refused because it did not satisfy the order's immutable
+     * financial terms (wrong amount/currency/reference/gateway, or a reused
+     * gateway transaction). Raised by PaymentIntegrityGuard, throttled per
+     * order+reason. Always accompanied by a structured log entry.
+     */
+    const TYPE_PAYMENT_INTEGRITY_ALERT = 'payment_integrity_alert';
+
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);
