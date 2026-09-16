@@ -12,37 +12,27 @@ class MainInterfaceSmokeTest extends TestCase
 
     public function test_homepage_renders_with_results_checker_section(): void
     {
+        // The featured heading is two-tone, so the phrase is split across a
+        // <span> in the markup; assert on both halves rather than the
+        // concatenated string.
         $this->get('/')
             ->assertOk()
-            ->assertSee('Results Checker PINs, Delivered Instantly')
+            ->assertSee('Results Checker PINs,')
+            ->assertSee('Delivered Instantly')
             ->assertSee('Retrieve My PIN')
             ->assertSee(route('result-checkers.entry'));
     }
 
-    public function test_entry_redirects_to_configured_flagship_store(): void
+    public function test_entry_forwards_to_the_official_platform_page(): void
     {
-        $vendor = Vendor::factory()->create();
-        config(['storefront.main_store_code' => $vendor->vendor_code]);
-
+        // The legacy /results-checkers link (bookmarks, external links) now
+        // forwards to the official, admin-configured platform page rather
+        // than a specific vendor's store — that page resolves its own
+        // vendor (App\Support\PlatformServiceVendor) and degrades
+        // gracefully on its own, so this redirect no longer depends on
+        // MainStore or on any vendor existing in the database.
         $this->get(route('result-checkers.entry'))
-            ->assertRedirect(route('storefront.result-checkers', ['vendor' => $vendor->vendor_code]));
-    }
-
-    public function test_entry_falls_back_when_configured_code_is_absent(): void
-    {
-        // The production flagship code does not exist in this database — the
-        // link must resolve to some existing vendor instead of 404ing.
-        $vendor = Vendor::factory()->create(['is_approved' => true]);
-        config(['storefront.main_store_code' => 'BUNDJXW6SR']);
-
-        $this->get(route('result-checkers.entry'))
-            ->assertRedirect(route('storefront.result-checkers', ['vendor' => $vendor->vendor_code]));
-    }
-
-    public function test_entry_redirects_home_when_no_vendors_exist(): void
-    {
-        $this->get(route('result-checkers.entry'))
-            ->assertRedirect(route('storefront.index'));
+            ->assertRedirect(route('services.result-checkers'));
     }
 
     public function test_result_checkers_url_preselects_results_category(): void

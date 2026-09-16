@@ -1,192 +1,208 @@
+{{--
+    result_checkers/status_show.blade.php
+
+    Single result-checker order, reached via GET /results-checker/status/{order}
+    — ResultCheckerPaymentCallbackController redirects here after payment.
+    Everything needed is already known server-side ($order, loaded with its
+    service), so this is now plain Blade with no Alpine/JS: the previous
+    version drove the status colours through `:class="$order->status ? ...`
+    Alpine bindings referencing a bare `$order` PHP variable inside a JS
+    expression, which Alpine can never resolve (it isn't a JS identifier) —
+    those bindings silently failed. The label/colour/message mapping below
+    mirrors the same statuses ResultCheckerService::getOrderStatus() and
+    result_checkers/status.blade.php use (pending_payment, pending_stock,
+    processing, completed, failed).
+--}}
 @extends('layouts.app')
 
 @section('title', 'Order Status - ' . $order->id . ' - XTRA4U')
 
+{{-- Scope the storefront design system to this page only. --}}
+@section('body-class', 'x4')
+
+@php
+    $mainStoreVendor = \App\Support\MainStore::vendor();
+    $shopUrl = $mainStoreVendor
+        ? route('storefront.vendor', ['vendor' => $mainStoreVendor->vendor_code])
+        : route('checkout.show');
+
+    $statusMeta = match ($order->status) {
+        'pending_payment' => ['label' => 'Awaiting Payment', 'message' => 'Please complete your payment to proceed', 'bg' => '#fef9c3', 'text' => '#854d0e'],
+        'pending_stock' => ['label' => 'Pending Stock', 'message' => 'We are preparing your results', 'bg' => '#ffedd5', 'text' => '#9a3412'],
+        'processing' => ['label' => 'Processing', 'message' => 'Your order is being processed', 'bg' => '#dbeafe', 'text' => '#1e40af'],
+        'completed' => ['label' => 'Completed', 'message' => 'Your order has been completed', 'bg' => '#dcfce7', 'text' => '#166534'],
+        'failed' => ['label' => 'Failed', 'message' => 'Your order could not be completed', 'bg' => '#fee2e2', 'text' => '#991b1b'],
+        default => ['label' => 'Unknown', 'message' => 'Check your order status below', 'bg' => '#f3f4f6', 'text' => '#374151'],
+    };
+@endphp
+
+@section('site-header')
+    <x-storefront.header :shop-url="$shopUrl" />
+@endsection
+
+@section('site-footer')
+    <x-storefront.footer :shop-url="$shopUrl" />
+@endsection
+
 @section('content')
-<div class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 py-12">
-    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-        
-        <!-- Header -->
-        <div class="text-center mb-10">
-            <div class="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4" :class="getStatusColor('{{ $order->status }}').bg">
-                <svg class="w-8 h-8" :class="getStatusColor('{{ $order->status }}').text" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-            </div>
-            <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">Order Status</h1>
-            <p class="mt-3 text-lg text-gray-600" x-text="getStatusMessage('{{ $order->status }}')"></p>
-        </div>
+<div class="x4-page" style="padding-top: 64px;">
+    <section class="relative overflow-hidden" style="background: #fff; min-height: calc(100vh - 64px);">
+        <div class="x4-hero-wash absolute inset-0" aria-hidden="true" style="pointer-events: none;"></div>
 
-        <!-- Status Card -->
-        <div class="bg-white rounded-2xl shadow-xl p-8 mb-8">
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 pb-6 border-b border-gray-200">
-                <div>
-                    <span class="text-sm text-gray-500 uppercase tracking-wide">Order ID</span>
-                    <p class="font-mono font-semibold text-gray-900 text-lg mt-1">{{ $order->id }}</p>
-                </div>
-                <div class="flex items-center px-4 py-2 rounded-full" :class="getStatusColor('{{ $order->status }}').bg">
-                    <span class="w-2 h-2 rounded-full mr-2" :class="getStatusColor('{{ $order->status }}').dot"></span>
-                    <span class="text-sm font-semibold" :class="getStatusColor('{{ $order->status }}').text" x-text="getStatusLabel('{{ $order->status }}')"></span>
-                </div>
-            </div>
+        <div class="relative max-w-3xl mx-auto px-5" style="padding-top: 56px; padding-bottom: 72px;">
 
-            <!-- Order Information -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8 pb-8 border-b border-gray-200">
-                <div>
-                    <span class="text-xs text-gray-500 uppercase tracking-wide">Service</span>
-                    <p class="font-medium text-gray-900 mt-2">{{ $order->service->name ?? 'N/A' }}</p>
+            {{-- ============================================================
+                 Header
+                 ============================================================ --}}
+            <x-storefront.reveal from="up" class="text-center mb-9">
+                <div
+                    class="mx-auto mb-5 flex items-center justify-center"
+                    style="width: 64px; height: 64px; border-radius: var(--x4-r-lg); background-color: {{ $statusMeta['bg'] }};"
+                >
+                    <x-storefront.icon name="check" class="w-7 h-7" style="color: {{ $statusMeta['text'] }};" />
                 </div>
-                <div>
-                    <span class="text-xs text-gray-500 uppercase tracking-wide">Quantity</span>
-                    <p class="font-medium text-gray-900 mt-2">{{ $order->quantity }} item(s)</p>
-                </div>
-                <div>
-                    <span class="text-xs text-gray-500 uppercase tracking-wide">Customer Name</span>
-                    <p class="font-medium text-gray-900 mt-2">{{ $order->customer_name ?? 'N/A' }}</p>
-                </div>
-                <div>
-                    <span class="text-xs text-gray-500 uppercase tracking-wide">Phone Number</span>
-                    <p class="font-medium text-gray-900 mt-2">{{ $order->customer_phone }}</p>
-                </div>
-                <div>
-                    <span class="text-xs text-gray-500 uppercase tracking-wide">Amount Paid</span>
-                    <p class="font-semibold text-gray-900 mt-2">GH₵ {{ number_format($order->total_price, 2) }}</p>
-                </div>
-                <div>
-                    <span class="text-xs text-gray-500 uppercase tracking-wide">Reference</span>
-                    <p class="font-mono font-semibold text-gray-900 text-sm mt-2 break-all">{{ $order->payment_reference }}</p>
-                </div>
-            </div>
 
-            <!-- Timeline -->
-            <div class="mb-8 pb-8 border-b border-gray-200">
-                <h3 class="font-semibold text-gray-900 mb-4">Timeline</h3>
-                <div class="space-y-4">
-                    <!-- Order Created -->
-                    <div class="flex">
-                        <div class="flex flex-col items-center mr-4">
-                            <div class="flex items-center justify-center h-10 w-10 rounded-full bg-green-100">
-                                <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                                </svg>
-                            </div>
-                            <div class="h-12 w-1 bg-gray-200 my-2"></div>
-                        </div>
+                <h1 class="x4-display-xl mb-3" style="color: var(--x4-ink-strong);">Order Status</h1>
+                <p class="x4-body-lg" style="color: var(--x4-ink-body);">{{ $statusMeta['message'] }}</p>
+            </x-storefront.reveal>
+
+            {{-- ============================================================
+                 Payment verification failure — ResultCheckerPaymentCallbackController
+                 flashes these two keys when the gateway couldn't confirm payment.
+                 ============================================================ --}}
+            @if (session('payment_failed'))
+                <x-storefront.reveal :delay="30">
+                <div class="mb-6" style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: var(--x4-r-lg); padding: 16px 18px;">
+                    <div class="flex items-start gap-3">
+                        <x-storefront.icon name="close" class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: #dc2626;" />
                         <div>
-                            <p class="font-semibold text-gray-900">Order Created</p>
-                            <p class="text-sm text-gray-500">{{ $order->created_at->format('M d, Y h:i A') }}</p>
-                        </div>
-                    </div>
-
-                    <!-- Payment -->
-                    <div class="flex">
-                        <div class="flex flex-col items-center mr-4">
-                            <div class="flex items-center justify-center h-10 w-10 rounded-full" :class="$order->paid_at ? 'bg-green-100' : 'bg-gray-100'">
-                                <svg class="h-6 w-6" :class="$order->paid_at ? 'text-green-600' : 'text-gray-400'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                </svg>
-                            </div>
-                            <div class="h-12 w-1 bg-gray-200 my-2"></div>
-                        </div>
-                        <div>
-                            <p class="font-semibold text-gray-900">Payment Confirmed</p>
-                            <p class="text-sm text-gray-500">
-                                @if($order->paid_at)
-                                    {{ $order->paid_at->format('M d, Y h:i A') }}
-                                @else
-                                    <span class="text-gray-400">Pending...</span>
-                                @endif
-                            </p>
-                        </div>
-                    </div>
-
-                    <!-- Fulfilled -->
-                    <div class="flex">
-                        <div class="flex flex-col items-center mr-4">
-                            <div class="flex items-center justify-center h-10 w-10 rounded-full" :class="$order->fulfilled_at ? 'bg-green-100' : 'bg-gray-100'">
-                                <svg class="h-6 w-6" :class="$order->fulfilled_at ? 'text-green-600' : 'text-gray-400'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-                                </svg>
-                            </div>
-                        </div>
-                        <div>
-                            <p class="font-semibold text-gray-900">Delivered</p>
-                            <p class="text-sm text-gray-500">
-                                @if($order->fulfilled_at)
-                                    {{ $order->fulfilled_at->format('M d, Y h:i A') }}
-                                @else
-                                    <span class="text-gray-400">Processing...</span>
-                                @endif
-                            </p>
+                            <p class="x4-body-md" style="color: #991b1b; font-weight: 500;">We couldn't confirm your payment</p>
+                            <p class="x4-caption mt-0.5" style="color: #991b1b;">{{ session('payment_message') ?? 'Payment verification failed. Please try again or contact support.' }}</p>
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <!-- Status-Specific Messages -->
-            @if($order->status === 'pending_payment')
-                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                    <p class="text-yellow-800 text-sm">Awaiting payment confirmation. Please complete the payment to proceed.</p>
-                </div>
-            @elseif($order->status === 'pending_stock')
-                <div class="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                    <p class="text-orange-800 text-sm">Your order is waiting for stock availability. We'll notify you via SMS when ready.</p>
-                </div>
-            @elseif($order->status === 'completed')
-                <div class="bg-green-50 border border-green-200 rounded-lg p-4">
-                    <p class="text-green-800 text-sm">Your results have been delivered to {{ $order->customer_phone }}. Check your SMS for details.</p>
-                </div>
-            @elseif($order->status === 'failed')
-                <div class="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <p class="text-red-800 text-sm">This order could not be completed. Please contact support for assistance.</p>
-                </div>
+                </x-storefront.reveal>
             @endif
-        </div>
 
-        <!-- Back Button -->
-        <div class="text-center">
-            <a href="{{ route('result-checkers.status') }}" class="inline-flex items-center text-brand-deep-blue hover:text-brand-bright-blue font-medium transition-colors">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-                </svg>
-                Back to Status Checker
-            </a>
+            {{-- ============================================================
+                 Status card
+                 ============================================================ --}}
+            <x-storefront.reveal :delay="60">
+            <div class="x4-panel mb-8" style="overflow: hidden;">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3" style="padding: 20px 24px; border-bottom: 1px solid var(--x4-hairline); background-color: var(--x4-canvas-soft);">
+                    <div>
+                        <span class="x4-micro-cap" style="color: var(--x4-ink-mute);">Order ID</span>
+                        <p class="x4-tnum" style="font-size: 16px; font-weight: 500; color: var(--x4-ink);">{{ $order->id }}</p>
+                    </div>
+                    <span
+                        class="inline-flex items-center flex-shrink-0"
+                        style="padding: 5px 14px; border-radius: var(--x4-r-pill); background-color: {{ $statusMeta['bg'] }}; color: {{ $statusMeta['text'] }};"
+                    >
+                        <span class="x4-caption" style="font-weight: 500;">{{ $statusMeta['label'] }}</span>
+                    </span>
+                </div>
+
+                {{-- Order information --}}
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-5" style="padding: 24px; border-bottom: 1px solid var(--x4-hairline);">
+                    <div>
+                        <span class="x4-micro-cap" style="color: var(--x4-ink-mute);">Service</span>
+                        <p class="x4-body-md mt-1" style="font-weight: 500; color: var(--x4-ink);">{{ $order->service->name ?? 'N/A' }}</p>
+                    </div>
+                    <div>
+                        <span class="x4-micro-cap" style="color: var(--x4-ink-mute);">Quantity</span>
+                        <p class="x4-body-md mt-1" style="font-weight: 500; color: var(--x4-ink);">{{ $order->quantity }} item(s)</p>
+                    </div>
+                    <div>
+                        <span class="x4-micro-cap" style="color: var(--x4-ink-mute);">Customer Name</span>
+                        <p class="x4-body-md mt-1" style="font-weight: 500; color: var(--x4-ink);">{{ $order->customer_name ?? 'N/A' }}</p>
+                    </div>
+                    <div>
+                        <span class="x4-micro-cap" style="color: var(--x4-ink-mute);">Phone Number</span>
+                        <p class="x4-body-md x4-tnum mt-1" style="font-weight: 500; color: var(--x4-ink);">{{ $order->customer_phone }}</p>
+                    </div>
+                    <div>
+                        <span class="x4-micro-cap" style="color: var(--x4-ink-mute);">Amount Paid</span>
+                        <p class="x4-body-md x4-tnum mt-1" style="font-weight: 500; color: #16a34a;">GH₵ {{ number_format((float) $order->total_price, 2) }}</p>
+                    </div>
+                    <div>
+                        <span class="x4-micro-cap" style="color: var(--x4-ink-mute);">Reference</span>
+                        <p class="x4-caption x4-tnum mt-1" style="font-weight: 500; color: var(--x4-ink); word-break: break-all;">{{ $order->payment_reference }}</p>
+                    </div>
+                </div>
+
+                {{-- Timeline --}}
+                <div style="padding: 24px;">
+                    <p class="x4-micro-cap mb-4" style="color: var(--x4-ink-mute);">Timeline</p>
+
+                    <div class="space-y-0">
+                        @foreach ([
+                            ['title' => 'Order Created', 'done' => true, 'at' => $order->created_at, 'pending_label' => null],
+                            ['title' => 'Payment Confirmed', 'done' => (bool) $order->paid_at, 'at' => $order->paid_at, 'pending_label' => 'Pending…'],
+                            ['title' => 'Delivered', 'done' => (bool) $order->fulfilled_at, 'at' => $order->fulfilled_at, 'pending_label' => 'Processing…'],
+                        ] as $i => $step)
+                            <div class="flex items-start gap-4">
+                                <div class="flex flex-col items-center flex-shrink-0">
+                                    <span
+                                        class="flex items-center justify-center"
+                                        style="width: 34px; height: 34px; border-radius: 9999px; background-color: {{ $step['done'] ? '#dcfce7' : 'var(--x4-canvas-soft)' }}; border: 1px solid {{ $step['done'] ? '#bbf7d0' : 'var(--x4-hairline)' }};"
+                                    >
+                                        @if ($step['done'])
+                                            <x-storefront.icon name="check" class="w-4 h-4" style="color: #16a34a;" />
+                                        @else
+                                            <span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 9999px; background-color: var(--x4-ink-mute);"></span>
+                                        @endif
+                                    </span>
+                                    @if ($i < 2)
+                                        <span style="width: 2px; flex: 1; min-height: 28px; background-color: {{ $step['done'] ? '#bbf7d0' : 'var(--x4-hairline)' }}; margin: 4px 0;"></span>
+                                    @endif
+                                </div>
+                                <div style="padding-bottom: 20px;">
+                                    <p class="x4-body-md" style="font-weight: 500; color: var(--x4-ink);">{{ $step['title'] }}</p>
+                                    <p class="x4-caption mt-0.5" style="color: var(--x4-ink-mute);">
+                                        {{ $step['at']?->format('M d, Y h:i A') ?? $step['pending_label'] }}
+                                    </p>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+
+                {{-- Status-specific message --}}
+                <div style="padding: 16px 24px; border-top: 1px solid var(--x4-hairline); background-color: {{ $statusMeta['bg'] }}1a;">
+                    <p class="x4-body-md" style="color: {{ $statusMeta['text'] }};">
+                        @switch ($order->status)
+                            @case ('pending_payment')
+                                Awaiting payment confirmation. Please complete the payment to proceed.
+                                @break
+                            @case ('pending_stock')
+                                Your order is waiting for stock availability. We'll notify you via SMS when ready.
+                                @break
+                            @case ('completed')
+                                Your results have been delivered to {{ $order->customer_phone }}. Check your SMS for details.
+                                @break
+                            @case ('failed')
+                                This order could not be completed. Please contact support for assistance.
+                                @break
+                            @default
+                                Your order is being processed.
+                        @endswitch
+                    </p>
+                </div>
+            </div>
+            </x-storefront.reveal>
+
+            {{-- ============================================================
+                 Back button
+                 ============================================================ --}}
+            <div class="text-center">
+                <a href="{{ route('result-checkers.status') }}" class="x4-caption x4-link x4-link-accent inline-flex items-center gap-2" style="color: var(--x4-ink-mute); font-weight: 500;">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                    </svg>
+                    Back to Status Checker
+                </a>
+            </div>
         </div>
-    </div>
+    </section>
 </div>
-
-<script>
-function getStatusColor(status) {
-    const colors = {
-        'pending_payment': { bg: 'bg-yellow-100', text: 'text-yellow-800', dot: 'bg-yellow-500' },
-        'pending_stock': { bg: 'bg-orange-100', text: 'text-orange-800', dot: 'bg-orange-500' },
-        'processing': { bg: 'bg-blue-100', text: 'text-blue-800', dot: 'bg-blue-500' },
-        'completed': { bg: 'bg-green-100', text: 'text-green-800', dot: 'bg-green-500' },
-        'failed': { bg: 'bg-red-100', text: 'text-red-800', dot: 'bg-red-500' },
-    };
-    return colors[status] || { bg: 'bg-gray-100', text: 'text-gray-800', dot: 'bg-gray-500' };
-}
-
-function getStatusLabel(status) {
-    const labels = {
-        'pending_payment': 'Awaiting Payment',
-        'pending_stock': 'Pending Stock',
-        'processing': 'Processing',
-        'completed': 'Completed',
-        'failed': 'Failed',
-    };
-    return labels[status] || 'Unknown';
-}
-
-function getStatusMessage(status) {
-    const messages = {
-        'pending_payment': 'Please complete your payment to proceed',
-        'pending_stock': 'We are preparing your results',
-        'processing': 'Your order is being processed',
-        'completed': 'Your order has been completed',
-        'failed': 'Your order could not be completed',
-    };
-    return messages[status] || 'Check your order status below';
-}
-</script>
 @endsection

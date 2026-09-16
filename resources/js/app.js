@@ -1,6 +1,7 @@
 import './bootstrap';
 import Alpine from 'alpinejs';
 import collapse from '@alpinejs/collapse';
+import { registerStorefrontComponents, initStorefront } from './storefront';
 
 // Make Alpine available globally
 window.Alpine = Alpine;
@@ -9,6 +10,9 @@ window.Alpine = Alpine;
 document.addEventListener('alpine:init', () => {
     // Register Alpine plugins
     Alpine.plugin(collapse);
+
+    // Public marketplace homepage interactions (header, hero, reveals)
+    registerStorefrontComponents(Alpine);
     Alpine.store('app', {
         mobileMenuOpen: false,
         userMenuOpen: false,
@@ -289,3 +293,10 @@ if ('serviceWorker' in navigator) {
 
 // Start Alpine.js
 Alpine.start();
+
+// Storefront scroll reveals and counters (no-ops off the homepage)
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initStorefront);
+} else {
+    initStorefront();
+}

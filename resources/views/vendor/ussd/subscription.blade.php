@@ -73,7 +73,7 @@
                     {{-- Dialled code --}}
                     <div class="lg:col-span-1">
                         <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Your USSD Code</p>
-                        <p class="mt-2 text-2xl font-bold font-mono text-brand-deep-blue break-all">
+                        <p class="mt-2 text-2xl font-bold font-mono text-brand-violet break-all">
                             {{ $current->currentUssdCode() ?? '—' }}
                         </p>
                         <p class="mt-1 text-xs text-gray-500">Share this with your customers.</p>
@@ -166,14 +166,14 @@
                         <input type="tel" id="ussd-payer-phone" inputmode="numeric"
                                value="{{ $vendor->phone_number }}"
                                placeholder="e.g. 0244123456"
-                               class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-deep-blue focus:ring-brand-deep-blue">
+                               class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-violet focus:ring-brand-violet">
                     </div>
                     <div>
                         <label for="ussd-payer-network" class="block text-xs font-medium text-gray-600 mb-1">
                             Network
                         </label>
                         <select id="ussd-payer-network"
-                                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-deep-blue focus:ring-brand-deep-blue">
+                                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-violet focus:ring-brand-violet">
                             <option value="">Auto-detect</option>
                             <option value="MTN">MTN</option>
                             <option value="TELECEL">Telecel</option>
@@ -197,7 +197,7 @@
                         $perSession = $plan->included_sessions > 0 ? $plan->price / $plan->included_sessions : 0;
                     @endphp
 
-                    <div class="bg-white rounded-xl border {{ $isCurrentPlan ? 'border-brand-deep-blue ring-1 ring-brand-deep-blue' : 'border-gray-200' }} shadow-sm flex flex-col">
+                    <div class="bg-white rounded-xl border {{ $isCurrentPlan ? 'border-brand-violet ring-1 ring-brand-violet' : 'border-gray-200' }} shadow-sm flex flex-col">
                         <div class="p-5 flex-1">
                             <div class="flex items-start justify-between gap-2">
                                 <h3 class="text-base font-bold text-gray-900">{{ $plan->name }}</h3>
@@ -245,8 +245,8 @@
                                     data-plan-name="{{ $plan->name }}"
                                     class="w-full px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed
                                     {{ $isCurrentPlan
-                                        ? 'bg-white border border-brand-deep-blue text-brand-deep-blue hover:bg-blue-50'
-                                        : 'bg-brand-deep-blue text-white hover:bg-brand-bright-blue' }}">
+                                        ? 'bg-white border border-brand-violet text-brand-violet hover:bg-blue-50'
+                                        : 'bg-brand-violet text-white hover:bg-brand-violet-deep' }}">
                                 {{ $label }}
                             </button>
                         </div>

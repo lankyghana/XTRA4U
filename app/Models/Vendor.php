@@ -2,12 +2,12 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Support\Str;
 
 class Vendor extends Authenticatable
@@ -19,7 +19,7 @@ class Vendor extends Authenticatable
         static::saving(function (Vendor $vendor): void {
             // Business rule: A vendor cannot be an Affiliate without also being an AFA Affiliate.
             // Enforce idempotently at the model layer so it applies across all entry points.
-            if (!is_null($vendor->affiliate_vendor_id) && $vendor->is_afa_affiliate !== true) {
+            if (! is_null($vendor->affiliate_vendor_id) && $vendor->is_afa_affiliate !== true) {
                 $vendor->is_afa_affiliate = true;
             }
         });
@@ -122,6 +122,20 @@ class Vendor extends Authenticatable
     }
 
     /**
+     * Whether this vendor has AFA registration priced and ready to sell,
+     * either directly or as a reseller. Mirrors the condition already
+     * duplicated in StorefrontController and App\Support\PlatformServiceVendor
+     * (a full price/eligibility resolution still requires
+     * AffiliateChainService for the reseller case) — a single read-only
+     * predicate so new callers don't have to re-derive it.
+     */
+    public function offersAfaRegistration(): bool
+    {
+        return ($this->afa_enabled && (float) $this->afa_price > 0)
+            || ($this->afa_reseller_enabled && (float) $this->afa_selling_price > 0 && $this->afa_source_vendor_id);
+    }
+
+    /**
      * Get AFA registrations for this vendor
      */
     public function afaRegistrations(): HasMany
@@ -178,7 +192,7 @@ class Vendor extends Authenticatable
 
         do {
             $randomSuffix = strtoupper(Str::random(6));
-            $vendorCode = $namePrefix . $randomSuffix;
+            $vendorCode = $namePrefix.$randomSuffix;
             $exists = self::where('vendor_code', $vendorCode)->exists();
         } while ($exists);
 

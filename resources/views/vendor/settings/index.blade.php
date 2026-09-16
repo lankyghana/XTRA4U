@@ -6,27 +6,27 @@
 <x-vendor-layout :vendor="$vendor" title="Settings" subtitle="Manage your account and preferences" active="settings">
     <div class="space-y-6">
         @if(session('success'))
-            <div class="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg shadow-md">
-                <div class="flex items-center">
-                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                    </svg>
-                    {{ session('success') }}
-                </div>
+            <div class="flex items-center gap-3 bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-xl">
+                <svg class="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                </svg>
+                <span class="text-sm">{{ session('success') }}</span>
             </div>
         @endif
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <!-- Profile Settings -->
-            <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-                <div class="bg-gradient-to-r from-brand-deep-blue to-blue-700 px-6 py-4">
-                    <h2 class="text-xl font-bold text-white flex items-center">
-                        <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+                    <span class="w-9 h-9 bg-brand-violet-soft rounded-lg flex items-center justify-center shrink-0">
+                        <svg class="w-5 h-5 text-brand-violet" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                         </svg>
-                        Profile Settings
-                    </h2>
-                    <p class="text-blue-100">Update your business information</p>
+                    </span>
+                    <div>
+                        <h2 class="text-base font-semibold text-gray-900">Profile Settings</h2>
+                        <p class="text-sm text-gray-500">Update your business information</p>
+                    </div>
                 </div>
 
                 <form method="POST" action="{{ route('vendor.settings.update') }}" class="p-6 space-y-4">
@@ -35,12 +35,12 @@
 
                     <div>
                         <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Business Name</label>
-                        <input 
-                            type="text" 
-                            name="name" 
+                        <input
+                            type="text"
+                            name="name"
                             id="name"
                             value="{{ old('name', $vendor->name) }}"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-violet focus:border-brand-violet"
                             required
                         >
                         @error('name')
@@ -50,12 +50,12 @@
 
                     <div>
                         <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-                        <input 
-                            type="email" 
+                        <input
+                            type="email"
                             name="email"
                             id="email"
                             value="{{ old('email', $vendor->email) }}"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-violet focus:border-brand-violet"
                             required
                         >
                         @error('email')
@@ -66,14 +66,14 @@
 
                     <div>
                         <label for="phone_number" class="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
-                        <input 
-                            type="text" 
-                            name="phone_number" 
+                        <input
+                            type="text"
+                            name="phone_number"
                             id="phone_number"
                             value="{{ old('phone_number', $vendor->phone_number) }}"
                             inputmode="tel"
                             autocomplete="tel"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-violet focus:border-brand-violet"
                             required
                         >
                         @error('phone_number')
@@ -84,13 +84,13 @@
                     <div>
                         <label for="vendor_code" class="block text-sm font-medium text-gray-700 mb-1">Vendor Code</label>
                         <div class="flex items-center">
-                            <input 
-                                type="text" 
+                            <input
+                                type="text"
                                 value="{{ $vendor->vendor_code }}"
                                 class="flex-1 px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700 font-mono"
                                 disabled
                             >
-                            <button 
+                            <button
                                 type="button"
                                 onclick="copyToClipboard('{{ $vendor->vendor_code }}')"
                                 class="ml-2 px-3 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors"
@@ -104,23 +104,25 @@
                     </div>
 
                     <div class="pt-4">
-                        <button type="submit" class="w-full px-6 py-3 bg-brand-deep-blue text-white font-medium rounded-lg hover:bg-blue-700 transition-colors">
+                        <x-button type="submit" variant="primary" class="w-full justify-center">
                             Save Profile
-                        </button>
+                        </x-button>
                     </div>
                 </form>
             </div>
 
             <!-- Payout Settings -->
-            <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-                <div class="bg-gradient-to-r from-green-500 to-green-600 px-6 py-4">
-                    <h2 class="text-xl font-bold text-white flex items-center">
-                        <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+                    <span class="w-9 h-9 bg-brand-violet-soft rounded-lg flex items-center justify-center shrink-0">
+                        <svg class="w-5 h-5 text-brand-violet" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
                         </svg>
-                        Payout Settings
-                    </h2>
-                    <p class="text-green-100">Configure your withdrawal details</p>
+                    </span>
+                    <div>
+                        <h2 class="text-base font-semibold text-gray-900">Payout Settings</h2>
+                        <p class="text-sm text-gray-500">Configure your withdrawal details</p>
+                    </div>
                 </div>
 
                 <form method="POST" action="{{ route('vendor.settings.update') }}" class="p-6 space-y-4">
@@ -133,10 +135,10 @@
 
                     <div>
                         <label for="momo_provider" class="block text-sm font-medium text-gray-700 mb-1">Mobile Money Provider</label>
-                        <select 
-                            name="momo_provider" 
+                        <select
+                            name="momo_provider"
                             id="momo_provider"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-violet focus:border-brand-violet"
                         >
                             <option value="">Select Provider</option>
                             @foreach (config('momo.providers', []) as $providerValue => $providerLabel)
@@ -150,13 +152,13 @@
 
                     <div>
                         <label for="momo_number" class="block text-sm font-medium text-gray-700 mb-1">Mobile Money Number</label>
-                        <input 
-                            type="text" 
-                            name="momo_number" 
+                        <input
+                            type="text"
+                            name="momo_number"
                             id="momo_number"
                             value="{{ old('momo_number', $vendor->momo_number) }}"
                             placeholder="0XXXXXXXXX"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-violet focus:border-brand-violet"
                         >
                         @error('momo_number')
                             <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
@@ -175,23 +177,25 @@
                     </div>
 
                     <div class="pt-4">
-                        <button type="submit" class="w-full px-6 py-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors">
+                        <x-button type="submit" variant="primary" class="w-full justify-center">
                             Save Payout Settings
-                        </button>
+                        </x-button>
                     </div>
                 </form>
             </div>
 
             <!-- Change Password -->
-            <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-                <div class="bg-gradient-to-r from-gray-600 to-gray-700 px-6 py-4">
-                    <h2 class="text-xl font-bold text-white flex items-center">
-                        <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+                    <span class="w-9 h-9 bg-brand-violet-soft rounded-lg flex items-center justify-center shrink-0">
+                        <svg class="w-5 h-5 text-brand-violet" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
                         </svg>
-                        Change Password
-                    </h2>
-                    <p class="text-gray-300">Update your account password</p>
+                    </span>
+                    <div>
+                        <h2 class="text-base font-semibold text-gray-900">Change Password</h2>
+                        <p class="text-sm text-gray-500">Update your account password</p>
+                    </div>
                 </div>
 
                 <form method="POST" action="{{ route('vendor.settings.password') }}" class="p-6 space-y-4">
@@ -200,11 +204,11 @@
 
                     <div>
                         <label for="current_password" class="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
-                        <input 
-                            type="password" 
-                            name="current_password" 
+                        <input
+                            type="password"
+                            name="current_password"
                             id="current_password"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-violet focus:border-brand-violet"
                             required
                         >
                         @error('current_password')
@@ -214,11 +218,11 @@
 
                     <div>
                         <label for="password" class="block text-sm font-medium text-gray-700 mb-1">New Password</label>
-                        <input 
-                            type="password" 
-                            name="password" 
+                        <input
+                            type="password"
+                            name="password"
                             id="password"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-violet focus:border-brand-violet"
                             required
                             minlength="8"
                         >
@@ -229,34 +233,36 @@
 
                     <div>
                         <label for="password_confirmation" class="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
-                        <input 
-                            type="password" 
-                            name="password_confirmation" 
+                        <input
+                            type="password"
+                            name="password_confirmation"
                             id="password_confirmation"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-violet focus:border-brand-violet"
                             required
                             minlength="8"
                         >
                     </div>
 
                     <div class="pt-4">
-                        <button type="submit" class="w-full px-6 py-3 bg-gray-700 text-white font-medium rounded-lg hover:bg-gray-800 transition-colors">
+                        <x-button type="submit" variant="primary" class="w-full justify-center">
                             Update Password
-                        </button>
+                        </x-button>
                     </div>
                 </form>
             </div>
 
             <!-- Store Link -->
-            <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-                <div class="bg-gradient-to-r from-purple-500 to-purple-600 px-6 py-4">
-                    <h2 class="text-xl font-bold text-white flex items-center">
-                        <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+                    <span class="w-9 h-9 bg-brand-violet-soft rounded-lg flex items-center justify-center shrink-0">
+                        <svg class="w-5 h-5 text-brand-violet" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
                         </svg>
-                        Your Store Link
-                    </h2>
-                    <p class="text-purple-100">Share this link with your customers</p>
+                    </span>
+                    <div>
+                        <h2 class="text-base font-semibold text-gray-900">Your Store Link</h2>
+                        <p class="text-sm text-gray-500">Share this link with your customers</p>
+                    </div>
                 </div>
 
                 <div class="p-6">
@@ -267,25 +273,27 @@
                     </div>
 
                     <div class="mt-4 flex gap-3">
-                        <button 
+                        <x-button
+                            type="button"
+                            variant="primary"
                             onclick="copyToClipboard('{{ route('storefront.vendor', $vendor->vendor_code) }}')"
-                            class="flex-1 px-4 py-2 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center"
+                            class="flex-1 justify-center"
                         >
                             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/>
                             </svg>
                             Copy Link
-                        </button>
-                        <a 
+                        </x-button>
+                        <x-button
                             href="{{ route('storefront.vendor', $vendor->vendor_code) }}"
                             target="_blank"
-                            class="px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors flex items-center"
+                            variant="secondary"
                         >
                             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
                             </svg>
                             Visit Store
-                        </a>
+                        </x-button>
                     </div>
 
                     <div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -297,22 +305,23 @@
             </div>
 
             <!-- External Fulfillment -->
-            <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-                <div class="bg-gradient-to-r from-brand-deep-blue to-blue-700 px-6 py-4">
-                    <h2 class="text-xl font-bold text-white flex items-center">
-                        <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+                    <span class="w-9 h-9 bg-brand-violet-soft rounded-lg flex items-center justify-center shrink-0">
+                        <svg class="w-5 h-5 text-brand-violet" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
                         </svg>
-                        External Fulfillment
-                    </h2>
-                    <p class="text-blue-100">Configure your external fulfillment integration</p>
+                    </span>
+                    <div>
+                        <h2 class="text-base font-semibold text-gray-900">External Fulfillment</h2>
+                        <p class="text-sm text-gray-500">Configure your external fulfillment integration</p>
+                    </div>
                 </div>
 
                 <div class="p-6">
-                    <a href="{{ route('vendor.settings.external-fulfillment') }}"
-                       class="inline-flex items-center px-4 py-2 bg-brand-deep-blue text-white font-medium rounded-lg hover:bg-blue-700 transition-colors">
+                    <x-button href="{{ route('vendor.settings.external-fulfillment') }}" variant="primary">
                         Manage Settings
-                    </a>
+                    </x-button>
                     <p class="mt-3 text-sm text-gray-600">Only root vendors can enable this feature.</p>
                 </div>
             </div>

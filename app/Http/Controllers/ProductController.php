@@ -11,7 +11,6 @@ use App\Support\Money;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\Rule;
 
 class ProductController extends Controller
 {
@@ -33,6 +32,7 @@ class ProductController extends Controller
         [$activeExternalFulfillmentProvider, $providerNetworks] = $this->resolveExternalFulfillmentContext($vendor);
 
         return view('product_create', [
+            'vendor' => $vendor,
             'networkOptions' => $networkOptions,
             'activeExternalFulfillmentProvider' => $activeExternalFulfillmentProvider,
             'providerNetworks' => $providerNetworks,
@@ -104,7 +104,7 @@ class ProductController extends Controller
                 if (isset($metadata['external_mappings'][$p]['service_id'])) {
                     // Prefix so the JS dropdown and buildStructuredDescription() both know
                     // which provider owns this service ID (e.g. "skdataplug::SOME_ID").
-                    $metadata['external_mappings'][$p]['service_id'] = $p . '::' . $metadata['external_mappings'][$p]['service_id'];
+                    $metadata['external_mappings'][$p]['service_id'] = $p.'::'.$metadata['external_mappings'][$p]['service_id'];
                     $activeExternalFulfillmentProvider = $p;
                     break;
                 }
@@ -112,6 +112,7 @@ class ProductController extends Controller
         }
 
         return view('product_edit', [
+            'vendor' => $vendor,
             'product' => $product,
             'metadata' => $metadata,
             'networkOptions' => $networkOptions,
@@ -232,17 +233,19 @@ class ProductController extends Controller
     protected function findVendorProduct(int|Product $id): Product
     {
         $vendor = $this->resolveVendor();
+
         return Product::where('vendor_id', $vendor->id)->findOrFail($id);
     }
 
     protected function categoryValidationRule(): string
     {
-        return 'nullable|string|in:' . implode(',', $this->availableCategoryKeys());
+        return 'nullable|string|in:'.implode(',', $this->availableCategoryKeys());
     }
 
     protected function availableCategoryKeys(): array
     {
         $keys = array_keys(config('storefront.categories', []));
+
         return $keys ?: ['data'];
     }
 
@@ -271,7 +274,7 @@ class ProductController extends Controller
             return 'nullable|string|max:60';
         }
 
-        return 'nullable|string|in:' . implode(',', $names);
+        return 'nullable|string|in:'.implode(',', $names);
     }
 
     protected function defaultCategory(): string
@@ -289,8 +292,7 @@ class ProductController extends Controller
         Vendor $vendor,
         ?string $activeExternalFulfillmentProvider = null,
         array $existingMetadata = [],
-    ): ?string
-    {
+    ): ?string {
         $externalMappings = [];
         if (isset($existingMetadata['external_mappings']) && is_array($existingMetadata['external_mappings'])) {
             $externalMappings = $existingMetadata['external_mappings'];
@@ -439,7 +441,7 @@ class ProductController extends Controller
     protected function externalNetworkValidationRule(array $providerNetworks): string
     {
         if (! empty($providerNetworks)) {
-            return 'nullable|string|in:' . implode(',', $providerNetworks);
+            return 'nullable|string|in:'.implode(',', $providerNetworks);
         }
 
         return 'nullable|string|max:60';

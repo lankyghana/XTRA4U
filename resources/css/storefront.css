@@ -1,0 +1,693 @@
+/* =====================================================================
+   XTRA4U Storefront Design System
+   ---------------------------------------------------------------------
+   Visual language for the public marketplace homepage.
+
+   Every token, utility and animation in this file is namespaced with an
+   `x4-` prefix, and the typographic scale only applies inside `.x4`.
+   Nothing here leaks into the vendor dashboard, admin, checkout, or the
+   other views that share `layouts/app.blade.php`.
+   ===================================================================== */
+
+.x4 {
+    /* Brand violet ramp */
+    --x4-primary: #533afd;
+    --x4-primary-deep: #4434d4;
+    --x4-primary-press: #2e2b8c;
+    --x4-primary-soft: #665efd;
+    --x4-primary-sub: #b9b9f9;
+
+    /* Hero/service-card violet (a touch warmer than the ramp above) */
+    --x4-violet: #5b3df5;
+    --x4-violet-deep: #4a30d4;
+    --x4-violet-soft: #ede9fe;
+    --x4-violet-soft-deep: #ddd6fe;
+
+    /* Ink */
+    --x4-brand-dark: #1c1e54;
+    --x4-ink: #0d253d;
+    --x4-ink-sec: #273951;
+    --x4-ink-mute: #4f6070;
+    --x4-ink-strong: #111827;
+    --x4-ink-body: #4b5563;
+    --x4-ink-soft: #6b7280;
+
+    /* Surfaces */
+    --x4-canvas: #ffffff;
+    --x4-canvas-soft: #f6f9fc;
+    --x4-canvas-cream: #f5e9d4;
+    --x4-hairline: #e3e8ee;
+    --x4-hairline-warm: #e5e7eb;
+
+    /* Elevation */
+    --x4-shadow-1: rgba(0, 55, 112, 0.08) 0 1px 3px;
+    --x4-shadow-2: rgba(0, 55, 112, 0.08) 0 8px 24px, rgba(0, 55, 112, 0.04) 0 2px 6px;
+    --x4-shadow-3: rgba(0, 55, 112, 0.14) 0 20px 48px, rgba(0, 55, 112, 0.06) 0 4px 12px;
+
+    /* Radii */
+    --x4-r-sm: 6px;
+    --x4-r-md: 8px;
+    --x4-r-lg: 12px;
+    --x4-r-xl: 16px;
+    --x4-r-pill: 9999px;
+
+    color: var(--x4-ink);
+    background: var(--x4-canvas);
+    font-family: Inter, "SF Pro Display", system-ui, -apple-system, sans-serif;
+    font-size: 15px;
+    font-weight: 300;
+    line-height: 1.4;
+    font-feature-settings: "ss01";
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ---------------------------------------------------------------
+   Typographic scale
+
+   Light-weight (300) display type with tight negative tracking is the
+   signature of this design. Headings opt in explicitly because the
+   Tailwind preflight resets h1-h6 to inherit size and weight.
+   --------------------------------------------------------------- */
+.x4 .x4-display-xxl {
+    font-size: clamp(34px, 6vw, 56px);
+    font-weight: 300;
+    line-height: 1.06;
+    letter-spacing: -1.4px;
+}
+
+.x4 .x4-display-xl {
+    font-size: clamp(28px, 5vw, 48px);
+    font-weight: 300;
+    line-height: 1.15;
+    letter-spacing: -0.96px;
+}
+
+.x4 .x4-display-lg {
+    font-size: clamp(22px, 4vw, 32px);
+    font-weight: 300;
+    line-height: 1.1;
+    letter-spacing: -0.64px;
+}
+
+.x4 .x4-display-md {
+    font-size: 26px;
+    font-weight: 300;
+    line-height: 1.12;
+    letter-spacing: -0.26px;
+}
+
+.x4 .x4-heading-lg {
+    font-size: 22px;
+    font-weight: 300;
+    line-height: 1.1;
+    letter-spacing: -0.22px;
+}
+
+.x4 .x4-heading-md {
+    font-size: 20px;
+    font-weight: 300;
+    line-height: 1.4;
+    letter-spacing: -0.2px;
+}
+
+.x4 .x4-body-lg {
+    font-size: 16px;
+    font-weight: 300;
+    line-height: 1.4;
+}
+
+.x4 .x4-body-md {
+    font-size: 15px;
+    font-weight: 300;
+    line-height: 1.4;
+}
+
+.x4 .x4-caption {
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 1.4;
+    letter-spacing: -0.39px;
+}
+
+.x4 .x4-micro-cap {
+    font-size: 10px;
+    font-weight: 400;
+    line-height: 1.15;
+    letter-spacing: 0.1px;
+    text-transform: uppercase;
+}
+
+/* Tabular figures for stats, prices and counters */
+.x4 .x4-tnum {
+    font-feature-settings: "tnum", "ss01";
+    letter-spacing: -0.42px;
+}
+
+/* ---------------------------------------------------------------
+   Buttons
+   --------------------------------------------------------------- */
+.x4 .x4-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 22px;
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1;
+    border-radius: var(--x4-r-pill);
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.x4 .x4-btn-primary {
+    background-color: var(--x4-primary);
+    color: #fff;
+    border: 1px solid var(--x4-primary);
+}
+
+.x4 .x4-btn-primary:hover {
+    background-color: var(--x4-primary-deep);
+    border-color: var(--x4-primary-deep);
+}
+
+.x4 .x4-btn-primary:active {
+    background-color: var(--x4-primary-press);
+}
+
+.x4 .x4-btn-outline {
+    background-color: var(--x4-canvas);
+    color: var(--x4-primary);
+    border: 1px solid var(--x4-primary);
+}
+
+.x4 .x4-btn-outline:hover {
+    background-color: var(--x4-violet-soft);
+}
+
+/* Ghost button, for use on the dark brand panel */
+.x4 .x4-btn-ghost {
+    background-color: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+}
+
+.x4 .x4-btn-ghost:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Squarer, heavier hero CTAs */
+.x4 .x4-btn-hero {
+    border-radius: 10px;
+    padding: 13px 26px;
+}
+
+.x4 .x4-btn-hero-primary {
+    background-color: var(--x4-violet);
+    border-color: var(--x4-violet);
+    box-shadow: 0 4px 14px rgba(91, 61, 245, 0.35);
+}
+
+.x4 .x4-btn-hero-primary:hover {
+    background-color: var(--x4-violet-deep);
+    border-color: var(--x4-violet-deep);
+}
+
+.x4 .x4-btn-hero-outline {
+    border-width: 1.5px;
+    border-color: var(--x4-violet);
+    color: var(--x4-violet);
+}
+
+.x4 .x4-btn-hero-outline:hover {
+    background-color: var(--x4-violet-soft);
+}
+
+/* ---------------------------------------------------------------
+   Eyebrow chip
+   --------------------------------------------------------------- */
+.x4 .x4-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: var(--x4-r-pill);
+    background-color: var(--x4-primary-sub);
+    color: var(--x4-primary-deep);
+}
+
+/* ---------------------------------------------------------------
+   Service card
+   --------------------------------------------------------------- */
+.x4 .x4-service-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 28px;
+    background-color: #fff;
+    border: 1.5px solid var(--x4-hairline-warm);
+    border-radius: var(--x4-r-xl);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    transition: box-shadow 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.x4 .x4-service-card:hover,
+.x4 .x4-service-card:focus-within {
+    box-shadow: 0 8px 32px rgba(91, 61, 245, 0.14);
+    border-color: var(--x4-violet);
+    transform: translateY(-3px);
+}
+
+/* Violet rule that fades in along the top edge on hover */
+.x4 .x4-service-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: var(--x4-violet);
+    border-radius: var(--x4-r-xl) var(--x4-r-xl) 0 0;
+    opacity: 0;
+    transition: opacity 0.18s ease;
+}
+
+.x4 .x4-service-card:hover::before,
+.x4 .x4-service-card:focus-within::before {
+    opacity: 1;
+}
+
+.x4 .x4-service-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+    border-radius: var(--x4-r-lg);
+    background-color: var(--x4-violet);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(91, 61, 245, 0.3);
+}
+
+.x4 .x4-service-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    align-self: flex-start;
+    padding: 7px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--x4-violet);
+    background-color: var(--x4-violet-soft);
+    border-radius: var(--x4-r-md);
+    text-decoration: none;
+    transition: background-color 0.15s ease;
+}
+
+.x4 .x4-service-link:hover {
+    background-color: var(--x4-violet-soft-deep);
+}
+
+/* ---------------------------------------------------------------
+   Vendor store: shared panel, inputs, and selection cards
+
+   Used by resources/views/vendor_store.blade.php. Every selectable
+   element here (category tile, service card, package card) is a plain
+   HTML element carrying Alpine bindings directly, not a Blade component
+   — `:class`/`:disabled` on a `<x-...>` tag would be evaluated as PHP
+   by the component compiler and collide with Alpine's own syntax.
+   --------------------------------------------------------------- */
+.x4 .x4-panel {
+    background-color: var(--x4-canvas);
+    border: 1px solid var(--x4-hairline);
+    border-radius: var(--x4-r-lg);
+    box-shadow: var(--x4-shadow-1);
+}
+
+.x4 .x4-input {
+    display: block;
+    width: 100%;
+    padding: 10px 14px;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--x4-ink);
+    background-color: var(--x4-canvas);
+    border: 1px solid var(--x4-hairline);
+    border-radius: var(--x4-r-md);
+    transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.x4 .x4-input:focus {
+    outline: none;
+    border-color: var(--x4-violet);
+    box-shadow: 0 0 0 3px var(--x4-violet-soft);
+}
+
+.x4 .x4-cat-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    text-align: center;
+    padding: 20px 12px;
+    min-height: 112px;
+    background-color: var(--x4-canvas);
+    border: 1.5px solid var(--x4-hairline-warm);
+    border-radius: var(--x4-r-lg);
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease, background-color 0.15s ease;
+}
+
+.x4 .x4-cat-tile:hover {
+    border-color: var(--x4-violet);
+    box-shadow: 0 6px 20px rgba(91, 61, 245, 0.14);
+    transform: translateY(-2px);
+}
+
+.x4 .x4-cat-tile.is-selected {
+    border-color: var(--x4-violet);
+    background-color: var(--x4-violet-soft);
+    box-shadow: 0 0 0 3px var(--x4-violet-soft-deep) inset;
+}
+
+.x4 .x4-cat-tile.is-closed {
+    cursor: not-allowed;
+    background-color: var(--x4-canvas-soft);
+    color: var(--x4-ink-mute);
+}
+
+.x4 .x4-cat-tile.is-closed:hover {
+    border-color: var(--x4-hairline-warm);
+    box-shadow: none;
+    transform: none;
+}
+
+.x4 .x4-cat-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--x4-r-md);
+    background-color: var(--x4-violet-soft);
+    color: var(--x4-violet);
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.x4 .x4-cat-tile.is-selected .x4-cat-icon {
+    background-color: var(--x4-violet);
+    color: #fff;
+}
+
+.x4 .x4-pick-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px;
+    background-color: var(--x4-canvas);
+    border: 1.5px solid var(--x4-hairline-warm);
+    border-radius: var(--x4-r-md);
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.x4 .x4-pick-card:hover {
+    border-color: var(--x4-violet-soft-deep);
+    box-shadow: var(--x4-shadow-1);
+}
+
+.x4 .x4-pick-card.is-selected {
+    border-color: var(--x4-violet);
+    background-color: var(--x4-violet-soft);
+}
+
+/* ---------------------------------------------------------------
+   Decorative washes
+   --------------------------------------------------------------- */
+
+/* Aurora behind the closing call to action */
+.x4 .x4-aurora {
+    background:
+        radial-gradient(ellipse 70% 90% at 5% 40%, rgba(245, 201, 132, 0.55) 0%, transparent 55%),
+        radial-gradient(ellipse 55% 70% at 28% 10%, rgba(249, 107, 238, 0.28) 0%, transparent 50%),
+        radial-gradient(ellipse 65% 80% at 55% 25%, rgba(83, 58, 253, 0.3) 0%, transparent 55%),
+        radial-gradient(ellipse 50% 60% at 80% 15%, rgba(234, 34, 97, 0.22) 0%, transparent 50%),
+        radial-gradient(ellipse 60% 50% at 95% 60%, rgba(68, 52, 212, 0.18) 0%, transparent 55%),
+        #f6f9fc;
+}
+
+/* Softer wash behind the hero */
+.x4 .x4-hero-wash {
+    background:
+        radial-gradient(ellipse 70% 55% at 20% 50%, rgba(91, 61, 245, 0.07) 0%, transparent 60%),
+        radial-gradient(ellipse 45% 40% at 85% 15%, rgba(79, 107, 255, 0.05) 0%, transparent 55%),
+        radial-gradient(ellipse 35% 30% at 60% 85%, rgba(109, 74, 255, 0.04) 0%, transparent 50%);
+}
+
+/* ---------------------------------------------------------------
+   Page wrapper
+
+   Reveal-on-scroll stages elements at translateX(±32px), which would
+   otherwise stick out past the viewport and give the page a horizontal
+   scrollbar on narrow screens until the animation runs. Clipping the
+   wrapper contains that travel. `clip` is preferred because it does not
+   create a scroll container; `hidden` is the fallback for older engines.
+   --------------------------------------------------------------- */
+.x4 .x4-page {
+    overflow-x: hidden;
+    overflow-x: clip;
+}
+
+/* ---------------------------------------------------------------
+   Hero slider
+
+   Slides are stacked absolutely and cross-faded with opacity, never
+   `display`, so that:
+     - both images occupy the same box and the height never collapses,
+     - the outgoing and incoming slides fade through each other rather
+       than through the page background,
+     - the off-screen slide still counts as in-viewport, so the browser
+       preloads it instead of stalling on the first transition.
+   The aspect ratio holds the box open before the images decode.
+   --------------------------------------------------------------- */
+.x4 .x4-slider {
+    position: relative;
+    aspect-ratio: 1100 / 619;
+    max-height: 500px;
+    overflow: hidden;
+    border-radius: 20px;
+    border: 1px solid var(--x4-hairline-warm);
+    box-shadow: 0 24px 64px rgba(91, 61, 245, 0.18);
+    background-color: var(--x4-canvas-soft);
+}
+
+.x4 .x4-slide {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+}
+
+.x4 .x4-slide.is-active {
+    opacity: 1;
+}
+
+/* Dots keep the design's 7px / 22px pill but sit inside a 24px hit area
+   so they meet the minimum target size on touch screens. */
+.x4 .x4-slider-dot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+}
+
+.x4 .x4-slider-dot::before {
+    content: "";
+    display: block;
+    width: 7px;
+    height: 7px;
+    border-radius: var(--x4-r-pill);
+    background-color: rgba(255, 255, 255, 0.45);
+    transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.x4 .x4-slider-dot[aria-current="true"]::before {
+    width: 22px;
+    background-color: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .x4 .x4-slide,
+    .x4 .x4-slider-dot::before {
+        transition: none;
+    }
+}
+
+/* ---------------------------------------------------------------
+   Text links
+
+   Colour shifts on hover AND focus, so keyboard users get the same
+   affordance as pointer users. These replace inline JS mouse handlers.
+   --------------------------------------------------------------- */
+.x4 .x4-link {
+    color: var(--x4-ink-mute);
+    text-decoration: none;
+    transition: color 0.12s ease;
+}
+
+.x4 .x4-link:hover,
+.x4 .x4-link:focus-visible {
+    color: var(--x4-ink);
+}
+
+.x4 .x4-link-accent:hover,
+.x4 .x4-link-accent:focus-visible {
+    color: var(--x4-primary);
+}
+
+/* ---------------------------------------------------------------
+   Focus visibility
+   --------------------------------------------------------------- */
+.x4 a:focus-visible,
+.x4 button:focus-visible {
+    outline: 2px solid var(--x4-primary);
+    outline-offset: 2px;
+    border-radius: var(--x4-r-sm);
+}
+
+/* ---------------------------------------------------------------
+   Motion
+   --------------------------------------------------------------- */
+@keyframes x4-float {
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-7px);
+    }
+}
+
+@keyframes x4-pulse-dot {
+    0%,
+    100% {
+        box-shadow: 0 0 rgba(74, 222, 128, 0.75);
+    }
+    60% {
+        box-shadow: 0 0 0 5px rgba(74, 222, 128, 0);
+    }
+}
+
+@keyframes x4-chip-slide {
+    from {
+        opacity: 0;
+        transform: translateX(-14px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes x4-marquee {
+    from {
+        transform: translateX(0);
+    }
+    to {
+        transform: translateX(-33.3333%);
+    }
+}
+
+.x4 .x4-float {
+    animation: x4-float 3.2s ease-in-out infinite;
+}
+
+.x4 .x4-pulse-dot {
+    animation: x4-pulse-dot 2s ease-in-out infinite;
+}
+
+.x4 .x4-chip {
+    animation: x4-chip-slide 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.x4 .x4-marquee {
+    display: flex;
+    width: max-content;
+    align-items: center;
+    gap: 16px;
+    animation: x4-marquee 16s linear infinite;
+}
+
+.x4 .x4-marquee:hover {
+    animation-play-state: paused;
+}
+
+.x4 .x4-marquee-mask {
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(to right, transparent, black 12%, black 88%, transparent);
+    mask-image: linear-gradient(to right, transparent, black 12%, black 88%, transparent);
+}
+
+/* Scroll reveal.
+
+   The hidden state is applied by JS (`.x4-reveal-armed`) rather than in
+   the stylesheet, so if Alpine never boots the page still renders fully
+   visible instead of staying blank. */
+.x4 [data-x4-reveal] {
+    transition:
+        opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1) var(--x4-reveal-delay, 0ms),
+        transform 0.7s cubic-bezier(0.22, 1, 0.36, 1) var(--x4-reveal-delay, 0ms);
+    will-change: opacity, transform;
+}
+
+.x4 [data-x4-reveal].x4-reveal-armed {
+    opacity: 0;
+}
+
+.x4 [data-x4-reveal="up"].x4-reveal-armed {
+    transform: translateY(32px);
+}
+
+.x4 [data-x4-reveal="left"].x4-reveal-armed {
+    transform: translateX(-32px);
+}
+
+.x4 [data-x4-reveal="right"].x4-reveal-armed {
+    transform: translateX(32px);
+}
+
+.x4 [data-x4-reveal].x4-visible {
+    opacity: 1;
+    transform: none;
+}
+
+/* Anyone who asked for less motion gets the finished state, no travel. */
+@media (prefers-reduced-motion: reduce) {
+    .x4 [data-x4-reveal],
+    .x4 [data-x4-reveal].x4-reveal-armed,
+    .x4 [data-x4-reveal].x4-visible {
+        opacity: 1;
+        transform: none;
+        transition: none;
+    }
+
+    .x4 .x4-float,
+    .x4 .x4-pulse-dot,
+    .x4 .x4-chip,
+    .x4 .x4-marquee {
+        animation: none;
+    }
+}

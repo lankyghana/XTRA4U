@@ -14,10 +14,14 @@
 $baseClasses = 'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
 
 $variants = [
-    'primary' => 'bg-[#00942C] text-white hover:bg-[#009633] focus:ring-[#0B66B5] px-4 py-2 font-medium shadow-md',
-    'secondary' => 'border border-gray-300 text-gray-700 bg-white hover:bg-gray-100 focus:ring-[#0B66B5] px-4 py-2 font-medium',
-    'outline' => 'border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 focus:ring-[#0B66B5] px-4 py-2 font-medium',
-    'ghost' => 'text-gray-700 bg-transparent hover:bg-gray-100 focus:ring-[#0B66B5] px-4 py-2 font-medium',
+    // Primary brand action (Add Product, Save, Update) — the one violet-filled
+    // button on a page. See XTRA4U button hierarchy: resources/css/storefront.css.
+    'primary' => 'bg-brand-violet text-white hover:bg-brand-violet-deep focus:ring-brand-violet-deep px-4 py-2 font-medium shadow-sm',
+    // Supporting actions (Cancel, Log Out) — neutral, never competes with primary.
+    'secondary' => 'border border-gray-300 text-gray-700 bg-white hover:bg-gray-100 focus:ring-brand-violet px-4 py-2 font-medium',
+    // Branded-but-secondary actions (View, Filters) — violet outline, white fill.
+    'outline' => 'border border-brand-violet text-brand-violet bg-white hover:bg-brand-violet-soft focus:ring-brand-violet px-4 py-2 font-medium',
+    'ghost' => 'text-gray-700 bg-transparent hover:bg-gray-100 focus:ring-brand-violet px-4 py-2 font-medium',
     'danger' => 'bg-[#DC2626] text-white hover:bg-red-700 focus:ring-[#DC2626] px-4 py-2 font-medium',
     'success' => 'bg-[#00942C] text-white hover:bg-[#009633] focus:ring-[#00942C] px-4 py-2 font-medium',
 ];
@@ -33,9 +37,8 @@ $classes = collect([$baseClasses, $variants[$variant], $sizes[$size]])->implode(
 @endphp
 
 @if($href)
-    <a href="{{ $href }}" 
-       class="{{ $classes }}"
-       {{ $attributes }}>
+    <a href="{{ $href }}"
+       {{ $attributes->merge(['class' => $classes]) }}>
         @if($icon && $iconPosition === 'left')
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 {!! $icon !!}
@@ -58,10 +61,9 @@ $classes = collect([$baseClasses, $variants[$variant], $sizes[$size]])->implode(
         @endif
     </a>
 @else
-    <button type="{{ $type }}" 
-            class="{{ $classes }}"
+    <button type="{{ $type }}"
             {{ $disabled ? 'disabled' : '' }}
-            {{ $attributes }}>
+            {{ $attributes->merge(['class' => $classes]) }}>
         @if($icon && $iconPosition === 'left')
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 {!! $icon !!}

@@ -4,6 +4,9 @@
 /* css-validate-disable */
 @import 'tailwindcss';
 
+/* Public marketplace storefront design system (scoped to `.x4`) */
+@import './storefront.css';
+
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 @source '../**/*.blade.php';
@@ -24,7 +27,16 @@
     --color-brand-xtra-green: #00942C;
     --color-brand-bright-green: #009633;
     --color-brand-soft-green: #73B553;
-    
+
+    /* Violet — the storefront's brand accent (resources/css/storefront.css
+       --x4-violet), also used for the vendor/admin dashboard chrome so the
+       whole product reads as one brand rather than two. */
+    --color-brand-violet: #533afd;
+    --color-brand-violet-deep: #4434d4;
+    --color-brand-violet-press: #2e2b8c;
+    --color-brand-violet-soft: #ede9fe;
+    --color-brand-dark: #1c1e54;
+
     /* Neutral Colors */
     --color-brand-dark-gray: #1F2937;
     --color-brand-medium-gray: #6B7280;
