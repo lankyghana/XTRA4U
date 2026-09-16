@@ -321,6 +321,10 @@ class UssdMenuService
                     'mobile_money_network' => $session->getData('network_name'),
                     'service_purchased' => $product->name,
                     'amount_paid' => $product->price,
+                    // Freeze this order's financial terms at creation, exactly
+                    // as the web checkout does. A USSD order is a normal order
+                    // and is held to the same immutable-terms invariant.
+                    ...\App\Services\Payments\OrderPricingSnapshot::forOwnedProduct($product),
                     'vendor_id' => $sessionVendorId,
                     'vendor_service_id' => $product->id,
                     'owner_vendor_id' => $isReseller ? $product->vendor_id : null,
