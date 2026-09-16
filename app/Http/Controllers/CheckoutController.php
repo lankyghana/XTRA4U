@@ -10,12 +10,13 @@ use App\Models\ResellerProduct;
 use App\Models\Vendor;
 use App\Services\GatewayManager;
 use App\Services\Payments\CheckoutIntentGuard;
+use App\Services\Payments\OrderPricingSnapshot;
+use App\Services\Payments\PaymentIntegrityGuard;
 use App\Services\PaymentService;
 use App\Support\PaymentVerificationState;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 
 class CheckoutController extends Controller
 {
@@ -25,11 +26,18 @@ class CheckoutController extends Controller
 
     protected CheckoutIntentGuard $intentGuard;
 
-    public function __construct(PaymentService $paymentService, GatewayManager $gatewayManager, ?CheckoutIntentGuard $intentGuard = null)
-    {
+    protected PaymentIntegrityGuard $integrityGuard;
+
+    public function __construct(
+        PaymentService $paymentService,
+        GatewayManager $gatewayManager,
+        ?CheckoutIntentGuard $intentGuard = null,
+        ?PaymentIntegrityGuard $integrityGuard = null,
+    ) {
         $this->paymentService = $paymentService;
         $this->gatewayManager = $gatewayManager;
         $this->intentGuard = $intentGuard ?? app(CheckoutIntentGuard::class);
+        $this->integrityGuard = $integrityGuard ?? app(PaymentIntegrityGuard::class);
     }
 
     /**
@@ -303,9 +311,16 @@ class CheckoutController extends Controller
         // to derive what the customer is actually charged — the price always
         // comes from the product/reseller-listing row resolved (and vendor-
         // matched) server-side above.
-        $authoritativeAmount = $resellerProduct
-            ? (float) $resellerProduct->selling_price
-            : (float) $product->price;
+        //
+        // The snapshot freezes the full breakdown (main vendor's base price +
+        // reseller markup = expected amount, plus currency) onto the order, so
+        // a later price or markup change cannot alter what THIS order owes and
+        // settlement never has to consult live pricing again.
+        $pricingSnapshot = $resellerProduct
+            ? OrderPricingSnapshot::forResellerListing($resellerProduct)
+            : OrderPricingSnapshot::forOwnedProduct($product);
+
+        $authoritativeAmount = (float) $pricingSnapshot['expected_amount'];
 
         // A resolved price of zero (or less) is a data/config issue, not a valid
         // sale — never create a free/negative order regardless of what the
@@ -352,6 +367,8 @@ class CheckoutController extends Controller
                 'mobile_money_network' => $validated['payer_network'] ?? null,
                 'service_purchased' => $resolvedServiceName,
                 'amount_paid' => $authoritativeAmount,
+                // Immutable financial terms for this order — see above.
+                ...$pricingSnapshot,
                 'vendor_id' => $validated['vendor_id'],
                 'vendor_service_id' => $product?->id ?? $resellerProduct?->product?->id,
                 'reseller_product_id' => $resellerProduct?->id,
@@ -502,37 +519,28 @@ class CheckoutController extends Controller
             ]);
         }
 
-        // Every gateway's verifyPayment() already normalizes data.amount to major
-        // units (GHS) — including Paystack's, which converts from pesewas internally.
-        $amount = data_get($verification, 'data.amount');
+        // Central payment integrity invariant: the gateway must have confirmed
+        // SUCCESS for this order's own reference, under this order's own
+        // gateway, in the expected currency, for an amount EXACTLY equal to the
+        // order's frozen expected amount, on a transaction not already consumed
+        // by another order. Anything else refuses to settle and is recorded for
+        // investigation — never silently corrected.
+        $integrity = $this->integrityGuard->guard($order, $verification, $order->payment_gateway);
 
-        // Amount mismatch guard. For gateways that lock the amount in via a real
-        // server-to-server "initialize" call (Paystack/Flutterwave/Moolre/BulkClix),
-        // the verified amount can never legitimately be less than what we expect,
-        // so this is a no-op for them. It matters for Payaza: its Web Checkout SDK
-        // sets checkout_amount client-side with no prior server-locked amount, so a
-        // tampered popup could otherwise get a genuinely-paid-but-too-small amount
-        // waved through. Never fulfil on a lower-than-expected confirmed amount.
-        $expectedAmount = (float) $order->amount_paid;
-        if ($amount !== null && $expectedAmount > 0 && round((float) $amount, 2) < round($expectedAmount, 2)) {
-            Log::error('Checkout verify: verified amount is less than expected order amount - refusing to fulfil', [
-                'order_id' => $order->id,
-                'reference' => $reference,
-                'expected_amount' => $expectedAmount,
-                'verified_amount' => $amount,
-            ]);
-
+        if (! $integrity->passed) {
             return response()->json([
                 'success' => true,
                 'status' => 'failed',
-                'message' => 'Payment amount mismatch. Please contact support.',
+                // Deliberately generic: the expected/confirmed figures are
+                // diagnostic data for administrators, not for the customer.
+                'message' => 'We could not confirm this payment. Please contact support.',
                 'order_id' => $order->id,
             ]);
         }
 
-        if ($amount) {
-            $order->amount_paid = (float) $amount;
-        }
+        // Record what was actually collected, now that it has been proven to
+        // match the frozen expected amount.
+        $order->amount_paid = $integrity->confirmedAmount;
 
         $this->paymentService->completeOrder($order);
 
