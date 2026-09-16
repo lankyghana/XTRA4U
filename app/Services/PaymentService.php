@@ -12,6 +12,8 @@ use App\Models\ResellerProduct;
 use App\Models\Transaction;
 use App\Models\Vendor;
 use App\Models\VendorNotification;
+use App\Support\Money;
+use App\Support\PaymentIntegrity;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -116,6 +118,20 @@ class PaymentService
     /**
      * Complete an order after successful payment
      * This handles all post-payment logic: transactions, notifications, emails, SMS, wallet updates
+     *
+     * HARD FINANCIAL BOUNDARY. No order may create financial side effects
+     * until the server has PROVEN that a trusted payment source satisfied
+     * that exact order's immutable financial terms. That proof is carried by
+     * `orders.payment_integrity_status` (see {@see PaymentIntegrity}), which
+     * only PaymentIntegrityGuard — or one of the explicitly modelled
+     * non-gateway trusted sources (vendor wallet debit, admin confirmation) —
+     * can write.
+     *
+     * The check lives HERE rather than only in the callers because the
+     * callers are many and growing: a browser verify endpoint, three provider
+     * webhooks, a redirect callback, a reconciliation sweep, two admin
+     * actions, and whatever integration is added next. Any of them could
+     * forget the check; none of them can forget this one.
      */
     public function completeOrder(Order $order): bool
     {
@@ -123,6 +139,10 @@ class PaymentService
         // Concurrency safety is enforced by lockForUpdate() inside the transaction below.
         if (in_array($order->payment_status, ['paid', 'completed'], true)) {
             return true;
+        }
+
+        if (! $this->maySettle($order)) {
+            return false;
         }
 
         $postCommit = [];
@@ -134,6 +154,13 @@ class PaymentService
             // Idempotency: avoid double-crediting wallets / duplicate transactions.
             if (in_array($locked->payment_status, ['paid', 'completed'], true)) {
                 return true;
+            }
+
+            // Re-check under the row lock: the integrity status could have
+            // been changed (e.g. stamped MISMATCH by a concurrent webhook)
+            // between the fast-path check above and acquiring this lock.
+            if (! $this->maySettle($locked)) {
+                return false;
             }
 
             if ($locked->is_reseller_order && $locked->reseller_product_id) {
@@ -151,11 +178,126 @@ class PaymentService
     }
 
     /**
+     * The settlement gate. Refuses — loudly, but without mutating anything —
+     * any order whose payment has not been proven by a trusted source.
+     */
+    private function maySettle(Order $order): bool
+    {
+        if ($order->allowsSettlement()) {
+            return true;
+        }
+
+        Log::error('PaymentService::completeOrder refused — payment integrity not established for this order', [
+            'order_id' => $order->id,
+            'payment_integrity_status' => $order->payment_integrity_status,
+            'payment_integrity_note' => $order->payment_integrity_note,
+            'payment_status' => $order->payment_status,
+            'payment_gateway' => $order->payment_gateway,
+            'payment_reference' => $order->payment_reference,
+            'expected_amount' => $order->expected_amount,
+            'amount_paid' => $order->amount_paid,
+        ]);
+
+        return false;
+    }
+
+    /**
+     * The amount this order is settled against.
+     *
+     * Prefers the immutable snapshot frozen at creation. `amount_paid` is used
+     * only for historical orders that predate the snapshot — never to override
+     * it, so a gateway that confirmed a different figure can never change what
+     * the platform pays out.
+     */
+    private function settlementAmountFor(Order $order): float
+    {
+        if ($order->hasPricingSnapshot()) {
+            return (float) $order->expected_amount;
+        }
+
+        return (float) $order->amount_paid;
+    }
+
+    /**
+     * The frozen base/markup split for a reseller order.
+     *
+     * This is the fix for the settlement path re-reading live pricing: the
+     * owner is paid the base price THIS ORDER was created against and the
+     * reseller the markup THIS ORDER was created against, regardless of what
+     * the main vendor's product price or the reseller's markup have since
+     * become. Price changes apply to new orders only.
+     *
+     * Historical orders (no snapshot) fall back to the live listing exactly as
+     * before, but the drift is asserted against what was actually collected
+     * and reported when it disagrees.
+     *
+     * @return array{base: float, markup: float, source: string}
+     */
+    private function resellerSettlementTerms(Order $order, ResellerProduct $resellerProduct): array
+    {
+        // What this order is authoritatively owed. Every split below must add
+        // up to exactly this — the platform must never pay out more than was
+        // collected, and must never silently pay out nothing.
+        $total = $this->settlementAmountFor($order);
+
+        // 1. The split frozen onto this order at creation, when it is present
+        //    and internally consistent. This is the normal path.
+        if ($order->hasPricingSnapshot() && $order->base_price !== null) {
+            $frozenBase = (float) $order->base_price;
+            $frozenMarkup = (float) $order->markup_price;
+
+            if (Money::equals(Money::sum($frozenBase, $frozenMarkup), $total)) {
+                return ['base' => $frozenBase, 'markup' => $frozenMarkup, 'source' => 'order_snapshot'];
+            }
+
+            Log::error('Reseller settlement: order has a pricing snapshot whose split does not add up to its expected amount', [
+                'order_id' => $order->id,
+                'frozen_base_price' => $frozenBase,
+                'frozen_markup_price' => $frozenMarkup,
+                'order_total' => $total,
+            ]);
+        }
+
+        // 2. The live listing, but ONLY while it still reconciles with what
+        //    this order owes — which is the case for a legacy order whose
+        //    listing has not been re-priced since.
+        $liveBase = (float) $resellerProduct->base_price;
+        $liveMarkup = (float) $resellerProduct->markup_price;
+
+        if (Money::equals(Money::sum($liveBase, $liveMarkup), $total)) {
+            return ['base' => $liveBase, 'markup' => $liveMarkup, 'source' => 'live_listing'];
+        }
+
+        // 3. Neither reconciles — a legacy order whose listing was re-priced
+        //    while it sat unresolved, or an inconsistent snapshot. Rather than
+        //    paying out a total the customer never paid (or, worse, zero),
+        //    honour the seller's markup up to the order total and give the
+        //    remainder to the owner, so the books still balance to what was
+        //    collected. Loud, because a human should look at it.
+        $reconciledMarkup = min($liveMarkup, $total);
+
+        Log::error('Reseller settlement: neither the frozen split nor the live listing reconciles with this order total; settling to the order total', [
+            'order_id' => $order->id,
+            'reseller_product_id' => $resellerProduct->id,
+            'order_total' => $total,
+            'live_base_price' => $liveBase,
+            'live_markup_price' => $liveMarkup,
+            'settled_markup' => $reconciledMarkup,
+        ]);
+
+        return [
+            'base' => round($total - $reconciledMarkup, 2),
+            'markup' => $reconciledMarkup,
+            'source' => 'reconciled_to_order_total',
+        ];
+    }
+
+    /**
      * Complete a regular (non-reseller) order
      */
     protected function completeRegularOrder(Order $order, array &$postCommit = []): bool
     {
-        $amountPaid = (float) $order->amount_paid;
+        $amountPaid = $this->settlementAmountFor($order);
         $commission = round($amountPaid * 0.02, 2);
         $vendorEarnings = round($amountPaid - $commission, 2);
 
@@ -241,11 +383,21 @@ class PaymentService
      * - Order->payment_source is 'wallet'
      * - The paying vendor already had their wallet debited for the total
      *   (base_price + platform_commission).
+     * - That debit was recorded as the order's proof of payment
+     *   (PaymentIntegrity::WALLET_VERIFIED). The wallet flow's trusted source
+     *   is the atomic server-side debit, so the caller that performed the
+     *   debit is what stamps it — this method verifies the stamp exists
+     *   rather than assuming its own precondition, which is what keeps an
+     *   un-debited order from being completed for free.
      */
     public function completeVendorWalletOrder(Order $order): bool
     {
         if (in_array($order->payment_status, ['paid', 'completed'], true)) {
             return true;
+        }
+
+        if (! $this->maySettle($order)) {
+            return false;
         }
 
         $postCommit = [];
@@ -255,6 +407,10 @@ class PaymentService
 
             if (in_array($locked->payment_status, ['paid', 'completed'], true)) {
                 return true;
+            }
+
+            if (! $this->maySettle($locked)) {
+                return false;
             }
 
             // We intentionally DO NOT run reseller or affiliate payout logic here.
@@ -408,8 +564,14 @@ class PaymentService
             return $this->completeMultiLevelResellerOrder($order, $resellerProduct, $postCommit);
         }
 
-        $basePrice = $resellerProduct->base_price;
-        $markupPrice = $resellerProduct->markup_price;
+        // Settle against the terms frozen onto THIS order at creation, not
+        // whatever the listing says now. A main vendor raising their price or
+        // a reseller changing their markup after an order exists must not
+        // change that order's economics — and must never be able to cause a
+        // payout larger than what was actually collected.
+        $terms = $this->resellerSettlementTerms($order, $resellerProduct);
+        $basePrice = $terms['base'];
+        $markupPrice = $terms['markup'];
 
         // Calculate commissions (2% each)
         $ownerCommission = round($basePrice * 0.02, 2);
@@ -550,6 +712,30 @@ class PaymentService
         $chainService = new AffiliateChainService;
         $payout = $chainService->computeResellerProductPayout($resellerProduct);
 
+        // Chain-drift guard. The live chain is only an acceptable basis for
+        // settlement while it still reconciles with the terms THIS order was
+        // created against. If any listing in the chain has been re-priced
+        // since — which is entirely legitimate, it just applies to new orders
+        // — distributing from the live chain would pay out an amount the
+        // customer never paid. Fall back to the order's own frozen split.
+        if (($payout['ok'] ?? false) && $order->hasPricingSnapshot()) {
+            $chainTotal = Money::sum(...array_map(
+                static fn (array $line) => $line['amount'] ?? 0,
+                $payout['lines'] ?? []
+            ));
+
+            if (! Money::equals($chainTotal, $order->expected_amount)) {
+                Log::warning('Multi-level reseller chain has been re-priced since this order was created; settling from the order\'s frozen snapshot instead', [
+                    'order_id' => $order->id,
+                    'reseller_product_id' => $resellerProduct->id,
+                    'live_chain_total' => $chainTotal,
+                    'order_expected_amount' => (string) $order->expected_amount,
+                ]);
+
+                $payout = ['ok' => false, 'reason' => 'chain_repriced_since_order_created'];
+            }
+        }
+
         if (! ($payout['ok'] ?? false)) {
             Log::warning('Multi-level reseller payout computation failed; falling back to 2-party split', [
                 'order_id' => $order->id,
@@ -557,12 +743,19 @@ class PaymentService
                 'reason' => $payout['reason'] ?? null,
             ]);
 
-            // Fallback: treat everything except immediate seller markup as the owner's portion.
-            $fallbackOwnerAmount = max(0.0, round(((float) $order->amount_paid) - (float) $resellerProduct->markup_price, 2));
+            // Fallback: the owner's portion is everything except the immediate
+            // seller's markup. Both figures come from the order's frozen terms
+            // when it has them, so a re-priced listing cannot inflate either.
+            $fallbackTerms = $this->resellerSettlementTerms($order, $resellerProduct);
+            $fallbackTotal = $order->hasPricingSnapshot()
+                ? (float) $order->expected_amount
+                : (float) $order->amount_paid;
+
+            $fallbackOwnerAmount = max(0.0, round($fallbackTotal - $fallbackTerms['markup'], 2));
             $fallbackOwnerCommission = round($fallbackOwnerAmount * 0.02, 2);
             $fallbackOwnerEarning = round($fallbackOwnerAmount - $fallbackOwnerCommission, 2);
 
-            $fallbackResellerAmount = (float) $resellerProduct->markup_price;
+            $fallbackResellerAmount = $fallbackTerms['markup'];
             $fallbackResellerCommission = round($fallbackResellerAmount * 0.02, 2);
             $fallbackResellerEarning = round($fallbackResellerAmount - $fallbackResellerCommission, 2);
 
@@ -572,8 +765,10 @@ class PaymentService
                 'status' => 'Processing',
                 'payment_status' => 'paid',
                 'payment_completed_at' => now(),
-                'base_price' => (float) $resellerProduct->base_price,
-                'markup_price' => (float) $resellerProduct->markup_price,
+                // Frozen terms win; only a legacy order with no snapshot takes
+                // these from the live listing (resellerSettlementTerms()).
+                'base_price' => $fallbackTerms['base'],
+                'markup_price' => $fallbackTerms['markup'],
                 'owner_earning' => $fallbackOwnerEarning,
                 'reseller_earning' => $fallbackResellerEarning,
                 'platform_commission' => $platformCommission,
@@ -614,8 +809,14 @@ class PaymentService
             'status' => 'Processing',
             'payment_status' => 'paid',
             'payment_completed_at' => now(),
-            'base_price' => (float) $resellerProduct->base_price,
-            'markup_price' => (float) $resellerProduct->markup_price,
+            // Keep the order's frozen terms when it has them. The chain-drift
+            // guard above has already established that the live chain totals
+            // to exactly this order's expected amount, so the live per-listing
+            // figures are only used for orders with no snapshot.
+            ...($order->hasPricingSnapshot() ? [] : [
+                'base_price' => (float) $resellerProduct->base_price,
+                'markup_price' => (float) $resellerProduct->markup_price,
+            ]),
             'owner_earning' => (float) $payout['owner_earning'],
             'reseller_earning' => (float) $payout['immediate_seller_earning'],
             'platform_commission' => (float) $payout['platform_commission'],
