@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\PaymentGatewayConfig;
 use App\Models\WalletTopup;
 use App\Services\AfaPaymentService;
+use App\Services\Payments\PaymentIntegrityGuard;
 use App\Services\PaymentService;
 use App\Services\PaystackPaymentService;
 use App\Services\WalletService;
@@ -91,10 +92,24 @@ class PaystackWebhookController extends Controller
                 return response()->json(['success' => true, 'message' => 'Already processed']);
             }
 
-            if ($verifiedAmount > 0 && ((float) $order->amount_paid) <= 0) {
-                $order->amount_paid = $verifiedAmount;
-                $order->save();
+            // Central payment integrity invariant. Before this, THIS webhook
+            // performed no amount comparison at all — a verified Paystack
+            // transaction completed the order regardless of how much was
+            // actually collected against its frozen expected amount.
+            $integrity = app(PaymentIntegrityGuard::class)->guard(
+                $order,
+                $verification,
+                PaymentGatewayConfig::GATEWAY_PAYSTACK
+            );
+
+            if (! $integrity->passed) {
+                // Recorded on the order and logged. 200 so Paystack stops
+                // retrying a webhook that will never be accepted.
+                return response()->json(['success' => true, 'message' => 'OK']);
             }
+
+            $order->amount_paid = $integrity->confirmedAmount;
+            $order->save();
 
             $paymentService->completeOrder($order);
 
