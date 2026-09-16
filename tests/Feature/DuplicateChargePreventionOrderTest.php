@@ -464,7 +464,14 @@ class DuplicateChargePreventionOrderTest extends TestCase
         Http::fake([
             'https://api.paystack.co/transaction/verify/*' => Http::response(['status' => true, 'data' => ['status' => 'success', 'amount' => 2000]], 200),
         ]);
-        app(\App\Services\PaymentService::class)->completeOrder($order1);
+        // Settlement requires proof a trusted source satisfied the order's
+        // terms; a real verify/webhook stamps it via PaymentIntegrityGuard.
+        app(\App\Services\Payments\PaymentIntegrityGuard::class)->stampTrustedSource(
+            $order1,
+            \App\Support\PaymentIntegrity::VERIFIED,
+            'test fixture: gateway verified this payment'
+        );
+        app(\App\Services\PaymentService::class)->completeOrder($order1->fresh());
         $this->assertSame('paid', $order1->fresh()->payment_status);
 
         $this->fakeInitializeAlwaysSucceeds();
