@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\ResellerProduct;
 use App\Models\Vendor;
 use App\Services\ExternalFulfillment\ExternalFulfillmentConfig;
+use App\Support\Money;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
@@ -176,15 +177,20 @@ class ProductController extends Controller
             'is_active' => $request->boolean('is_active'),
         ]);
 
-        // Sync base_price for all resellers when owner changes price
-        if ($oldPrice != $newPrice) {
+        // Sync base_price for all resellers when the OWNER changes their price.
+        // This is the one authorized way a listing's base price moves — the
+        // main vendor owns that number — so it goes through the explicit
+        // authoritative-sync API rather than a mass assignment that the model
+        // guard would (correctly) revert.
+        //
+        // Existing orders are unaffected: each froze its own base/markup at
+        // creation, so this only changes the terms of NEW orders.
+        if (! Money::equals($oldPrice, $newPrice)) {
             ResellerProduct::where('product_id', $product->id)
                 ->get()
-                ->each(function ($resellerProduct) use ($newPrice) {
-                    $resellerProduct->update([
-                        'base_price' => $newPrice,
-                        // selling_price auto-calculated in model boot()
-                    ]);
+                ->each(function (ResellerProduct $resellerProduct) use ($newPrice) {
+                    $resellerProduct->syncAuthoritativeBasePrice($newPrice);
+                    $resellerProduct->save();
                 });
         }
 
@@ -196,11 +202,14 @@ class ProductController extends Controller
     {
         $product = $this->findVendorProduct($id);
 
-        if ($product->image_path) {
-            Storage::disk('public')->delete($product->image_path);
-        }
-
-        // ResellerProduct rows are removed by FK cascade (see migration).
+        // The image is deliberately NOT deleted: this is a soft delete, and the
+        // product record (image included) remains the evidence of what
+        // historical orders referring to it actually bought.
+        //
+        // Soft deletion also means the FK cascade that used to remove
+        // ResellerProduct rows no longer fires. That is correct — those
+        // listings stop being sellable anyway, because every storefront and
+        // marketplace query requires an active, non-deleted parent product.
         $product->delete();
 
         return redirect()->route('vendor.products.index')->with('success', 'Product deleted successfully.');
