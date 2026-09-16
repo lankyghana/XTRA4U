@@ -86,6 +86,10 @@ class AdminPaymentHealthTest extends TestCase
             'mobile_money_number' => '0240000000',
             'service_purchased' => 'TEST-SERVICE',
             'amount_paid' => 50.00,
+            // Immutable financial terms, as every creation path now freezes them.
+            'expected_amount' => 50.00,
+            'currency' => 'GHS',
+            'pricing_snapshot_at' => now(),
             'vendor_id' => $vendor->id,
             'status' => 'Pending',
             'payment_status' => 'unpaid',
