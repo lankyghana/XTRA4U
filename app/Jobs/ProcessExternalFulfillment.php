@@ -148,6 +148,23 @@ class ProcessExternalFulfillment implements ShouldBeUnique, ShouldQueue
                 return ['action' => 'skip'];
             }
 
+            // payment_status alone is NOT sufficient to deliver real goods.
+            // An order must also carry proof that a trusted payment source
+            // satisfied its immutable financial terms — see PaymentIntegrity.
+            // This is the control that stops an order whose payment was never
+            // (or cannot be) verified from reaching a provider, however it came
+            // to be marked paid.
+            if (! $order->allowsFulfillment()) {
+                Log::warning('External fulfillment skipped: payment integrity not established for this order', [
+                    'order_id' => $order->id,
+                    'payment_status' => $order->payment_status,
+                    'payment_integrity_status' => $order->payment_integrity_status,
+                    'payment_integrity_note' => $order->payment_integrity_note,
+                ]);
+
+                return ['action' => 'skip'];
+            }
+
             // Administratively-closed historical orders must never be
             // resubmitted or re-checked, regardless of external_fulfillment_status.
             if (str_starts_with((string) $order->reconciliation_note, self::ADMINISTRATIVE_CLOSURE_NOTE_PREFIX)) {
