@@ -102,6 +102,8 @@ class PaymentReconciliationOutageRecoveryTest extends TestCase
         $order = Order::create([
             'recipient_phone_number' => '0244000000', 'mobile_money_number' => '0244000000',
             'service_purchased' => $product->name, 'amount_paid' => 20.00,
+            // Immutable financial terms, as every creation path now freezes them.
+            'expected_amount' => 20.00, 'currency' => 'GHS', 'pricing_snapshot_at' => now(),
             'vendor_id' => $vendor1->id, 'vendor_service_id' => $product->id,
             'status' => 'Pending', 'payment_status' => 'unpaid',
             'payment_gateway' => 'paystack', 'payment_reference' => 'OUTAGE-ORDER-PAYSTACK',

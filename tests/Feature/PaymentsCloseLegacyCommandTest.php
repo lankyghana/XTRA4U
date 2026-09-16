@@ -68,6 +68,10 @@ class PaymentsCloseLegacyCommandTest extends TestCase
             'mobile_money_number' => '0244000000',
             'service_purchased' => $product->name,
             'amount_paid' => 20.00,
+            // Immutable financial terms, as every creation path now freezes them.
+            'expected_amount' => 20.00,
+            'currency' => 'GHS',
+            'pricing_snapshot_at' => now(),
             'vendor_id' => $vendor->id,
             'vendor_service_id' => $product->id,
             'status' => 'Pending',

@@ -11,8 +11,11 @@ use App\Models\Transaction;
 use App\Models\Vendor;
 use App\Models\VendorNotification;
 use App\Services\Payments\CheckoutIntentGuard;
+use App\Services\Payments\OrderPricingSnapshot;
+use App\Services\Payments\PaymentIntegrityGuard;
 use App\Services\PaymentService;
 use App\Services\WalletService;
+use App\Support\PaymentIntegrity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -164,6 +167,35 @@ class PurchaseController extends Controller
         // and revenue leakage when vendors pay via their wallet from the dashboard.
         $payWithWallet = (bool) ($request->input('pay_with_wallet') ?? false);
 
+        // SECURITY: `pay_with_wallet` is an authenticated-vendor capability, and
+        // /purchase is a PUBLIC route. Previously an unauthenticated request
+        // carrying pay_with_wallet=1 fell straight past the wallet branch below
+        // (whose condition includes the auth check) and reached the
+        // `if ($payWithWallet) { completeOrder(); }` tail further down — which
+        // marked the order paid, credited vendor wallets and dispatched external
+        // fulfillment without any gateway payment and without any wallet ever
+        // being debited. Refuse the request outright instead: there is no
+        // legitimate caller that asks to pay from a wallet it is not signed in
+        // to. (Defence in depth: even if this were bypassed, the order would
+        // carry no proof of payment and PaymentService::completeOrder() now
+        // refuses to settle it.)
+        if ($payWithWallet && ! auth('vendor')->check()) {
+            Log::warning('Rejected wallet purchase attempt from a request with no authenticated vendor', [
+                'vendor_id' => $validated['vendor_id'] ?? null,
+                'vendor_service_id' => $validated['vendor_service_id'] ?? null,
+                'ip' => $request->ip(),
+            ]);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Wallet payment requires a signed-in vendor account.',
+                ], 403);
+            }
+
+            abort(403, 'Wallet payment requires a signed-in vendor account.');
+        }
+
         if ($payWithWallet && auth('vendor')->check()) {
             $walletService = new WalletService;
             $payingVendor = auth('vendor')->user();
@@ -220,8 +252,10 @@ class PurchaseController extends Controller
                 'mobile_money_number' => $validated['mobile_money_number'] ?? $validated['recipient_phone_number'],
                 'service_purchased' => $walletProduct->name,
                 'amount_paid' => $walletCharge,
-                'base_price' => $walletBasePrice,
-                'platform_commission' => $walletPlatformFee,
+                // Freeze the terms exactly as for a gateway order. A wallet
+                // purchase's payable total is base + platform fee, and it is
+                // what the debit below must match.
+                ...OrderPricingSnapshot::forWalletPurchase($walletBasePrice, $walletPlatformFee),
                 'vendor_service_id' => $walletProduct->id,
                 'status' => 'Pending',
                 'payment_status' => 'unpaid',
@@ -319,6 +353,18 @@ class PurchaseController extends Controller
                     return back()->withErrors(['wallet' => 'Insufficient wallet balance']);
                 }
 
+                // The debit IS the proof for this flow: a server-calculated
+                // price charged atomically against a locked vendor row, with no
+                // external party to verify against. Recording it here — after
+                // the debit actually succeeded, never before — is what makes
+                // the order settleable, and is why an order that was not
+                // debited can no longer be completed.
+                app(PaymentIntegrityGuard::class)->stampTrustedSource(
+                    $order,
+                    PaymentIntegrity::WALLET_VERIFIED,
+                    sprintf('vendor wallet debit of %s confirmed for vendor #%d', $walletCharge, $lockedVendor->id)
+                );
+
                 // Complete the order using the vendor-wallet-specific completion
                 // flow which DOES NOT credit any wallets or run reseller commission logic.
                 $this->paymentService->completeVendorWalletOrder($order);
@@ -348,6 +394,13 @@ class PurchaseController extends Controller
                 'mobile_money_number' => $validated['mobile_money_number'] ?? $validated['recipient_phone_number'],
                 'service_purchased' => $product->name,
                 'amount_paid' => (float) $price,
+                // Freeze this order's financial terms (main vendor base price +
+                // reseller markup = expected amount, plus currency) so neither
+                // a later price change nor any later verification step can
+                // alter what it owes.
+                ...($resellerProduct
+                    ? OrderPricingSnapshot::forResellerListing($resellerProduct)
+                    : OrderPricingSnapshot::forOwnedProduct($product)),
                 'vendor_id' => $validated['vendor_id'],
                 'vendor_service_id' => $product->id,
                 'status' => 'Pending',
@@ -410,21 +463,28 @@ class PurchaseController extends Controller
         // PROCEED: a fresh Order row for this intent was just created.
         $order = $creationResult['payable'];
 
-        // If wallet was used, run existing PaymentService pipeline to complete the order
+        // Unreachable by design: every wallet purchase is handled by the
+        // authenticated wallet branch above (which debits, proves and returns),
+        // and an unauthenticated wallet request is refused before reaching
+        // here. This used to be the path that completed an order with no
+        // payment at all. It is kept only as an explicit fail-closed assertion
+        // — never settle a wallet order that did not go through a debit.
         if ($payWithWallet) {
-            // PaymentService->completeOrder expects to execute the existing payout logic.
-            $this->paymentService->completeOrder($order);
+            Log::error('Unreachable wallet completion path was reached — refusing to complete an order with no recorded wallet debit', [
+                'order_id' => $order->id,
+                'vendor_id' => $order->vendor_id,
+            ]);
 
             if ($request->expectsJson()) {
                 return response()->json([
-                    'success' => true,
-                    'message' => 'Order paid with wallet and processed',
-                    'order_id' => $order->id,
-                ]);
+                    'success' => false,
+                    'message' => 'Wallet payment could not be processed. Please try again.',
+                ], 422);
             }
 
-            return redirect()->route('checkout.success', ['order' => $order->id])
-                ->with('success', 'Order paid with wallet and processed');
+            return redirect()->route('checkout.show')
+                ->with('payment_failed', true)
+                ->with('payment_message', 'Wallet payment could not be processed. Please try again.');
         }
 
         // Use vendor's email for Paystack instead of requiring customer email
@@ -479,7 +539,22 @@ class PurchaseController extends Controller
      */
     public function paymentCallback(Request $request, string $token)
     {
-        $stored = session()->pull("purchase.tokens.$token");
+        // DISABLED. This handler creates orders and 'completed' transactions
+        // from a session payload whose `payment_status` it simply believes —
+        // there is no gateway verification anywhere in it. Nothing has written
+        // `purchase.tokens.*` for a long time (grep: the key is only ever read
+        // here and pruned by PrunePurchaseTokens), so every request already
+        // ends at the 410 below; it is dead code that would become an
+        // unverified completion path the moment anything started populating
+        // that session key again. Fail closed explicitly rather than leaving a
+        // latent bypass of the payment integrity invariant.
+        Log::warning('Disabled legacy purchase callback was invoked', [
+            'ip' => $request->ip(),
+        ]);
+
+        abort(410, 'This payment flow is no longer available.');
+
+        $stored = session()->pull("purchase.tokens.$token"); // @phpstan-ignore-line unreachable — retained for context
 
         if (! $stored) {
             abort(410, 'Purchase session expired or invalid.');

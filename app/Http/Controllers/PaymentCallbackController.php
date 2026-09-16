@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Order;
+use App\Services\Payments\PaymentIntegrityGuard;
 use App\Services\PaymentService;
 use App\Support\PaymentVerificationState;
 use Illuminate\Http\Request;
@@ -12,9 +13,12 @@ class PaymentCallbackController extends Controller
 {
     protected PaymentService $paymentService;
 
-    public function __construct(PaymentService $paymentService)
+    protected PaymentIntegrityGuard $integrityGuard;
+
+    public function __construct(PaymentService $paymentService, ?PaymentIntegrityGuard $integrityGuard = null)
     {
         $this->paymentService = $paymentService;
+        $this->integrityGuard = $integrityGuard ?? app(PaymentIntegrityGuard::class);
     }
 
     public function handle(Request $request)
@@ -81,29 +85,23 @@ class PaymentCallbackController extends Controller
             return $this->redirectBackToStoreOrCheckout($order, 'Payment pending. Please wait for confirmation.', false);
         }
 
-        // Update order amount if gateway returned it. Every gateway's verifyPayment()
-        // already normalizes data.amount to major units (GHS) — including Paystack's,
-        // which converts from pesewas internally.
-        $amount = data_get($verification, 'data.amount');
+        // Central payment integrity invariant — the identical check every other
+        // payment surface applies (see PaymentIntegrityGuard). A callback can
+        // no more bypass the order's frozen financial terms than the browser
+        // verify endpoint or a webhook can.
+        $integrity = $this->integrityGuard->guard($order, $verification, $order->payment_gateway);
 
-        // Amount mismatch guard (mirrors CheckoutController::verify()). A no-op for
-        // gateways that lock the amount in server-side at initiation; matters for
-        // Payaza, whose Web Checkout SDK sets the charge amount client-side.
-        $expectedAmount = (float) $order->amount_paid;
-        if ($amount !== null && $expectedAmount > 0 && round((float) $amount, 2) < round($expectedAmount, 2)) {
-            Log::error('Payment callback: verified amount is less than expected order amount - refusing to fulfil', [
-                'order_id' => $order->id,
-                'reference' => $reference,
-                'expected_amount' => $expectedAmount,
-                'verified_amount' => $amount,
-            ]);
-
-            return $this->redirectBackToStoreOrCheckout($order, 'Payment amount mismatch. Please contact support.', true);
+        if (! $integrity->passed) {
+            // The refusal and its diagnostics are already recorded on the order
+            // and in the logs; the customer gets a neutral message.
+            return $this->redirectBackToStoreOrCheckout(
+                $order,
+                'We could not confirm this payment. Please contact support.',
+                true
+            );
         }
 
-        if ($amount) {
-            $order->amount_paid = (float) $amount;
-        }
+        $order->amount_paid = $integrity->confirmedAmount;
 
         // Complete order flows (wallet, notifications, transactions)
         $this->paymentService->completeOrder($order);

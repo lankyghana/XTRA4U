@@ -8,6 +8,7 @@ use App\Models\ResultCheckerOrder;
 use App\Models\UssdSubscription;
 use App\Models\WalletTopup;
 use App\Services\Ussd\UssdSubscriptionPurchaseService;
+use App\Support\PaymentIntegrity;
 use App\Support\PaymentVerificationState;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -90,6 +91,7 @@ class PaymentReconciliationService
     public function __construct(
         private GatewayManager $gatewayManager,
         private PaymentService $paymentService,
+        private \App\Services\Payments\PaymentIntegrityGuard $integrityGuard,
         private AfaPaymentService $afaPaymentService,
         private ResultCheckerService $resultCheckerService,
         private UssdSubscriptionPurchaseService $ussdSubscriptionPurchaseService,
@@ -147,7 +149,17 @@ class PaymentReconciliationService
         // that has simply been PENDING/UNKNOWN for too long — where there is
         // no other reason to name — gets relabelled manual_review once it
         // ages out.
-        $neverRetryAutomatically = in_array($outcome, [self::OUTCOME_NO_GATEWAY, self::OUTCOME_INTEGRITY_MISMATCH], true);
+        // OUTCOME_MAX_WINDOW_EXCEEDED is included because payment integrity
+        // failing as "unprovable" (a record whose financial terms cannot be
+        // established from data we still hold) is a permanent condition — no
+        // number of additional gateway queries will ever produce the missing
+        // expected amount. Park it for a human immediately instead of
+        // re-querying it on the backoff schedule for three days.
+        $neverRetryAutomatically = in_array($outcome, [
+            self::OUTCOME_NO_GATEWAY,
+            self::OUTCOME_INTEGRITY_MISMATCH,
+            self::OUTCOME_MAX_WINDOW_EXCEEDED,
+        ], true);
         $agedOut = $outcome === self::OUTCOME_LEFT_PENDING && $ageHours >= self::MAX_AUTOMATIC_WINDOW_HOURS;
 
         $updates = [
@@ -225,23 +237,39 @@ class PaymentReconciliationService
                     return self::OUTCOME_LEFT_PENDING;
                 }
 
-                $amount = data_get($verification, 'data.amount');
-                $expected = (float) $locked->amount_paid;
-                if ($amount !== null && $expected > 0 && round((float) $amount, 2) < round($expected, 2)) {
-                    $this->logEvent('error', 'PaymentReconciliationService: order amount mismatch — refusing to fulfil', [
+                // "The gateway says this reference succeeded" is NOT sufficient
+                // to complete an order, and this is the surface where that
+                // matters most: reconciliation can reach back to records
+                // created long ago, so it is the path by which a historical
+                // malformed order could suddenly settle and deliver real goods
+                // months later.
+                //
+                // The shared guard refuses unless the confirmed payment matches
+                // this exact order's frozen terms. Critically, an order created
+                // before server-authoritative pricing has no provable expected
+                // amount at all — the guard returns MANUAL_REVIEW for it rather
+                // than comparing amount_paid against itself (which is what let
+                // a GHS 0.10 payment "match" an ~GHS 89 order: the recorded
+                // expectation was the corrupted value).
+                $integrity = $this->integrityGuard->guard($locked, $verification, $locked->payment_gateway);
+
+                if (! $integrity->passed) {
+                    $this->logEvent('error', 'PaymentReconciliationService: order failed payment integrity — refusing to complete', [
                         'payable_type' => 'order',
                         'payable_id' => $locked->id,
-                        'expected_amount' => $expected,
-                        'verified_amount' => $amount,
+                        'reason' => $integrity->reason,
+                        'integrity_status' => $integrity->status,
+                        'expected_amount' => $integrity->expectedAmount,
+                        'confirmed_amount' => $integrity->confirmedAmount,
                     ]);
 
-                    return self::OUTCOME_INTEGRITY_MISMATCH;
+                    return $integrity->status === PaymentIntegrity::MANUAL_REVIEW
+                        ? self::OUTCOME_MAX_WINDOW_EXCEEDED
+                        : self::OUTCOME_INTEGRITY_MISMATCH;
                 }
 
-                if ($amount) {
-                    $locked->amount_paid = (float) $amount;
-                    $locked->save();
-                }
+                $locked->amount_paid = $integrity->confirmedAmount;
+                $locked->save();
 
                 $this->paymentService->completeOrder($locked);
 

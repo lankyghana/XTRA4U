@@ -119,6 +119,16 @@ class AdminTransactionController extends Controller
 				return back()->with('success', 'Order is already marked as paid.');
 			}
 
+			// Same trusted-source model as AdminOrderController::confirmPayment():
+			// an authenticated admin manually vouching for a payment the gateway
+			// could not confirm, recorded as such rather than passed off as
+			// gateway-verified.
+			app(\App\Services\Payments\PaymentIntegrityGuard::class)->stampTrustedSource(
+				$order,
+				\App\Support\PaymentIntegrity::ADMIN_CONFIRMED,
+				sprintf('manually confirmed by admin #%s via transaction #%d', auth('admin')->id() ?? 'unknown', $transaction->id)
+			);
+
 			$didComplete = $paymentService->completeOrder($order);
 			if (! $didComplete) {
 				return back()->with('error', 'Unable to confirm payment for this order.');

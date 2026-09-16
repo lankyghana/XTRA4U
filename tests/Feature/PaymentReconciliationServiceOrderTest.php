@@ -237,7 +237,14 @@ class PaymentReconciliationServiceOrderTest extends TestCase
         ]);
 
         // Simulate a webhook completing the order moments before this
-        // reconciliation pass's own transaction/lock runs.
+        // reconciliation pass's own transaction/lock runs. A webhook only
+        // reaches completeOrder() after the payment integrity guard has passed,
+        // so the order carries that proof here too.
+        app(\App\Services\Payments\PaymentIntegrityGuard::class)->stampTrustedSource(
+            $order,
+            \App\Support\PaymentIntegrity::VERIFIED,
+            'test fixture: webhook verified this payment first'
+        );
         app(\App\Services\PaymentService::class)->completeOrder($order->fresh());
         $this->assertSame('paid', $order->fresh()->payment_status);
 

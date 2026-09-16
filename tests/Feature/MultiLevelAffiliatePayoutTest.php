@@ -66,6 +66,17 @@ class MultiLevelAffiliatePayoutTest extends TestCase
             'is_reseller_order' => true,
         ]);
 
+        // Settlement now requires proof that a trusted payment source
+        // satisfied this order's terms — see PaymentIntegrity. This test's
+        // subject is how a proven payment is SPLIT across the chain, so the
+        // payment is stamped as confirmed out of band rather than re-staging a
+        // full gateway verification here.
+        app(\App\Services\Payments\PaymentIntegrityGuard::class)->stampTrustedSource(
+            $order,
+            \App\Support\PaymentIntegrity::ADMIN_CONFIRMED,
+            'test fixture: payment proven out of band'
+        );
+
         /** @var PaymentService $paymentService */
         $paymentService = $this->app->make(PaymentService::class);
         $this->assertTrue($paymentService->completeOrder($order->fresh()));

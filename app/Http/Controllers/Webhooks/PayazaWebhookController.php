@@ -9,6 +9,7 @@ use App\Models\PaymentGatewayConfig;
 use App\Models\Transaction;
 use App\Services\AfaPaymentService;
 use App\Services\PayazaPaymentService;
+use App\Services\Payments\PaymentIntegrityGuard;
 use App\Services\PaymentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -121,22 +122,25 @@ class PayazaWebhookController extends Controller
 
         if ($status === 'success') {
             if ($order) {
-                // Amount mismatch guard: never fulfil on a lower-than-expected
-                // confirmed amount. (amount_paid was already set at checkout
-                // time from the order total; only backfill if unset.)
-                if ($verifiedAmount > 0 && ((float) $order->amount_paid) <= 0) {
-                    $order->amount_paid = $verifiedAmount;
-                    $order->save();
-                } elseif ($verifiedAmount > 0 && round($verifiedAmount, 2) < round((float) $order->amount_paid, 2)) {
-                    Log::error('Payaza webhook: verified amount is less than expected order amount - refusing to fulfil', [
-                        'order_id' => $order->id,
-                        'reference' => $reference,
-                        'expected_amount' => $order->amount_paid,
-                        'verified_amount' => $verifiedAmount,
-                    ]);
+                // Central payment integrity invariant. This handler already had
+                // a lower-than-expected guard; it is replaced by the shared one
+                // so that Payaza is held to the identical rule as every other
+                // surface — EXACT amount, currency, reference, gateway and
+                // single-use transaction, compared in integer minor units.
+                // This matters most for Payaza: its Web Checkout SDK sets the
+                // charge amount client-side, with no server-locked amount.
+                $integrity = app(PaymentIntegrityGuard::class)->guard(
+                    $order,
+                    $verification,
+                    PaymentGatewayConfig::GATEWAY_PAYAZA
+                );
 
-                    return response()->json(['success' => true, 'message' => 'Amount mismatch']);
+                if (! $integrity->passed) {
+                    return response()->json(['success' => true, 'message' => 'OK']);
                 }
+
+                $order->amount_paid = $integrity->confirmedAmount;
+                $order->save();
 
                 $paymentService->completeOrder($order);
 

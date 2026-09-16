@@ -15,6 +15,21 @@ class PayazaWebhookTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * Give a fixture order the immutable financial terms every creation path
+     * now freezes at creation. Derived from the order's own amount so a test
+     * that overrides `amount_paid` never ends up with an order whose expected
+     * amount contradicts it.
+     */
+    protected static function withPricingSnapshot(array $attributes): array
+    {
+        return array_merge([
+            'expected_amount' => $attributes['amount_paid'] ?? null,
+            'currency' => 'GHS',
+            'pricing_snapshot_at' => now(),
+        ], $attributes);
+    }
+
     protected const SECRET = 'wh-secret-abc';
 
     protected const CHECK_STATUS_URL = 'https://api.payaza.africa/live/subsidiary/collections/v1/check-status*';
@@ -43,7 +58,7 @@ class PayazaWebhookTest extends TestCase
 
     protected function makeOrder(Vendor $vendor, string $reference, array $overrides = []): Order
     {
-        return Order::create(array_merge([
+        return Order::create(self::withPricingSnapshot(array_merge([
             'recipient_phone_number' => '0240000001',
             'mobile_money_number' => '0244123456',
             'service_purchased' => 'TEST-SERVICE',
@@ -53,7 +68,7 @@ class PayazaWebhookTest extends TestCase
             'payment_status' => 'unpaid',
             'payment_gateway' => PaymentGatewayConfig::GATEWAY_PAYAZA,
             'payment_reference' => $reference,
-        ], $overrides));
+        ], $overrides)));
     }
 
     protected function sign(array $payload): string
@@ -199,6 +214,10 @@ class PayazaWebhookTest extends TestCase
         $paymentService = new PaymentService;
         $verifyResult = $paymentService->checkPaymentStatus('XTRA4U-PYZ-RACE-1');
         $this->assertSame('success', $verifyResult['data']['status']);
+        // Mirrors CheckoutController::verify(): the verification response is
+        // put through the payment integrity guard before anything settles.
+        app(\App\Services\Payments\PaymentIntegrityGuard::class)
+            ->guard($order, $verifyResult, $order->payment_gateway);
         $paymentService->completeOrder($order);
 
         $this->assertSame('paid', $order->fresh()->payment_status);
@@ -226,8 +245,15 @@ class PayazaWebhookTest extends TestCase
         $response = $this->withHeaders(['x-payaza-signature' => $this->sign($payload)])
             ->postJson(route('webhooks.payaza'), $payload);
 
-        $response->assertStatus(200)->assertJson(['message' => 'Amount mismatch']);
-        $this->assertSame('unpaid', $order->fresh()->payment_status);
+        // The webhook now answers with a neutral acknowledgement (the
+        // expected/confirmed figures are diagnostics for administrators, not
+        // for the caller) and records the refusal on the order itself.
+        $response->assertStatus(200)->assertJson(['message' => 'OK']);
+
+        $fresh = $order->fresh();
+        $this->assertSame('unpaid', $fresh->payment_status);
+        $this->assertSame(\App\Support\PaymentIntegrity::MISMATCH, $fresh->payment_integrity_status);
+        $this->assertFalse($fresh->allowsFulfillment());
     }
 
     // 17. Failed verification does not fulfil

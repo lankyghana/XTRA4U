@@ -58,17 +58,32 @@ class ExternalFulfillmentIdempotencyTest extends TestCase
 
     private function makeOrder(Vendor $vendor, array $overrides = []): Order
     {
-        return Order::create(array_merge([
+        $order = Order::create(array_merge([
             'recipient_phone_number' => '0240000000',
             'mobile_money_number' => '0240000000',
             'service_purchased' => 'TEST-SERVICE',
             'amount_paid' => 10.00,
+            'expected_amount' => 10.00,
+            'currency' => 'GHS',
+            'pricing_snapshot_at' => now(),
             'vendor_id' => $vendor->id,
             'status' => 'Processing',
             'payment_status' => 'paid',
             'payment_reference' => 'TEST-REF-'.uniqid(),
             'payment_gateway' => 'test',
         ], $overrides));
+
+        // Delivering real goods now requires proof that a trusted payment
+        // source satisfied this order's terms, not merely payment_status=paid
+        // (see PaymentIntegrity). These fixtures stand in for orders a gateway
+        // already verified, so they carry that proof.
+        if (! array_key_exists('payment_integrity_status', $overrides)) {
+            $order->forceFill([
+                'payment_integrity_status' => \App\Support\PaymentIntegrity::VERIFIED,
+            ])->save();
+        }
+
+        return $order;
     }
 
     // 1. Normal first submission -------------------------------------------------

@@ -33,6 +33,21 @@ class PayazaOrderLifecycleTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * Give a fixture order the immutable financial terms every creation path
+     * now freezes at creation. Derived from the order's own amount so a test
+     * that overrides `amount_paid` never ends up with an order whose expected
+     * amount contradicts it.
+     */
+    protected static function withPricingSnapshot(array $attributes): array
+    {
+        return array_merge([
+            'expected_amount' => $attributes['amount_paid'] ?? null,
+            'currency' => 'GHS',
+            'pricing_snapshot_at' => now(),
+        ], $attributes);
+    }
+
     protected const SECRET = 'wh-secret-abc';
 
     protected const CHECK_STATUS_URL = 'https://api.payaza.africa/live/subsidiary/collections/v1/check-status*';
@@ -61,7 +76,7 @@ class PayazaOrderLifecycleTest extends TestCase
 
     protected function makeOrder(Vendor $vendor, string $reference, array $overrides = []): Order
     {
-        return Order::create(array_merge([
+        return Order::create(self::withPricingSnapshot(array_merge([
             'recipient_phone_number' => '0240000001',
             'mobile_money_number' => '0244123456',
             'service_purchased' => 'TEST-SERVICE',
@@ -71,7 +86,7 @@ class PayazaOrderLifecycleTest extends TestCase
             'payment_status' => 'unpaid',
             'payment_gateway' => PaymentGatewayConfig::GATEWAY_PAYAZA,
             'payment_reference' => $reference,
-        ], $overrides));
+        ], $overrides)));
     }
 
     protected function sign(array $payload): string

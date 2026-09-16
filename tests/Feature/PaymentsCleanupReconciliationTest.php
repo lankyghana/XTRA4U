@@ -76,6 +76,10 @@ class PaymentsCleanupReconciliationTest extends TestCase
             'mobile_money_number' => '0244000000',
             'service_purchased' => $product->name,
             'amount_paid' => $product->price,
+            // Immutable financial terms, as every creation path now freezes them.
+            'expected_amount' => $product->price,
+            'currency' => 'GHS',
+            'pricing_snapshot_at' => now(),
             'vendor_id' => $vendor->id,
             'vendor_service_id' => $product->id,
             'status' => 'Pending',
@@ -387,7 +391,14 @@ class PaymentsCleanupReconciliationTest extends TestCase
         $order = $this->oldOrder($vendor, $this->product($vendor, 20.00), 'CLEANUP-RACE');
 
         // Simulate a webhook having already completed the order moments
-        // before cleanup's own (independent) gateway check runs.
+        // before cleanup's own (independent) gateway check runs. A webhook
+        // only reaches completeOrder() once the payment integrity guard has
+        // passed, so the order carries that proof here too.
+        app(\App\Services\Payments\PaymentIntegrityGuard::class)->stampTrustedSource(
+            $order,
+            \App\Support\PaymentIntegrity::VERIFIED,
+            'test fixture: webhook verified this payment first'
+        );
         app(\App\Services\PaymentService::class)->completeOrder($order->fresh());
         $this->assertSame('paid', $order->fresh()->payment_status);
 

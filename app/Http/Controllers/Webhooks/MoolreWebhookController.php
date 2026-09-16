@@ -9,6 +9,7 @@ use App\Models\PaymentGatewayConfig;
 use App\Models\Transaction;
 use App\Services\AfaPaymentService;
 use App\Services\MoolrePaymentService;
+use App\Services\Payments\PaymentIntegrityGuard;
 use App\Services\PaymentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -125,14 +126,29 @@ class MoolreWebhookController extends Controller
         }
 
         $status = (string) data_get($verification, 'data.status', 'unknown');
-        $verifiedAmount = (float) data_get($verification, 'data.amount', 0);
 
         if ($status === 'success') {
             if ($order) {
-                if ($verifiedAmount > 0 && ((float) $order->amount_paid) <= 0) {
-                    $order->amount_paid = $verifiedAmount;
-                    $order->save();
+                // Central payment integrity invariant. Before this, THIS webhook
+                // performed no amount comparison at all: a Moolre status of
+                // "success" completed the order whatever amount it reported,
+                // which is how an order could settle and fulfil on a fraction of
+                // its real price. The gateway is named explicitly because this
+                // handler is, by construction, the Moolre one.
+                $integrity = app(PaymentIntegrityGuard::class)->guard(
+                    $order,
+                    $verification,
+                    PaymentGatewayConfig::GATEWAY_MOOLRE
+                );
+
+                if (! $integrity->passed) {
+                    // Already logged and recorded on the order. 200 so Moolre
+                    // stops retrying a webhook that will never be accepted.
+                    return response()->json(['success' => true, 'message' => 'OK']);
                 }
+
+                $order->amount_paid = $integrity->confirmedAmount;
+                $order->save();
 
                 $paymentService->completeOrder($order);
                 return response()->json(['success' => true, 'message' => 'Processed']);
