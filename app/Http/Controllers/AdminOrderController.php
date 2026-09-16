@@ -99,6 +99,17 @@ class AdminOrderController extends Controller
 				return back()->with('success', 'Order is already marked as paid.');
 			}
 
+			// An authenticated admin is a trusted (non-gateway) payment source:
+			// this action exists precisely for payments a provider outage left
+			// unverifiable. Record WHO decided it and that it was a manual
+			// decision, so such an order is never mistaken for one the gateway
+			// actually proved. Without this stamp completeOrder() would refuse.
+			app(\App\Services\Payments\PaymentIntegrityGuard::class)->stampTrustedSource(
+				$order,
+				\App\Support\PaymentIntegrity::ADMIN_CONFIRMED,
+				sprintf('manually confirmed by admin #%s', auth('admin')->id() ?? 'unknown')
+			);
+
 			$didComplete = $paymentService->completeOrder($order);
 			if (! $didComplete) {
 				return back()->with('error', 'Unable to confirm payment for this order.');
