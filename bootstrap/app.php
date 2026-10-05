@@ -31,6 +31,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin.only' => AdminOnly::class,
             'prune.purchase.tokens' => PrunePurchaseTokens::class,
             'ussd.gateway' => \App\Http\Middleware\EnsureUssdGatewayRequest::class,
+            'cms.admin' => \App\Http\Middleware\EnsureCmsAdmin::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
