@@ -5,7 +5,6 @@ namespace App\Models\Cms;
 use App\Models\Cms\Concerns\StampsActor;
 use App\Support\Cms\CmsRegistry;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
 
 class CmsMedia extends Model
 {
@@ -31,7 +30,9 @@ class CmsMedia extends Model
     {
         return $this->isBundled()
             ? asset($this->path)
-            : Storage::disk(self::DISK_UPLOAD)->url($this->path);
+            // Built from the current request host (not APP_URL) so the image is always same-origin,
+            // which the Content-Security-Policy img-src 'self' requires.
+            : asset('storage/'.ltrim($this->path, '/'));
     }
 
     /**
