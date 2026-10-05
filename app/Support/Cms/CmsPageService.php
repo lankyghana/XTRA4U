@@ -25,7 +25,7 @@ class CmsPageService
     {
         $snap = ['fields' => []];
         foreach (CmsPage::EDITABLE as $field) {
-            $snap['fields'][$field] = $page->{$field};
+            $snap['fields'][$field] = $field === 'robots_noindex' ? (bool) $page->{$field} : $page->{$field};
         }
 
         if ($page->isStructured()) {
@@ -98,6 +98,8 @@ class CmsPageService
                     $page->{$field} = $overlay[$field];
                 }
             }
+
+            $page->robots_noindex = (bool) $page->robots_noindex;
 
             if ($page->isStructured()) {
                 foreach ($page->sections()->get() as $section) {

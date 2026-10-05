@@ -42,6 +42,18 @@ class CmsContent
         return $this;
     }
 
+    /**
+     * Drop all per-request state (preview flag, memoised lookups). Called when a
+     * request finishes so nothing can leak into the next one on a long-lived
+     * worker (Octane, queue workers, tests).
+     */
+    public function flush(): void
+    {
+        $this->preview = false;
+        $this->mediaUrls = [];
+        $this->seeded = null;
+    }
+
     public function previewing(): bool
     {
         return $this->preview;

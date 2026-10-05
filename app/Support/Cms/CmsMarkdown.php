@@ -75,6 +75,13 @@ final class CmsMarkdown
 
         self::clean($root, $doc);
 
+        // Raw HTML that was stripped can leave empty paragraphs behind.
+        foreach (iterator_to_array($root->getElementsByTagName('p')) as $p) {
+            if (trim($p->textContent) === '' && $p->getElementsByTagName('*')->length === 0) {
+                $p->parentNode->removeChild($p);
+            }
+        }
+
         return self::inner($root);
     }
 

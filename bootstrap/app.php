@@ -19,13 +19,20 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             ContentSecurityPolicy::class,
         ]);
-        
+
         // Exclude webhook routes from CSRF verification
         $middleware->validateCsrfTokens(except: [
             'webhooks/*',
             'payment/callback',
         ]);
-        
+
+        // CMS routes must authenticate BEFORE implicit model binding runs; otherwise an
+        // anonymous visitor could tell "no such record" (404) from "exists" (redirect).
+        $middleware->prependToPriorityList(
+            before: \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            prepend: \App\Http\Middleware\EnsureCmsAdmin::class,
+        );
+
         $middleware->alias([
             'vendor.approved' => EnsureVendorApproved::class,
             'admin.only' => AdminOnly::class,
