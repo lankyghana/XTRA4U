@@ -442,6 +442,7 @@ MD,
     public static function settings(): array
     {
         $s = [
+            'site.logo_media_id' => ['group' => 'Branding', 'label' => 'Platform logo', 'type' => 'image', 'max' => 20, 'default' => '', 'help' => 'Replaces the XTRA4U badge and wordmark in the website header, footer and homepage. A wide PNG or WebP with a transparent background works best (about 28 px tall is shown). Remove it to go back to the default logo.'],
             'contact.support_phone' => ['group' => 'Contact', 'label' => 'Support phone', 'type' => 'phone', 'max' => 30, 'default' => ''],
             'contact.support_email' => ['group' => 'Contact', 'label' => 'Support email', 'type' => 'email', 'max' => 120, 'default' => ''],
             'contact.whatsapp_channel_url' => ['group' => 'Contact', 'label' => 'WhatsApp channel link', 'type' => 'url', 'max' => 255, 'default' => 'https://whatsapp.com/channel/0029Vb6ZXJuL7UVQeZ7L5D3v', 'help' => 'Used by the floating WhatsApp button and the footer Support link.'],

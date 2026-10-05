@@ -15,8 +15,13 @@
                             $value = old('settings.'.$field, $def['value']);
                         @endphp
                         <div class="{{ $def['type'] === 'textarea' ? 'sm:col-span-2' : '' }}">
+                            @if ($def['type'] === 'image')
+                                <x-admin.cms-image-picker :name="'settings['.$field.']'" :value="is_numeric($value) ? $value : null" :label="$def['label']" />
+                            @else
                             <label for="s-{{ $field }}" class="block text-sm font-semibold text-gray-700">{{ $def['label'] }}</label>
-                            @if ($def['type'] === 'textarea')
+                            @endif
+                            @if ($def['type'] === 'image')
+                            @elseif ($def['type'] === 'textarea')
                                 <textarea id="s-{{ $field }}" name="settings[{{ $field }}]" rows="2" maxlength="{{ $def['max'] }}" class="mt-1 block w-full">{{ $value }}</textarea>
                             @else
                                 <input id="s-{{ $field }}" name="settings[{{ $field }}]" type="{{ ['email' => 'email', 'url' => 'url', 'phone' => 'tel'][$def['type']] ?? 'text' }}" maxlength="{{ $def['max'] }}" value="{{ $value }}" class="mt-1 block w-full"

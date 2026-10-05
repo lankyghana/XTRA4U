@@ -2,9 +2,18 @@
     XTRA4U wordmark.
 
     `onDark` swaps the ink colours for use over the dark brand panel.
+    When an admin has uploaded a logo (Content > Site Settings > Platform logo) that image
+    is shown instead of the built-in badge and wordmark.
 --}}
 @props(['onDark' => false])
 
+@php $customLogo = $cms->logoUrl(); @endphp
+
+@if ($customLogo)
+    <span {{ $attributes->merge(['class' => 'inline-flex items-center select-none']) }}>
+        <img src="{{ $customLogo }}" alt="{{ $cms->setting('footer.copyright_name', 'XTRA4U') }}" style="height: 28px; width: auto; max-width: 160px; object-fit: contain;">
+    </span>
+@else
 <span
     {{ $attributes->merge(['class' => 'inline-flex items-center gap-2 select-none']) }}
     style="font-weight: 400; font-size: 17px; letter-spacing: -0.3px;"
@@ -18,3 +27,4 @@
         XTRA<span style="color: {{ $onDark ? 'rgba(255,255,255,0.55)' : 'var(--x4-primary-soft)' }};">4U</span>
     </span>
 </span>
+@endif

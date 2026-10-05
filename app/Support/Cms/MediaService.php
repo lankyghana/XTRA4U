@@ -6,6 +6,7 @@ use App\Models\Cms\CmsBanner;
 use App\Models\Cms\CmsMedia;
 use App\Models\Cms\CmsPage;
 use App\Models\Cms\CmsSection;
+use App\Models\Cms\CmsSetting;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -121,6 +122,10 @@ class MediaService
         $id = $media->id;
         $used = [];
 
+        if ((int) CmsSetting::where('key', 'site.logo_media_id')->value('value') === $id) {
+            $used[] = 'Platform logo (Site Settings)';
+        }
+
         foreach (CmsBanner::where('image_media_id', $id)->get(['id', 'title']) as $banner) {
             $used[] = 'Banner: '.$banner->title;
         }
@@ -167,6 +172,10 @@ class MediaService
 
         foreach (CmsBanner::pluck('image_media_id') as $id) {
             $ids[(int) $id] = true;
+        }
+
+        if ($logo = (int) CmsSetting::where('key', 'site.logo_media_id')->value('value')) {
+            $ids[$logo] = true;
         }
 
         foreach (CmsPage::withTrashed()->get(['og_image_media_id', 'draft']) as $page) {

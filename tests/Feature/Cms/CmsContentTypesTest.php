@@ -356,4 +356,37 @@ class CmsContentTypesTest extends CmsTestCase
         auth('admin')->logout();
         $this->get('/')->assertOk()->assertDontSee('Follow us on WhatsApp')->assertDontSee('whatsapp.com/channel');
     }
+
+    public function test_the_platform_logo_can_be_replaced_and_restored(): void
+    {
+        $this->get('/')->assertOk()->assertSee('>X4U<', false)->assertDontSee('alt="XTRA4U"', false);
+
+        $this->actingAsAdminGuard();
+        $media = $this->media('brand-logo');
+        $this->put(route('admin.cms.settings.update'), ['settings' => ['site__logo_media_id' => $media->id]])->assertSessionHasNoErrors();
+
+        auth('admin')->logout();
+        $this->get('/')->assertOk()->assertSee(asset('images/storefront/brand-logo.jpg'), false)->assertSee('alt="XTRA4U"', false)->assertDontSee('>X4U<', false);
+        $this->get('/about')->assertOk()->assertSee(asset('images/storefront/brand-logo.jpg'), false);
+
+        // In use: cannot be deleted from the library.
+        $this->actingAsAdminGuard();
+        $uploaded = CmsMedia::forceCreate(['disk' => 'public', 'path' => 'cms/2026/01/logo.png', 'filename' => 'logo.png', 'mime' => 'image/png', 'size' => 1, 'width' => 40, 'height' => 40]);
+        $this->put(route('admin.cms.settings.update'), ['settings' => ['site__logo_media_id' => $uploaded->id]]);
+        $this->delete(route('admin.cms.media.destroy', $uploaded))->assertSessionHasErrors('file');
+
+        // Removing it restores the built-in badge.
+        $this->put(route('admin.cms.settings.update'), ['settings' => ['site__logo_media_id' => '']])->assertSessionHasNoErrors();
+        auth('admin')->logout();
+        $this->get('/')->assertOk()->assertSee('>X4U<', false)->assertSee('XTRA<span', false);
+    }
+
+    public function test_the_logo_setting_only_accepts_a_library_image(): void
+    {
+        $this->actingAsAdminGuard();
+
+        foreach (['999999', 'https://evil.example/logo.png', '<script>', '-1'] as $bad) {
+            $this->put(route('admin.cms.settings.update'), ['settings' => ['site__logo_media_id' => $bad]])->assertSessionHasErrors('settings.site__logo_media_id');
+        }
+    }
 }

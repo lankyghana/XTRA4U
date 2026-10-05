@@ -91,6 +91,14 @@ class CmsContent
         return $value;
     }
 
+    /** URL of the admin-uploaded platform logo, or null to use the built-in badge. */
+    public function logoUrl(): ?string
+    {
+        $id = $this->setting('site.logo_media_id');
+
+        return is_numeric($id) && (int) $id > 0 ? $this->image((int) $id) : null;
+    }
+
     /** Social links that are configured and pass link validation. @return list<array{key:string,label:string,url:string}> */
     public function socialLinks(): array
     {

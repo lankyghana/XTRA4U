@@ -32,6 +32,7 @@ class CmsSettingsRequest extends CmsRequest
 
         foreach (CmsRegistry::settings() as $key => $def) {
             $rules['settings.'.self::field($key)] = match ($def['type']) {
+                'image' => ['nullable', 'integer', 'exists:cms_media,id'],
                 'email' => ['nullable', 'email:rfc', 'max:'.$def['max']],
                 'phone' => ['nullable', 'string', 'max:'.$def['max'], 'regex:/^[0-9+()\-\s.]{5,}$/'],
                 'url' => ['nullable', 'string', 'max:'.$def['max'], $this->urlRule($key)],
