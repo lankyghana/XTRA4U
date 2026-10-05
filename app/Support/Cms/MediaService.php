@@ -156,6 +156,46 @@ class MediaService
     }
 
     /**
+     * Ids of every media row referenced anywhere, in a handful of queries, so a
+     * library listing can show "in use" without one lookup per image.
+     *
+     * @return array<int, true>
+     */
+    public function usedIds(): array
+    {
+        $ids = [];
+
+        foreach (CmsBanner::pluck('image_media_id') as $id) {
+            $ids[(int) $id] = true;
+        }
+
+        foreach (CmsPage::withTrashed()->get(['og_image_media_id', 'draft']) as $page) {
+            if ($page->og_image_media_id) {
+                $ids[(int) $page->og_image_media_id] = true;
+            }
+            if ($page->hasDraft() && ! empty($page->draft['og_image_media_id'])) {
+                $ids[(int) $page->draft['og_image_media_id']] = true;
+            }
+        }
+
+        foreach (CmsSection::with('page:id,slug')->get(['id', 'page_id', 'key', 'data', 'draft_data']) as $section) {
+            $def = CmsRegistry::section($section->page?->slug ?? '', $section->key);
+            foreach ($def['fields'] ?? [] as $name => $field) {
+                if ($field['type'] !== 'image') {
+                    continue;
+                }
+                foreach ([$section->data, $section->draft_data] as $payload) {
+                    if (is_array($payload) && is_numeric($payload[$name] ?? null)) {
+                        $ids[(int) $payload[$name]] = true;
+                    }
+                }
+            }
+        }
+
+        return $ids;
+    }
+
+    /**
      * @throws ValidationException when bundled, or still in use
      */
     public function delete(CmsMedia $media): void

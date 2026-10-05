@@ -41,6 +41,7 @@
 @endphp
 <div class="x4-page" style="padding-top: 64px;">
 
+    <x-cms.preview-bar />
     <x-cms.announcement-bar audience="public" />
 
     {{-- ============================================================

@@ -93,6 +93,7 @@
 {{-- The header is fixed at 64px tall; offset the page beneath it. --}}
 <div class="x4-page" style="padding-top: 64px;">
 
+    <x-cms.preview-bar />
     <x-cms.announcement-bar audience="public" />
 
     {{-- The hero (with its trust strip) is always first; the remaining sections follow the
