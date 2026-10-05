@@ -1,4 +1,6 @@
 <!-- WhatsApp Channel Floating Widget -->
+@php $waUrl = \App\Support\Cms\CmsLink::safe($cms->setting('contact.whatsapp_channel_url')); @endphp
+@if ($waUrl)
 <div class="fixed bottom-6 right-6 z-50" x-data="{ showTooltip: false }">
     <!-- Tooltip -->
     <div 
@@ -19,7 +21,7 @@
     
     <!-- WhatsApp Button -->
     <a 
-        href="https://whatsapp.com/channel/0029Vb6ZXJuL7UVQeZ7L5D3v" 
+        href="{{ $waUrl }}" 
         target="_blank" 
         rel="noopener noreferrer"
         @mouseenter="showTooltip = true" 
@@ -39,3 +41,4 @@
         <span class="relative inline-flex rounded-full h-4 w-4 bg-[#25D366]"></span>
     </span>
 </div>
+@endif

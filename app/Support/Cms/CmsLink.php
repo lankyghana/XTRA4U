@@ -123,7 +123,7 @@ final class CmsLink
             return null;
         }
         if (str_starts_with($url, '/') && ! str_starts_with($url, '//')) {
-            return $url;
+            return url($url);
         }
         if (preg_match('#^https://[^/?\#]+#i', $url) && filter_var($url, FILTER_VALIDATE_URL) !== false) {
             return $url;

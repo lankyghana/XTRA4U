@@ -383,7 +383,7 @@ MD,
             'mission' => [
                 'label' => 'What we do',
                 'help' => 'Three cards and the value-proposition banner underneath.',
-                'movable' => true,
+                'movable' => false,
                 'hideable' => true,
                 'fields' => [
                     'cards' => self::repeater('Cards', [
@@ -402,7 +402,7 @@ MD,
             'values' => [
                 'label' => 'Core values',
                 'help' => 'Four value tiles.',
-                'movable' => true,
+                'movable' => false,
                 'hideable' => true,
                 'fields' => [
                     'eyebrow' => self::text('Small label', 'Our Core Values', 40),
@@ -422,7 +422,7 @@ MD,
             'cta' => [
                 'label' => 'Closing call to action',
                 'help' => 'Last block before the footer.',
-                'movable' => true,
+                'movable' => false,
                 'hideable' => true,
                 'fields' => [
                     'title' => self::text('Title', 'Ready to Get Started?', 120),

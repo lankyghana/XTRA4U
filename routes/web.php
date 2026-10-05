@@ -145,9 +145,9 @@ Route::post('/afa/check-status', [AfaRegistrationController::class, 'checkStatus
 Route::post('/afa/verify', [AfaRegistrationController::class, 'verify'])->name('afa.verify');
 
 Route::get('/', [StorefrontController::class, 'index'])->name('storefront.index');
-Route::get('/about', fn () => view('pages.about'))->name('about');
-Route::get('/privacy', fn () => view('pages.privacy'))->name('privacy');
-Route::get('/terms', fn () => view('pages.terms'))->name('terms');
+Route::get('/about', [\App\Http\Controllers\CmsPageController::class, 'about'])->name('about');
+Route::get('/privacy', [\App\Http\Controllers\CmsPageController::class, 'legal'])->defaults('slug', 'privacy')->name('privacy');
+Route::get('/terms', [\App\Http\Controllers\CmsPageController::class, 'legal'])->defaults('slug', 'terms')->name('terms');
 
 // Public Marketplace alias (matches common capitalized URL)
 Route::get('/Marketplace', fn () => redirect()->route('checkout.show'));
@@ -566,3 +566,6 @@ Route::middleware(['web', 'admin.only'])->prefix('admin')->name('admin.')->group
     Route::delete('result-checker-pricing-tiers/{tier}', [AdminResultCheckerPricingTierController::class, 'destroy'])->name('result-checker-pricing-tiers.destroy');
     Route::patch('results-checkers/base-price', [AdminResultCheckerPinsController::class, 'updateBasePrice'])->name('result-checkers.base-price.update');
 });
+
+// Content management (public pages + admin Content section).
+require __DIR__.'/cms.php';

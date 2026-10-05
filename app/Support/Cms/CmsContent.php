@@ -370,7 +370,26 @@ class CmsContent
             return $page ? $this->payload($page, false) : ['missing' => true];
         });
 
-        return isset($payload['missing']) ? null : $payload;
+        if (isset($payload['missing'])) {
+            return $this->seeded() ? null : $this->registryPage($slug);
+        }
+
+        return $payload;
+    }
+
+    /** The former hardcoded legal copy, used only before the backfill has run. */
+    private function registryPage(string $slug): ?array
+    {
+        $def = CmsRegistry::systemRichPages()[$slug] ?? null;
+        if (! $def) {
+            return null;
+        }
+
+        $page = new CmsPage(array_intersect_key($def, array_flip(['title', 'icon', 'body', 'seo_title', 'meta_description'])) + ['slug' => $slug]);
+        $page->kind = 'rich';
+        $page->published_at = now();
+
+        return $this->payload($page, false);
     }
 
     public function payload(CmsPage $page, bool $useDraft): array
