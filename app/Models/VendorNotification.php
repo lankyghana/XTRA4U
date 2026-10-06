@@ -30,6 +30,7 @@ class VendorNotification extends Model
     const TYPE_WITHDRAWAL_REJECTED = 'withdrawal_rejected';
     const TYPE_AFA_REGISTRATION = 'afa_registration';
     const TYPE_ORDER_REFUNDED = 'order_refunded';
+    const TYPE_SUPPORT_REPLY = 'support_reply';
 
     public function vendor(): BelongsTo
     {

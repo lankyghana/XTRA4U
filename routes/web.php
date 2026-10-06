@@ -374,6 +374,24 @@ Route::middleware(['vendor.approved'])
         Route::get('quick-buy', [VendorQuickBuyController::class, 'show'])->name('quick-buy.show');
         Route::post('quick-buy', [VendorQuickBuyController::class, 'store'])->name('quick-buy.store');
 
+        // Support chat (vendor <-> admin). Conversations/attachments are looked up
+        // scoped to the authenticated vendor inside the controller.
+        Route::prefix('support')->name('support.')->group(function () {
+            $c = \App\Http\Controllers\Vendor\SupportController::class;
+            Route::get('/', [$c, 'index'])->name('index');
+            Route::get('new', [$c, 'create'])->name('new');
+            Route::post('/', [$c, 'store'])->middleware('throttle:20,1,support-start')->name('store');
+            Route::get('unread-count', [$c, 'unreadCount'])->middleware('throttle:120,1,support-unread')->name('unread');
+            Route::get('related-options', [$c, 'relatedOptions'])->middleware('throttle:60,1,support-related')->name('related');
+            Route::get('attachments/{attachmentId}', [$c, 'attachment'])->whereNumber('attachmentId')->name('attachments.show');
+            Route::get('{conversationId}', [$c, 'show'])->whereNumber('conversationId')->name('show');
+            Route::get('{conversationId}/messages', [$c, 'messages'])->whereNumber('conversationId')
+                ->middleware('throttle:120,1,support-poll')->name('messages');
+            Route::post('{conversationId}/messages', [$c, 'send'])->whereNumber('conversationId')
+                ->middleware('throttle:60,1,support-send')->name('send');
+            Route::post('{conversationId}/read', [$c, 'markRead'])->whereNumber('conversationId')->name('read');
+        });
+
         // NOTE: the actual payment gateway callback for top-ups should be public
         // and not require vendor authentication. The topup callback route is
         // defined outside the `vendor.approved` group below as `vendor.wallet.topup.callback`.
@@ -547,6 +565,32 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
             ->name('orders.mark-failed');
         Route::patch('orders/{order}/status', [\App\Http\Controllers\AdminResultCheckerOrdersController::class, 'updateStatus'])
             ->name('orders.update-status');
+    });
+
+    // Support inbox (vendor <-> admin chat). Read state is per admin.
+    Route::prefix('support')->name('support.')->group(function () {
+        $c = \App\Http\Controllers\Admin\SupportInboxController::class;
+        $q = \App\Http\Controllers\Admin\SupportQuickReplyController::class;
+        Route::get('/', [$c, 'index'])->name('index');
+        Route::get('unread-count', [$c, 'unreadCount'])->middleware('throttle:120,1,support-admin-unread')->name('unread');
+        Route::get('quick-replies/available', [$c, 'quickReplies'])->name('quick-replies.available');
+        Route::get('quick-replies', [$q, 'index'])->name('quick-replies.index');
+        Route::post('quick-replies', [$q, 'store'])->name('quick-replies.store');
+        Route::get('quick-replies/{reply}/edit', [$q, 'edit'])->whereNumber('reply')->name('quick-replies.edit');
+        Route::put('quick-replies/{reply}', [$q, 'update'])->whereNumber('reply')->name('quick-replies.update');
+        Route::post('quick-replies/{reply}/toggle', [$q, 'toggle'])->whereNumber('reply')->name('quick-replies.toggle');
+        Route::post('quick-replies/{reply}/move', [$q, 'move'])->whereNumber('reply')->name('quick-replies.move');
+        Route::delete('quick-replies/{reply}', [$q, 'destroy'])->whereNumber('reply')->name('quick-replies.destroy');
+        Route::get('attachments/{attachmentId}', [$c, 'attachment'])->whereNumber('attachmentId')->name('attachments.show');
+        Route::get('{conversationId}', [$c, 'show'])->whereNumber('conversationId')->name('show');
+        Route::get('{conversationId}/messages', [$c, 'messages'])->whereNumber('conversationId')
+            ->middleware('throttle:120,1,support-admin-poll')->name('messages');
+        Route::post('{conversationId}/messages', [$c, 'send'])->whereNumber('conversationId')
+            ->middleware('throttle:60,1,support-admin-send')->name('send');
+        Route::post('{conversationId}/read', [$c, 'markRead'])->whereNumber('conversationId')->name('read');
+        Route::post('{conversationId}/resolve', [$c, 'resolve'])->whereNumber('conversationId')->name('resolve');
+        Route::post('{conversationId}/close', [$c, 'close'])->whereNumber('conversationId')->name('close');
+        Route::post('{conversationId}/reopen', [$c, 'reopen'])->whereNumber('conversationId')->name('reopen');
     });
 
     // Manual Queue Run Trigger (scheduler-bridge)

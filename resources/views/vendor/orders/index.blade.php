@@ -125,6 +125,8 @@
                                         <td class="px-6 py-4 text-sm font-semibold text-gray-900">
                                             <div class="flex items-center gap-2">
                                                 <span>#{{ $order->id }}</span>
+                                                <a href="{{ route('vendor.support.new', ['related_type' => 'order', 'related_id' => $order->id, 'category' => 'order']) }}"
+                                                   class="text-xs font-medium text-brand-violet hover:underline">Get support</a>
                                                 @if($isAffiliateForViewer)
                                                     <x-badge variant="processing" size="sm">Affiliate Order</x-badge>
                                                 @endif
