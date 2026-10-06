@@ -462,6 +462,14 @@ Route::post('/admin/logout', [AdminAuthController::class, 'logout'])->name('admi
 
 Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/', [AdminController::class, 'dashboard'])->name('dashboard');
+    // Vendor contact export. Admin-only: admin.only plus the stricter cms.admin gate (explicit guards, no default-to-admin),
+    // re-checked in the FormRequest.
+    Route::get('vendors/export', [\App\Http\Controllers\Admin\VendorContactExportController::class, 'show'])
+        ->middleware('cms.admin')->name('vendors.export');
+    Route::post('vendors/export/preview', [\App\Http\Controllers\Admin\VendorContactExportController::class, 'preview'])
+        ->middleware(['cms.admin', 'throttle:30,1,vendor-export-preview'])->name('vendors.export.preview');
+    Route::post('vendors/export/download', [\App\Http\Controllers\Admin\VendorContactExportController::class, 'download'])
+        ->middleware(['cms.admin', 'throttle:10,1,vendor-export-download'])->name('vendors.export.download');
     Route::resource('vendors', AdminVendorController::class)->only(['index', 'update', 'destroy']);
     Route::post('vendors/{vendor}/adjust-balance', [AdminVendorController::class, 'adjustBalance'])->name('vendors.adjust-balance');
     Route::resource('network-services', AdminNetworkServiceController::class)
