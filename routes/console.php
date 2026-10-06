@@ -81,6 +81,13 @@ Schedule::call(function () {
     Artisan::call('payments:reconcile');
 })->everyFiveMinutes()->name('payments:reconcile')->withoutOverlapping();
 
+// Alerts (log + admin notification + optional external heartbeat) when queued
+// jobs are not being processed, i.e. the queue:work cron has stopped. Without
+// it, paid orders silently sit undelivered. In-process call, like the others.
+Schedule::call(function () {
+    Artisan::call('queue:health-check');
+})->everyFiveMinutes()->name('queue:health-check')->withoutOverlapping();
+
 // Wide, infrequent safety net behind payments:reconcile — see
 // CleanupPendingPayments's own docblock for why both exist. Every 6 hours.
 // Uses Artisan::call() (in-process) to avoid proc_open on shared hosting.
