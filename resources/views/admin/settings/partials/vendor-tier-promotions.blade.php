@@ -73,7 +73,7 @@
                             <!-- Actions -->
                             <div class="flex items-center gap-2 flex-shrink-0">
                                 <button type="button" @click="showActions = !showActions"
-                                        class="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                                        class="inline-flex items-center justify-center rounded-lg font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 px-3 py-1.5 text-xs border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-brand-violet">
                                     Review
                                 </button>
                             </div>
@@ -90,7 +90,7 @@
                                         <textarea name="notes" rows="2" placeholder="Optional notes..."
                                                   class="w-full text-xs rounded border-green-300 focus:border-green-500 focus:ring-green-500 mb-2 resize-none"></textarea>
                                         <button type="submit"
-                                                class="w-full px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors">
+                                                class="inline-flex items-center justify-center rounded-lg font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 px-3 py-1.5 text-xs bg-[#00942C] text-white hover:bg-[#009633] focus:ring-[#00942C] w-full">
                                             Confirm Promotion to {{ $nextTier?->name }}
                                         </button>
                                     </div>
@@ -104,7 +104,7 @@
                                         <textarea name="notes" rows="2" placeholder="Reason for rejection..."
                                                   class="w-full text-xs rounded border-red-300 focus:border-red-500 focus:ring-red-500 mb-2 resize-none"></textarea>
                                         <button type="submit"
-                                                class="w-full px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700 transition-colors">
+                                                class="inline-flex items-center justify-center rounded-lg font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 px-3 py-1.5 text-xs bg-[#DC2626] text-white hover:bg-red-700 focus:ring-[#DC2626] w-full">
                                             Reject
                                         </button>
                                     </div>

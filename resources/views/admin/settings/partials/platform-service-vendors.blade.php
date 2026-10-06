@@ -1,8 +1,8 @@
 <div class="max-w-4xl">
     {{-- Intro --}}
-    <div class="mb-8 bg-gradient-to-r from-brand-deep-blue to-brand-bright-blue rounded-xl p-6 text-white">
+    <div class="mb-8 rounded-xl border border-violet-200 bg-violet-50 p-5 text-gray-800">
         <h2 class="text-lg font-semibold">Platform Service Vendors</h2>
-        <p class="mt-1 text-sm text-white/80">
+        <p class="mt-1 text-sm text-gray-600">
             Choose which vendor's catalog powers each official XTRA4U service page
             (e.g. xtra4u.com/services/data-bundles). Customers who land there via the
             homepage buy from the vendor assigned here. This does not affect any
@@ -32,7 +32,7 @@
 
                     <select id="vendor_{{ $category }}"
                             name="vendor[{{ $category }}]"
-                            class="mt-3 block w-full max-w-md rounded-lg border-gray-300 shadow-sm focus:border-brand-bright-blue focus:ring-brand-bright-blue text-sm">
+                            class="mt-3 block w-full max-w-md rounded-lg border-gray-300 shadow-sm focus:border-brand-violet focus:ring-brand-violet text-sm">
                         <option value="" @selected(!$selected)>— Not assigned —</option>
                         @foreach ($choices->sortByDesc('eligible') as $choice)
                             @php $v = $choice['vendor']; @endphp
@@ -58,7 +58,7 @@
 
         <div class="mt-6 flex justify-end">
             <button type="submit"
-                    class="inline-flex items-center px-5 py-2.5 rounded-lg text-sm font-semibold text-white bg-brand-deep-blue hover:bg-brand-bright-blue transition-colors">
+                    class="inline-flex items-center justify-center rounded-lg font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 px-4 py-2 text-sm bg-brand-violet text-white hover:bg-brand-violet-deep focus:ring-brand-violet">
                 Save changes
             </button>
         </div>

@@ -37,7 +37,7 @@
                 ] as $t)
                     <button type="button"
                             @click="tab = '{{ $t['key'] }}'"
-                            :class="tab === '{{ $t['key'] }}' ? 'border-brand-deep-blue text-brand-deep-blue' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            :class="tab === '{{ $t['key'] }}' ? 'border-brand-violet text-brand-violet' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
                             class="whitespace-nowrap border-b-2 py-3 px-1 text-sm font-medium transition-colors">
                         {{ $t['label'] }}
                         @if ($t['key'] === 'vendor-tier-promotions' && $eligible->total() > 0)

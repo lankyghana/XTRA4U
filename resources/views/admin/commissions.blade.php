@@ -5,7 +5,7 @@
 @section('content')
 <x-admin-layout title="Commissions" subtitle="Overview of platform earnings" active="reports">
     <div class="max-w-2xl">
-        <div class="bg-gradient-to-br from-brand-deep-blue to-brand-green rounded-2xl shadow-xl overflow-hidden transform hover:scale-105 transition-transform duration-200">
+        <div class="bg-gradient-to-br from-brand-violet to-brand-green rounded-2xl shadow-xl overflow-hidden transform hover:scale-105 transition-transform duration-200">
             <div class="px-8 py-10">
                 <div class="flex items-center space-x-4 mb-4">
                     <div class="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
@@ -14,11 +14,11 @@
                         </svg>
                     </div>
                     <div>
-                        <p class="text-sm uppercase tracking-wide text-blue-100 font-medium">Total Commission Earned</p>
+                        <p class="text-sm uppercase tracking-wide text-gray-600 font-medium">Total Commission Earned</p>
                         <p class="mt-2 text-4xl font-bold text-white">₵{{ number_format($commissions, 2) }}</p>
                     </div>
                 </div>
-                <p class="mt-4 text-sm text-blue-100">Calculated across all vendor orders and transactions processed on the platform.</p>
+                <p class="mt-4 text-sm text-gray-600">Calculated across all vendor orders and transactions processed on the platform.</p>
             </div>
         </div>
     </div>

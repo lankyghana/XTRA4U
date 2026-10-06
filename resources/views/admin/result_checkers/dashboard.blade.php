@@ -8,12 +8,12 @@
                 <h2 class="text-lg font-semibold text-gray-900">Stock Overview</h2>
                 <p class="text-sm text-gray-500">Track available inventory per result checker service.</p>
             </div>
-            <a href="{{ route('admin.result-checkers.pins.index') }}" class="inline-flex items-center px-4 py-2 bg-brand-deep-blue text-white rounded-md text-sm font-semibold hover:bg-opacity-90">
+            <a href="{{ route('admin.result-checkers.pins.index') }}" class="inline-flex items-center px-4 py-2 bg-brand-violet text-white rounded-md text-sm font-semibold hover:bg-opacity-90">
                 Manage PINs
             </a>
         </div>
 
-        <x-table :headers="['Service', 'Total Pins', 'Used Pins', 'Remaining Stock']">
+        <x-admin.table :headers="['Service', 'Total Pins', 'Used Pins', 'Remaining Stock']">
             @forelse ($services as $service)
                 <tr class="hover:bg-gray-50">
                     <td class="px-6 py-4 text-sm font-medium text-gray-900">{{ $service->name }}</td>
@@ -26,14 +26,14 @@
                     <td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">No result checker services found.</td>
                 </tr>
             @endforelse
-        </x-table>
+        </x-admin.table>
 
         <div class="mt-12 flex items-center justify-between">
             <div>
                 <h2 class="text-lg font-semibold text-gray-900">Recent Orders</h2>
                 <p class="text-sm text-gray-500">Latest result checker orders across all vendors.</p>
             </div>
-            <a href="{{ route('admin.result-checkers.orders.index') }}" class="inline-flex items-center text-sm font-medium text-brand-deep-blue hover:text-brand-bright-blue">
+            <a href="{{ route('admin.result-checkers.orders.index') }}" class="inline-flex items-center text-sm font-medium text-brand-violet hover:text-brand-violet-deep">
                 View All Orders
                 <svg class="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
             </a>
@@ -54,7 +54,7 @@
                     @forelse($recentOrders ?? [] as $order)
                         <tr>
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                <a href="{{ route('admin.result-checkers.orders.show', $order) }}" class="text-brand-deep-blue hover:underline">
+                                <a href="{{ route('admin.result-checkers.orders.show', $order) }}" class="text-brand-violet hover:underline">
                                     #{{ $order->id }}
                                 </a>
                             </td>
@@ -75,7 +75,7 @@
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <a href="{{ route('admin.result-checkers.orders.show', $order) }}"
-                                   class="text-brand-deep-blue hover:text-brand-bright-blue font-semibold">
+                                   class="text-brand-violet hover:text-brand-violet-deep font-semibold">
                                     View
                                 </a>
                             </td>

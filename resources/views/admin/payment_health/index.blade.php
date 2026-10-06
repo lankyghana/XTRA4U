@@ -218,7 +218,7 @@
                     <input type="text" name="reason" value="{{ $filters['reason'] ?? '' }}" class="rounded-md border-gray-300 text-sm" placeholder="e.g. integrity_mismatch">
                 </div>
                 <div>
-                    <button type="submit" class="px-4 py-2 bg-gray-800 text-white text-sm rounded-md">Filter</button>
+                    <button type="submit" class="inline-flex items-center justify-center rounded-lg font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 px-4 py-2 text-sm border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-brand-violet">Filter</button>
                 </div>
                 @if (array_filter($filters))
                     <div>
@@ -227,7 +227,7 @@
                 @endif
             </form>
 
-            <x-table :headers="['Type', 'ID', 'Reference', 'Gateway', 'Amount', 'State', 'Created', 'Attempts', 'Last Reconciled', 'Next Reconciliation', 'Note', '']">
+            <x-admin.table :headers="['Type', 'ID', 'Reference', 'Gateway', 'Amount', 'State', 'Created', 'Attempts', 'Last Reconciled', 'Next Reconciliation', 'Note', '']">
                 @forelse ($queue as $row)
                     <tr class="hover:bg-gray-50">
                         <td class="px-6 py-4 text-sm">{{ $labels[$row->payable_type] ?? $row->payable_type }}</td>
@@ -253,7 +253,7 @@
                                     @csrf
                                     <input type="hidden" name="payable_type" value="{{ $row->payable_type }}">
                                     <input type="hidden" name="payable_id" value="{{ $row->id }}">
-                                    <button type="submit" class="px-3 py-1 text-xs bg-blue-600 text-white rounded-md">Recheck Payment</button>
+                                    <button type="submit" class="inline-flex items-center justify-center rounded-lg font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 px-3 py-1.5 text-xs bg-brand-violet text-white hover:bg-brand-violet-deep focus:ring-brand-violet">Recheck Payment</button>
                                 </form>
                             @else
                                 <span class="text-xs text-gray-400">No gateway on record</span>
@@ -263,7 +263,7 @@
                 @empty
                     <tr><td colspan="12" class="px-6 py-4 text-center text-sm text-gray-500">Nothing needs attention right now.</td></tr>
                 @endforelse
-            </x-table>
+            </x-admin.table>
 
             @if ($queue->hasPages())
                 <div class="flex justify-end pt-2">{{ $queue->links() }}</div>

@@ -49,22 +49,7 @@
                 </div>
                 <div>
                     <p class="text-sm text-gray-500">Current Status</p>
-                    @php
-                        $statusColors = [
-                            'Pending'    => 'bg-yellow-100 text-yellow-800',
-                            'Processing' => 'bg-blue-100 text-blue-800',
-                            'Completed'  => 'bg-green-100 text-green-800',
-                            'Failed'     => 'bg-red-100 text-red-800',
-                            'Cancelled'  => 'bg-red-100 text-red-800',
-                            'Refunded'   => 'bg-purple-100 text-purple-800',
-                            'On Hold'    => 'bg-orange-100 text-orange-800',
-                            'Verifying'  => 'bg-indigo-100 text-indigo-800',
-                        ];
-                        $colorClass = $statusColors[$order->status] ?? 'bg-gray-100 text-gray-800';
-                    @endphp
-                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ $colorClass }}">
-                        {{ $order->status ?? 'N/A' }}
-                    </span>
+                    <x-admin.status :status="$order->status ?? ''" label="{{ $order->status ?? 'N/A' }}" />
                 </div>
                 <div>
                     <p class="text-sm text-gray-500">Date</p>
@@ -91,7 +76,7 @@
                 <div class="w-full sm:w-72">
                     <label for="status" class="block text-sm font-medium text-gray-700 mb-1">New Status</label>
                     <select id="status" name="status"
-                        class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm py-2 px-3 border">
+                        class="block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-violet focus:ring-brand-violet text-sm py-2 px-3 border">
                         @foreach ([
                             'Pending'    => 'Pending',
                             'Processing' => 'Processing',
@@ -113,7 +98,7 @@
                 </div>
 
                 <button type="submit"
-                    class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors">
+                    class="inline-flex items-center justify-center rounded-lg font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 px-4 py-2 text-sm bg-brand-violet text-white hover:bg-brand-violet-deep focus:ring-brand-violet">
                     <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                         <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
                     </svg>

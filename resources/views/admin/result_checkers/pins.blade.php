@@ -62,7 +62,7 @@
                     </div>
 
                     <button type="submit"
-                        class="inline-flex items-center gap-2 px-4 py-2 bg-brand-deep-blue text-white rounded-md text-sm font-semibold hover:opacity-90 transition">
+                        class="inline-flex items-center justify-center rounded-lg font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 px-4 py-2 text-sm bg-brand-violet text-white hover:bg-brand-violet-deep focus:ring-brand-violet">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
                         </svg>
@@ -121,7 +121,7 @@
                     </div>
 
                     <button type="submit"
-                        class="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md text-sm font-semibold hover:bg-green-700 transition">
+                        class="inline-flex items-center justify-center rounded-lg font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 px-4 py-2 text-sm bg-[#00942C] text-white hover:bg-[#009633] focus:ring-[#00942C]">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
                         </svg>
@@ -198,7 +198,7 @@
                 </div>
 
                 <button type="submit"
-                    class="inline-flex items-center gap-2 px-4 py-2 bg-brand-deep-blue text-white rounded-md text-sm font-semibold hover:opacity-90 transition">
+                    class="inline-flex items-center justify-center rounded-lg font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 px-4 py-2 text-sm bg-brand-violet text-white hover:bg-brand-violet-deep focus:ring-brand-violet">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M12 12V4m0 0l-3 3m3-3l3 3"/>
                     </svg>
@@ -233,7 +233,7 @@
                 </div>
                 <div class="flex items-end">
                     <button type="submit"
-                        class="w-full inline-flex justify-center items-center px-4 py-2 bg-gray-900 text-white rounded-md text-sm font-semibold hover:bg-gray-700 transition">
+                        class="w-full inline-flex justify-center items-center px-4 py-2 bg-brand-violet text-white rounded-lg text-sm font-semibold hover:bg-brand-violet-deep transition">
                         Apply Filters
                     </button>
                 </div>
@@ -246,7 +246,7 @@
                 : str_repeat('*', max(strlen((string) $value) - 4, 0)) . substr((string) $value, -4);
         @endphp
 
-        <x-table :headers="['Service', 'Serial', 'PIN', 'Status', 'Order', 'Uploaded']">
+        <x-admin.table :headers="['Service', 'Serial', 'PIN', 'Status', 'Order', 'Uploaded']">
             @forelse ($pins as $pin)
                 <tr class="hover:bg-gray-50">
                     <td class="px-6 py-4 text-sm text-gray-900">{{ $pin->service?->name ?? 'N/A' }}</td>
@@ -274,7 +274,7 @@
                     <td colspan="6" class="px-6 py-4 text-center text-sm text-gray-500">No pins found.</td>
                 </tr>
             @endforelse
-        </x-table>
+        </x-admin.table>
 
         @if($pins->hasPages())
             <div class="flex justify-end pt-2">

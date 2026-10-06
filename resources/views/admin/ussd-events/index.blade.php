@@ -33,7 +33,7 @@
         </div>
 
         <div class="flex gap-2">
-            <button type="submit" class="px-4 py-2 bg-brand-deep-blue text-white text-sm font-semibold rounded-lg hover:bg-brand-bright-blue">
+            <button type="submit" class="inline-flex items-center justify-center rounded-lg font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 px-4 py-2 text-sm bg-brand-violet text-white hover:bg-brand-violet-deep focus:ring-brand-violet">
                 Filter
             </button>
             <a href="{{ route('admin.ussd-events.index') }}"

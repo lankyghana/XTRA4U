@@ -23,27 +23,27 @@
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4">
                         <div class="lg:col-span-3">
                             <label class="block text-xs font-medium text-gray-600 mb-1" for="recipient_date_from">Date from</label>
-                            <input id="recipient_date_from" type="date" name="date_from" value="{{ $filters['date_from'] ?? '' }}" class="w-full border border-gray-300 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue" />
+                            <input id="recipient_date_from" type="date" name="date_from" value="{{ $filters['date_from'] ?? '' }}" class="w-full border border-gray-300 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-violet focus:border-brand-violet" />
                         </div>
                         <div class="lg:col-span-3">
                             <label class="block text-xs font-medium text-gray-600 mb-1" for="recipient_date_to">Date to</label>
-                            <input id="recipient_date_to" type="date" name="date_to" value="{{ $filters['date_to'] ?? '' }}" class="w-full border border-gray-300 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue" />
+                            <input id="recipient_date_to" type="date" name="date_to" value="{{ $filters['date_to'] ?? '' }}" class="w-full border border-gray-300 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-violet focus:border-brand-violet" />
                         </div>
                         <div class="lg:col-span-3">
                             <label class="block text-xs font-medium text-gray-600 mb-1" for="recipient_phone">Phone number</label>
-                            <input id="recipient_phone" type="text" name="phone" value="{{ $filters['phone'] ?? '' }}" placeholder="+233… or partial" class="w-full border border-gray-300 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue" />
+                            <input id="recipient_phone" type="text" name="phone" value="{{ $filters['phone'] ?? '' }}" placeholder="+233… or partial" class="w-full border border-gray-300 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-violet focus:border-brand-violet" />
                         </div>
                         <div class="lg:col-span-3">
                             <label class="block text-xs font-medium text-gray-600 mb-1" for="recipient_vendor_id">Vendor ID</label>
-                            <input id="recipient_vendor_id" type="number" name="vendor_id" value="{{ $filters['vendor_id'] ?? '' }}" placeholder="Optional" class="w-full border border-gray-300 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue" />
+                            <input id="recipient_vendor_id" type="number" name="vendor_id" value="{{ $filters['vendor_id'] ?? '' }}" placeholder="Optional" class="w-full border border-gray-300 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-violet focus:border-brand-violet" />
                         </div>
                         <div class="lg:col-span-6">
                             <label class="block text-xs font-medium text-gray-600 mb-1" for="recipient_service_type">Service type</label>
-                            <input id="recipient_service_type" type="text" name="service_type" value="{{ $filters['service_type'] ?? '' }}" placeholder="e.g. DATA or afa_registration (partial match)" class="w-full border border-gray-300 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue" />
+                            <input id="recipient_service_type" type="text" name="service_type" value="{{ $filters['service_type'] ?? '' }}" placeholder="e.g. DATA or afa_registration (partial match)" class="w-full border border-gray-300 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-violet focus:border-brand-violet" />
                         </div>
                         <div class="lg:col-span-6 flex items-end">
                             <label class="flex items-start gap-3 cursor-pointer select-none">
-                                <input id="recipient_distinct" type="checkbox" name="distinct" value="1" {{ ($filters['distinct'] ?? null) ? 'checked' : '' }} class="mt-0.5 w-4 h-4 rounded border-gray-300 text-brand-deep-blue focus:ring-brand-deep-blue" />
+                                <input id="recipient_distinct" type="checkbox" name="distinct" value="1" {{ ($filters['distinct'] ?? null) ? 'checked' : '' }} class="mt-0.5 w-4 h-4 rounded border-gray-300 text-brand-violet focus:ring-brand-violet" />
                                 <span>
                                     <span class="block text-sm font-medium text-gray-700">Unique numbers only</span>
                                     <span class="block text-xs text-gray-500">Exports and Copy deduplicate to one row per phone number</span>
@@ -67,7 +67,7 @@
             </div>
         </div>
 
-        <x-table :headers="['Used at', 'Phone number', 'Service type', 'Vendor', 'Order']">
+        <x-admin.table :headers="['Used at', 'Phone number', 'Service type', 'Vendor', 'Order']">
             @forelse($logs as $log)
                 <tr class="hover:bg-gray-50">
                     <td class="px-6 py-4 text-sm text-gray-600 whitespace-nowrap">
@@ -104,7 +104,7 @@
                     </td>
                 </tr>
             @endforelse
-        </x-table>
+        </x-admin.table>
 
         @php($canPaginate = is_object($logs) && method_exists($logs, 'hasPages'))
         @if ($canPaginate && $logs->hasPages())

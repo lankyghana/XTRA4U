@@ -45,7 +45,17 @@ class AdminController extends Controller
         $pendingTierPromotions = Vendor::where('is_tier_eligible', true)->count();
         $tierDistribution = VendorTier::withCount('vendors')->ordered()->get();
 
+        // Read-only counts for the "Needs attention" panel (display only).
+        $pendingVendorCount = Vendor::where('is_approved', false)->count();
+        try {
+            $supportWaiting = app(\App\Services\Support\SupportInbox::class)->waitingForAdmin();
+        } catch (\Throwable $e) {
+            $supportWaiting = 0;
+        }
+
         return view('admin.dashboard', [
+            'pendingVendorCount' => $pendingVendorCount,
+            'supportWaiting' => $supportWaiting,
             'activeVendors' => $activeVendors,
             'pendingVendors' => $pendingVendors,
             'totalRevenue' => $totalRevenue,
