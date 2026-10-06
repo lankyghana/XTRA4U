@@ -139,7 +139,9 @@ Route::get('/store/{vendor:vendor_code}/afa', [AfaRegistrationController::class,
 Route::post('/afa/store/{vendor:vendor_code}', [AfaRegistrationController::class, 'store'])
     ->middleware('throttle:20,1,afa-store')
     ->name('afa.store');
-Route::get('/afa/callback', [AfaRegistrationController::class, 'paymentCallback'])->name('afa.callback');
+Route::get('/afa/callback', [AfaRegistrationController::class, 'paymentCallback'])
+    ->middleware('throttle:60,1,afa-callback')
+    ->name('afa.callback');
 Route::get('/afa/success/{reference}', [AfaRegistrationController::class, 'success'])->name('afa.success');
 Route::post('/afa/check-status', [AfaRegistrationController::class, 'checkStatus'])->name('afa.check-status');
 Route::post('/afa/verify', [AfaRegistrationController::class, 'verify'])->name('afa.verify');
@@ -175,21 +177,27 @@ Route::get('/store/{vendor:vendor_code}/result-checkers', [StorefrontController:
 Route::post('/store/{vendor:vendor_code}/result-checkers/checkout', [ResultCheckerCheckoutController::class, 'initiateCheckout'])
     ->middleware('throttle:20,1,rc-checkout') // 20 checkout initiations per minute
     ->name('result-checkers.checkout');
-Route::match(['GET', 'POST'], '/result-checkers/payment/callback/{order}', [ResultCheckerPaymentCallbackController::class, 'handle'])->name('result-checkers.payment.callback');
+Route::match(['GET', 'POST'], '/result-checkers/payment/callback/{order}', [ResultCheckerPaymentCallbackController::class, 'handle'])
+    ->middleware('throttle:60,1,rc-callback')
+    ->name('result-checkers.payment.callback');
 Route::post('/result-checkers/payment/webhook', [ResultCheckerPaymentCallbackController::class, 'webhook'])
     ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
+    ->middleware('throttle:120,1,rc-webhook')
     ->name('result-checkers.payment.webhook');
 // Delivery callbacks complete real orders, so they are throttled against
 // brute-forcing provider references.
 Route::post('/webhooks/gigshub', [\App\Http\Controllers\Webhooks\GigshubWebhookController::class, 'handle'])
     ->middleware('throttle:120,1,gigshub-webhook')
     ->name('api.webhooks.gigshub');
-Route::post('/webhooks/gigshub/balance-low', [\App\Http\Controllers\Webhooks\GigshubLowBalanceWebhookController::class, 'handle'])->name('webhooks.gigshub.balance-low');
+Route::post('/webhooks/gigshub/balance-low', [\App\Http\Controllers\Webhooks\GigshubLowBalanceWebhookController::class, 'handle'])
+    ->middleware('throttle:30,1,gigshub-balance-low-webhook')
+    ->name('webhooks.gigshub.balance-low');
 Route::post('/webhooks/skdataplug', [\App\Http\Controllers\Webhooks\SkdataplugWebhookController::class, 'handle'])
     ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
     ->middleware('throttle:120,1,skdataplug-webhook')
     ->name('api.webhooks.skdataplug');
 Route::post('/webhooks/paystack', [\App\Http\Controllers\Webhooks\PaystackWebhookController::class, 'handle'])
+    ->middleware('throttle:120,1,paystack-webhook')
     ->name('webhooks.paystack');
 
 // Result Checker Status pages
@@ -425,7 +433,9 @@ Route::post('/api/ussd', [\App\Http\Controllers\Api\UssdController::class, 'hand
 // Client-side polling endpoint for inline embed/iframe payment flows
 Route::get('/payment/status/{reference}', [\App\Http\Controllers\PaymentStatusController::class, 'status'])
     ->name('payment.status');
-Route::match(['GET', 'POST'], '/payment/callback', [PaymentCallbackController::class, 'handle'])->name('payment.callback');
+Route::match(['GET', 'POST'], '/payment/callback', [PaymentCallbackController::class, 'handle'])
+    ->middleware('throttle:60,1,payment-callback')
+    ->name('payment.callback');
 
 // Admin Authentication Routes
 Route::get('/admin/login', [AdminAuthController::class, 'showLoginForm'])->name('admin.login');

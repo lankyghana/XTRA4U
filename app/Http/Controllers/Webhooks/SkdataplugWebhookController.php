@@ -102,18 +102,23 @@ class SkdataplugWebhookController extends Controller
      *
      * SKDataPlug signs notifications with a shared secret. The signature is an
      * HMAC-SHA256 of the raw request body, hex-encoded. If no token is
-     * configured we log a warning but still accept the request (so the webhook
-     * works while the token is being set up).
+     * configured the request is rejected, except in local/testing environments
+     * where verification is skipped so the webhook can be exercised without one.
      */
     private function verifySignature(Request $request): bool
     {
         $secret = (string) config('services.skdataplug.token', '');
 
-        // No secret configured — skip verification (warn in logs).
         if ($secret === '') {
-            Log::warning('SKDataPlug webhook: SKDATAPLUG_TOKEN not set; skipping signature check.');
+            if (app()->environment(['local', 'testing'])) {
+                Log::warning('SKDataPlug webhook: SKDATAPLUG_TOKEN not set; skipping signature check (non-production).');
 
-            return true;
+                return true;
+            }
+
+            Log::error('SKDataPlug webhook rejected: SKDATAPLUG_TOKEN is not configured.');
+
+            return false;
         }
 
         $receivedSignature = (string) $request->header('X-SKPlug-Signature', '');

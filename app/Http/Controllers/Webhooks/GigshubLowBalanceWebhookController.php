@@ -10,8 +10,16 @@ use Illuminate\Support\Facades\Log;
 
 class GigshubLowBalanceWebhookController extends Controller
 {
+    use VerifiesGigshubSignature;
+
     public function handle(Request $request)
     {
+        if (! $this->verifySignature($request)) {
+            Log::warning('GigsHub low-balance webhook: invalid signature', ['ip' => $request->ip()]);
+
+            return response()->json(['error' => 'Invalid signature.'], 401);
+        }
+
         $payload = $request->all();
 
         Log::info('GigsHub low-balance webhook received', [
@@ -34,10 +42,19 @@ class GigshubLowBalanceWebhookController extends Controller
             return response()->json(['success' => false, 'error' => 'Missing balance or threshold'], 400);
         }
 
+        if (! is_numeric($balance) || ! is_numeric($threshold)) {
+            return response()->json(['success' => false, 'error' => 'balance and threshold must be numeric'], 422);
+        }
+
+        $balance = (float) $balance;
+        $threshold = (float) $threshold;
+        // Free text from the payload ends up in an admin-facing record: bound it.
+        $currency = is_string($currency) ? mb_substr(trim($currency), 0, 8) : 'GHS';
+
         $lastAlertKey = 'gigshub_last_low_balance_alert_at';
         $lastAlertTime = cache()->get($lastAlertKey);
 
-        if ($lastAlertTime && now()->diffInSeconds($lastAlertTime) < 120) {
+        if ($lastAlertTime && $lastAlertTime->diffInSeconds(now(), true) < 120) {
             Log::info('GigsHub low-balance: Duplicate suppressed (cooldown)', [
                 'balance' => $balance,
                 'threshold' => $threshold,
@@ -48,7 +65,7 @@ class GigshubLowBalanceWebhookController extends Controller
 
         cache()->put($lastAlertKey, now(), 3600);
 
-        $message = $payload['message'] ?? "Your wallet balance ({$currency} {$balance}) has dropped below your configured threshold of {$currency} {$threshold}.";
+        $message = is_string($payload['message'] ?? null) ? mb_substr($payload['message'], 0, 500) : "Your wallet balance ({$currency} {$balance}) has dropped below your configured threshold of {$currency} {$threshold}.";
 
         GigshubLowBalanceAlert::create([
             'balance' => $balance,
