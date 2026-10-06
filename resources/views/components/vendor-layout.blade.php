@@ -38,6 +38,7 @@
                     'settings' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />'
                         . '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />',
                     'ussd' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />',
+                    'support' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8M8 14h5m-9 6l3-3h11a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v14z" />',
                     default => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />',
                 };
             }
@@ -46,6 +47,14 @@
 @endonce
 
 @php
+    // Unread support conversations for THIS vendor. A failure here must never break the page.
+    try {
+        $supportPrincipal = \App\Support\Support\SupportPrincipal::tryVendor();
+        $supportUnread = $supportPrincipal ? app(\App\Services\Support\SupportInbox::class)->unreadConversations($supportPrincipal) : 0;
+    } catch (\Throwable $e) {
+        $supportUnread = 0;
+    }
+
     $storefrontUrl = $vendor && $vendor->vendor_code ? route('storefront.vendor', ['vendor' => $vendor->vendor_code]) : null;
 
     $navLinks = [
@@ -122,6 +131,13 @@
             'matches' => ['vendor.ussd.subscription.*'],
         ],
         [
+            'key' => 'support',
+            'label' => 'Support',
+            'href' => route('vendor.support.index'),
+            'matches' => ['vendor.support.*'],
+            'badge' => $supportUnread,
+        ],
+        [
             'key' => 'settings',
             'label' => 'Settings',
             'href' => route('vendor.settings.index'),
@@ -143,7 +159,7 @@
         'Sell' => ['orders', 'fulfillment', 'products'],
         'Grow' => ['marketplace', 'reseller', 'affiliates', 'result-checkers', 'afa', 'ussd'],
         'Finance' => ['wallet', 'analytics'],
-        'Account' => ['settings'],
+        'Account' => ['support', 'settings'],
     ];
 
     $linkBaseClasses = 'group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors';
@@ -198,6 +214,7 @@
                                             {!! vendor_nav_paths($link['key']) !!}
                                         </svg>
                                         {{ $link['label'] }}
+                                        @if (!empty($link['badge']))<span class="ml-auto inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-[11px] font-semibold text-white bg-red-500" aria-label="{{ $link['badge'] }} unread">{{ $link['badge'] > 99 ? '99+' : $link['badge'] }}</span>@endif
                                     </a>
                                 @endforeach
                             </div>
@@ -271,6 +288,7 @@
                                         {!! vendor_nav_paths($link['key']) !!}
                                     </svg>
                                     {{ $link['label'] }}
+                                    @if (!empty($link['badge']))<span class="ml-auto inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-[11px] font-semibold text-white bg-red-500" aria-label="{{ $link['badge'] }} unread">{{ $link['badge'] > 99 ? '99+' : $link['badge'] }}</span>@endif
                                 </a>
                             @endforeach
                         </div>
@@ -377,7 +395,7 @@
                                         </template>
 
                                         <template x-for="notification in notifications" :key="notification.id">
-                                            <div @click="markAsRead(notification.id)"
+                                            <div @click="openNotification(notification)"
                                                  :class="{ 'bg-violet-50': !notification.read_at }"
                                                  class="px-3 sm:px-4 py-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors active:bg-gray-100">
                                                 <div class="flex items-start gap-2 sm:gap-3">
@@ -460,6 +478,8 @@
 
         <main class="flex-1 overflow-y-auto bg-gray-50">
             <div class="py-6 px-4 sm:px-6 lg:px-8">
+                {{-- Informational notices from Content > Announcements (vendor audience). --}}
+                <x-cms.announcement-bar audience="vendor" />
                 {{ $slot }}
             </div>
         </main>
@@ -503,6 +523,33 @@
                 } finally {
                     this.loading = false;
                 }
+            },
+
+            urlFor(n) {
+                const d = n.data || {};
+                switch (n.type) {
+                    case 'support_reply':
+                        return d.conversation_id ? '{{ url('/vendor/support') }}/' + d.conversation_id : '{{ route('vendor.support.index') }}';
+                    case 'new_order':
+                    case 'order_completed':
+                    case 'order_refunded':
+                        return '{{ route('vendor.orders.index') }}';
+                    case 'affiliate_order':
+                        return '{{ url('/vendor/orders/affiliate') }}';
+                    case 'withdrawal_approved':
+                    case 'withdrawal_rejected':
+                        return '{{ route('vendor.withdrawals.index') }}';
+                    case 'afa_registration':
+                        return '{{ route('vendor.afa.index') }}';
+                    default:
+                        return null;
+                }
+            },
+
+            async openNotification(n) {
+                const url = this.urlFor(n);
+                await this.markAsRead(n.id);
+                if (url) window.location.href = url;
             },
 
             async markAsRead(id) {

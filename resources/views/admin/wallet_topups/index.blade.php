@@ -1,86 +1,78 @@
-@extends('layouts.app')
+@extends('layouts.admin')
 
 @section('title', 'Wallet Top-ups')
 
 @section('content')
-<div class="max-w-7xl mx-auto py-6">
-    <h1 class="text-2xl font-bold mb-4">Wallet Top-ups Reconciliation</h1>
+<x-admin-layout title="Wallet Top-ups" subtitle="Reconcile vendor wallet top-ups against the payment gateway." active="wallet-topups">
+    <div class="space-y-4">
+        <x-admin.filters :action="route('admin.wallet-topups.index')" :active="filled(request('status')) || filled(request('gateway')) || filled(request('from')) || filled(request('to'))">
+            <label class="sr-only" for="topup-status">Status</label>
+            <select id="topup-status" name="status" class="w-full sm:w-44">
+                <option value="">All statuses</option>
+                <option value="initiated" {{ request('status')==='initiated' ? 'selected' : '' }}>Initiated</option>
+                <option value="completed" {{ request('status')==='completed' ? 'selected' : '' }}>Completed</option>
+                <option value="failed" {{ request('status')==='failed' ? 'selected' : '' }}>Failed</option>
+            </select>
+            <label class="sr-only" for="topup-gateway">Gateway</label>
+            <input id="topup-gateway" type="text" name="gateway" placeholder="Gateway" value="{{ request('gateway') }}" class="w-full sm:w-40" />
+            <label class="sr-only" for="topup-from">From date</label>
+            <input id="topup-from" type="date" name="from" value="{{ request('from') }}" class="w-full sm:w-40" />
+            <label class="sr-only" for="topup-to">To date</label>
+            <input id="topup-to" type="date" name="to" value="{{ request('to') }}" class="w-full sm:w-40" />
+        </x-admin.filters>
 
-    <form method="GET" class="mb-4 flex gap-2">
-        <select name="status" class="rounded border-gray-200 px-3 py-2">
-            <option value="">All statuses</option>
-            <option value="initiated" {{ request('status')==='initiated' ? 'selected' : '' }}>initiated</option>
-            <option value="completed" {{ request('status')==='completed' ? 'selected' : '' }}>completed</option>
-            <option value="failed" {{ request('status')==='failed' ? 'selected' : '' }}>failed</option>
-        </select>
-        <input type="text" name="gateway" placeholder="Gateway" value="{{ request('gateway') }}" class="rounded border-gray-200 px-3 py-2" />
-        <input type="date" name="from" value="{{ request('from') }}" class="rounded border-gray-200 px-3 py-2" />
-        <input type="date" name="to" value="{{ request('to') }}" class="rounded border-gray-200 px-3 py-2" />
-        <button class="px-4 py-2 bg-purple-600 text-white rounded">Filter</button>
-    </form>
-
-    <div class="bg-white rounded shadow overflow-hidden">
-        <table class="w-full text-left">
-            <thead class="bg-gray-50">
+        <x-admin.table :headers="['ID', 'Vendor', 'Amount', 'Status', 'Gateway', 'Reference', 'Created', 'Completed', '']">
+            @forelse($topups as $t)
                 <tr>
-                    <th class="px-4 py-2">ID</th>
-                    <th class="px-4 py-2">Vendor</th>
-                    <th class="px-4 py-2">Amount</th>
-                    <th class="px-4 py-2">Status</th>
-                    <th class="px-4 py-2">Gateway</th>
-                    <th class="px-4 py-2">Reference</th>
-                    <th class="px-4 py-2">Created</th>
-                    <th class="px-4 py-2">Completed</th>
-                    <th class="px-4 py-2">Actions</th>
+                    <td class="text-gray-500">{{ $t->id }}</td>
+                    <td class="whitespace-nowrap text-gray-900">{{ $t->vendor?->name }} <span class="text-xs text-gray-400">#{{ $t->vendor_id }}</span></td>
+                    <td class="whitespace-nowrap font-semibold text-gray-900">GHS {{ number_format($t->amount, 2) }}</td>
+                    <td><x-admin.status :status="$t->status" /></td>
+                    <td class="text-gray-700">{{ $t->gateway }}</td>
+                    <td class="font-mono text-xs text-gray-600">{{ $t->reference }}</td>
+                    <td class="whitespace-nowrap text-gray-500">{{ $t->created_at }}</td>
+                    <td class="whitespace-nowrap text-gray-500">{{ $t->completed_at ?? '-' }}</td>
+                    <td class="text-right">
+                        <button type="button" class="view-json admin-link text-sm" data-json='@json($t->gateway_response)'>View response</button>
+                    </td>
                 </tr>
-            </thead>
-            <tbody>
-                @foreach($topups as $t)
-                    <tr class="border-t">
-                        <td class="px-4 py-2">{{ $t->id }}</td>
-                        <td class="px-4 py-2">{{ $t->vendor?->name }} ({{ $t->vendor_id }})</td>
-                        <td class="px-4 py-2">GHS {{ number_format($t->amount, 2) }}</td>
-                        <td class="px-4 py-2">{{ $t->status }}</td>
-                        <td class="px-4 py-2">{{ $t->gateway }}</td>
-                        <td class="px-4 py-2">{{ $t->reference }}</td>
-                        <td class="px-4 py-2">{{ $t->created_at }}</td>
-                        <td class="px-4 py-2">{{ $t->completed_at ?? '-' }}</td>
-                        <td class="px-4 py-2">
-                            <button type="button" class="px-2 py-1 bg-gray-100 rounded view-json" data-json='@json($t->gateway_response)'>View JSON</button>
-                        </td>
-                    </tr>
-                @endforeach
-            </tbody>
-        </table>
+            @empty
+                <tr><td colspan="9"><x-admin.empty title="No top-ups found" description="Try different filters, or wait for vendors to top up their wallets." /></td></tr>
+            @endforelse
+        </x-admin.table>
+
+        @if ($topups->hasPages())
+            <div class="flex justify-end">{{ $topups->links() }}</div>
+        @endif
     </div>
 
-    <div class="mt-4">{{ $topups->links() }}</div>
-
-    <div id="json-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center">
-        <div class="bg-white max-w-2xl w-full p-4 rounded">
-            <h2 class="font-bold mb-2">Gateway Response</h2>
-            <pre id="json-content" class="whitespace-pre-wrap text-sm bg-gray-100 p-2 rounded max-h-96 overflow-auto"></pre>
-            <div class="text-right mt-2">
-                <button id="json-close" class="px-4 py-2 bg-gray-200 rounded">Close</button>
+    <div id="json-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-brand-dark/50 p-4" role="dialog" aria-modal="true" aria-labelledby="json-title">
+        <div class="w-full max-w-2xl rounded-xl bg-white p-5 shadow-xl">
+            <h2 id="json-title" class="mb-3 text-base font-semibold text-gray-900">Gateway response</h2>
+            <pre id="json-content" class="max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-gray-100 p-3 text-sm"></pre>
+            <div class="mt-4 text-right">
+                <x-button type="button" variant="secondary" id="json-close">Close</x-button>
             </div>
         </div>
     </div>
 
     <script>
     document.addEventListener('DOMContentLoaded', function () {
+        var modal = document.getElementById('json-modal');
+        function close() { modal.classList.add('hidden'); modal.classList.remove('flex'); }
         document.querySelectorAll('.view-json').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var json = this.getAttribute('data-json');
                 document.getElementById('json-content').textContent = JSON.stringify(JSON.parse(json || '{}'), null, 2);
-                document.getElementById('json-modal').classList.remove('hidden');
-                document.getElementById('json-modal').classList.add('flex');
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+                document.getElementById('json-close').focus();
             });
         });
-        document.getElementById('json-close').addEventListener('click', function () {
-            document.getElementById('json-modal').classList.add('hidden');
-            document.getElementById('json-modal').classList.remove('flex');
-        });
+        document.getElementById('json-close').addEventListener('click', close);
+        modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
     });
     </script>
-</div>
+</x-admin-layout>
 @endsection

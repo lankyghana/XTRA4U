@@ -38,7 +38,7 @@ class PaystackWebhookController extends Controller
             return response()->json(['success' => true, 'message' => 'OK']);
         }
 
-        if (! $signature || $signature !== hash_hmac('sha512', $payload, $secretKey)) {
+        if (! $signature || ! hash_equals(hash_hmac('sha512', $payload, $secretKey), (string) $signature)) {
             Log::warning('Paystack webhook: Invalid signature');
 
             return response()->json(['success' => false, 'message' => 'Invalid signature'], 403);

@@ -7,6 +7,9 @@
 /* Public marketplace storefront design system (scoped to `.x4`) */
 @import './storefront.css';
 
+/* Admin dashboard primitives (scoped to `.admin-shell`) */
+@import './admin.css';
+
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 @source '../**/*.blade.php';

@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\Log;
 
 class GigshubWebhookController extends Controller
 {
+    use VerifiesGigshubSignature;
+
     public function __construct(private ExternalFulfillmentStatusSynchronizer $synchronizer) {}
 
     public function handle(Request $request)
@@ -64,40 +66,6 @@ class GigshubWebhookController extends Controller
         ]);
 
         return response()->json(['success' => true], 200);
-    }
-
-    /**
-     * Optional shared-secret check.
-     *
-     * This endpoint completes real orders, so it accepts either an HMAC-SHA256
-     * signature of the raw body or the secret presented verbatim — GigsHub's
-     * signing scheme is not documented here, so both forms are allowed.
-     *
-     * When no secret is configured the request is accepted and a warning is
-     * logged: the webhook has always been unauthenticated, and rejecting
-     * callbacks on deploy would strand deliveries. Set GIGSHUB_WEBHOOK_SECRET
-     * to close it.
-     */
-    private function verifySignature(Request $request): bool
-    {
-        $secret = (string) config('services.gigshub.webhook_secret', '');
-
-        if ($secret === '') {
-            Log::warning('GigsHub webhook: GIGSHUB_WEBHOOK_SECRET not set; accepting unauthenticated callback.');
-
-            return true;
-        }
-
-        $provided = (string) ($request->header('X-Gigshub-Signature')
-            ?: $request->header('X-Webhook-Secret', ''));
-
-        if ($provided === '') {
-            return false;
-        }
-
-        $expectedHmac = hash_hmac('sha256', $request->getContent(), $secret);
-
-        return hash_equals($expectedHmac, $provided) || hash_equals($secret, $provided);
     }
 
     /**

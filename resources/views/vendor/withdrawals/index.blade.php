@@ -948,7 +948,11 @@
                         @forelse ($history as $item)
                             <tr class="hover:bg-gray-50 transition-colors duration-150 history-row" data-type="{{ $item->history_type ?? (strtolower(str_replace(' ', '-', $item->type)) === 'top-up' || strtolower(str_replace(' ', '-', $item->type)) === 'wallet_topup' ? 'topups' : (strtolower(str_replace(' ', '-', $item->type)) === 'withdrawal' ? 'withdrawals' : 'other')) }}">
                                 <td class="px-6 py-4 text-sm font-medium text-gray-900">{{ $item->type }}</td>
-                                <td class="px-6 py-4 text-sm text-gray-500">{{ $item->reference ?? '-' }}</td>
+                                <td class="px-6 py-4 text-sm text-gray-500">{{ $item->reference ?? '-' }}
+                                    @if (! empty($item->support_id))
+                                        <a href="{{ route('vendor.support.new', ['related_type' => 'withdrawal', 'related_id' => $item->support_id, 'category' => 'withdrawal']) }}" class="block text-xs font-medium text-brand-violet hover:underline">Get support</a>
+                                    @endif
+                                </td>
                                 <td class="px-6 py-4 text-sm text-gray-500">{{ optional($item->date)->format('M d, Y • h:i A') }}</td>
                                 <td class="px-6 py-4 text-sm font-semibold text-gray-900">GHS {{ number_format($item->amount, 2) }}</td>
                                 <td class="px-6 py-4 text-sm text-gray-700">{{ ucfirst($item->status ?? 'n/a') }}</td>

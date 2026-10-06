@@ -104,6 +104,16 @@ Per-vendor configuration: each vendor can set their own XpresPortal/GigsHub/SKDa
 ### Deployment
 Production uses cPanel (`.cpanel.yml`) — Laravel lives in `core/` subdirectory; public assets deploy to `/home/xtraucom/public_html/`.
 
+### Support Chat (Vendor <-> Admin)
+Private support inbox: `Vendor\SupportController` (`/vendor/support`) and `Admin\SupportInboxController` (`/admin/support`), both thin callers of `app/Services/Support/SupportService`.
+- **Actor identity**: always a `SupportPrincipal` built from the authenticated session (`tryVendor()` / `tryAdmin()`); never from request input. `guard` is `vendor` | `admin` (Admin model) | `web` (User with role=admin), so the two admin representations never collide.
+- **Status/queue**: vendor msg -> `waiting_admin` (`waiting_since` set only when *entering* it, so follow-ups keep their place); admin msg -> `waiting_vendor`; admin resolve/close/reopen. Vendor reply to a Resolved conversation reopens it only within `support.reopen_days` (default 7, env `SUPPORT_REOPEN_DAYS`); Closed or older-resolved needs a new request. Admin queue = oldest `waiting_since` first.
+- **Unread is per reader** (`support_reads`, keyed by conversation + `reader_guard` + `reader_id`); the queue/status is global.
+- **Attachments**: private `local` disk under `support/{vendor}/{conversation}/{ulid}.ext`, served only by `SupportAttachmentResponder` (policy-checked, 404 on denial). Images are decoded + re-encoded; audio must match a webm/ogg/mp4/mp3 signature. Limits in `config/support.php`.
+- **Related records** are resolved only through `SupportRelatedRecords` (vendor-scoped queries).
+- **CSP**: only `vendor.support.new|show` and `admin.support.show` get `microphone=(self)` and `media-src 'self' blob:`; every other page keeps `microphone=()`.
+- Categories and quick replies are DB rows (seeded by migration, editable); quick replies are managed at `/admin/support/quick-replies`.
+
 ## Key Gotchas
 
 - **Result checker PINs are encrypted** — `result_checker_orders.delivered_pins` uses `Illuminate\Support\Facades\Crypt`.

@@ -111,6 +111,9 @@ return [
     |
     */
 
+    // Recipient for admin-facing alert emails (read here so it survives config:cache).
+    'admin_email' => env('ADMIN_EMAIL'),
+
     'from' => [
         'address' => config('services.mail_fallback.from.address', 'hello@example.com'),
         'name' => config('services.mail_fallback.from.name', 'Example'),

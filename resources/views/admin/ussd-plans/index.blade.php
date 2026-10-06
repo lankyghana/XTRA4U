@@ -7,7 +7,7 @@
 <x-admin-layout title="USSD Plans" subtitle="Subscription plans vendors purchase to enable their USSD channel" active="ussd-plans">
     <x-slot name="actions">
         <a href="{{ route('admin.ussd-plans.create') }}"
-           class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-deep-blue text-white text-sm font-semibold rounded-lg hover:bg-brand-bright-blue transition-colors">
+           class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-violet text-white text-sm font-semibold rounded-lg hover:bg-brand-violet-deep transition-colors">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
             </svg>
@@ -128,7 +128,7 @@
                         <form action="{{ route('admin.ussd-plans.destroy', $plan) }}" method="POST">
                             @csrf
                             @method('DELETE')
-                            <button type="submit" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700">
+                            <button type="submit" class="inline-flex items-center justify-center rounded-lg font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 px-3 py-1.5 text-xs bg-[#DC2626] text-white hover:bg-red-700 focus:ring-[#DC2626]">
                                 Confirm Delete
                             </button>
                         </form>
@@ -140,7 +140,7 @@
                 <p class="text-sm font-medium text-gray-900">No USSD plans yet</p>
                 <p class="mt-1 text-sm text-gray-500">Create a plan so vendors can subscribe to the USSD channel.</p>
                 <a href="{{ route('admin.ussd-plans.create') }}"
-                   class="mt-4 inline-flex items-center px-4 py-2 bg-brand-deep-blue text-white text-sm font-semibold rounded-lg hover:bg-brand-bright-blue">
+                   class="mt-4 inline-flex items-center px-4 py-2 bg-brand-violet text-white text-sm font-semibold rounded-lg hover:bg-brand-violet-deep">
                     Create the first plan
                 </a>
             </div>

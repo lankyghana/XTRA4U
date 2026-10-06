@@ -109,4 +109,14 @@ return [
         'timeout'  => env('SKDATAPLUG_TIMEOUT', 30),
     ],
 
+    'hubtel' => [
+        // Fallbacks for HubtelPaymentService when the gateway row has no value.
+        // Read here (not via env()) so they survive `config:cache`.
+        'client_id'     => env('HUBTEL_CLIENT_ID'),
+        'client_secret' => env('HUBTEL_CLIENT_SECRET'),
+        'username'      => env('HUBTEL_USERNAME'),
+        'password'      => env('HUBTEL_PASSWORD'),
+        'base_url'      => env('HUBTEL_BASE_URL', 'https://api.hubtel.com'),
+    ],
+
 ];

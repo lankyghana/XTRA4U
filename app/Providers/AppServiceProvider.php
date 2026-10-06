@@ -2,6 +2,11 @@
 
 namespace App\Providers;
 
+use App\Models\SupportAttachment;
+use App\Models\SupportConversation;
+use App\Policies\SupportAttachmentPolicy;
+use App\Policies\SupportConversationPolicy;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Queue;
@@ -21,6 +26,9 @@ class AppServiceProvider extends ServiceProvider
         if (config('app.env') === 'production' || config('app.url') && str_starts_with(config('app.url'), 'https://')) {
             \URL::forceScheme('https');
         }
+
+		Gate::policy(SupportConversation::class, SupportConversationPolicy::class);
+		Gate::policy(SupportAttachment::class, SupportAttachmentPolicy::class);
 
 		// Apply database-driven SMTP configuration (fallback stays in config/services.php).
 		app(DynamicMailConfigurator::class)->apply();

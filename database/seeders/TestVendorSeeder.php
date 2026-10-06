@@ -14,6 +14,13 @@ class TestVendorSeeder extends Seeder
      */
     public function run(): void
     {
+        // Development-only: creates an approved vendor with funded balances and a known password.
+        if (app()->isProduction()) {
+            $this->command?->error('TestVendorSeeder creates a vendor with a default password and funded wallet; it must not run in production.');
+
+            return;
+        }
+
         $vendor = Vendor::firstOrCreate(
             ['email' => 'ducaquqi@fxzig.com'],
             [

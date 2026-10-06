@@ -7,6 +7,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('favicon-32x32.png') }}">
     <title>@yield('title', 'XTRA4U - Digital Services Platform')</title>
     <meta name="description" content="@yield('description', 'XTRA4U - Your trusted platform for digital services, vendor management, and secure transactions.')">
+    @stack('head-seo')
     
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.bunny.net">

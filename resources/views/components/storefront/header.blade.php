@@ -21,12 +21,11 @@
 @props(['shopUrl', 'showVendorLinks' => false, 'showDashboardButton' => false])
 
 @php
-    $navLinks = [
-        ['label' => 'Home', 'href' => route('storefront.index')],
-        ['label' => 'Results Checker', 'href' => route('result-checkers.entry')],
-        ['label' => 'Retrieve PIN', 'href' => route('order.status')],
-        ['label' => 'About', 'href' => route('about')],
-    ];
+    // Managed under Content > Navigation (Header menu); links are re-validated at render time.
+    $navLinks = array_map(
+        fn ($item) => ['label' => $item['label'], 'href' => $item['url']],
+        $cms->nav('header', $shopUrl)
+    );
 @endphp
 
 <header

@@ -879,6 +879,7 @@ class VendorDashboardController extends Controller
                 'status' => $w->status,
                 'reference' => $w->reference,
                 'date' => $w->created_at,
+                'support_id' => $w->id, // display-only: powers the "Get support" link
             ];
         });
 

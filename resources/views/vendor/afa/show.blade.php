@@ -33,6 +33,7 @@
                             <h2 class="text-lg font-semibold text-gray-900">{{ $registration->full_name }}</h2>
                             <div class="flex items-center gap-2 mt-1">
                                 <p class="text-sm text-gray-500 font-mono">{{ $registration->reference }}</p>
+                                <a href="{{ route('vendor.support.new', ['related_type' => 'afa_registration', 'related_id' => $registration->id, 'category' => 'afa']) }}" class="text-xs font-medium text-brand-violet hover:underline">Get support</a>
                                 @if($registration->reseller_vendor_id)
                                     @if($registration->reseller_vendor_id == $vendor->id)
                                         {{-- Current vendor is the reseller --}}

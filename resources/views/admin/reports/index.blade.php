@@ -17,17 +17,17 @@
                     <div class="lg:col-span-4">
                         <label class="block text-xs font-medium text-gray-600 mb-1" for="rpt_date_from">Date from</label>
                         <input id="rpt_date_from" type="date" name="date_from" value="{{ $filters['date_from'] }}"
-                            class="w-full border border-gray-300 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue" />
+                            class="w-full border border-gray-300 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-violet focus:border-brand-violet" />
                     </div>
                     <div class="lg:col-span-4">
                         <label class="block text-xs font-medium text-gray-600 mb-1" for="rpt_date_to">Date to</label>
                         <input id="rpt_date_to" type="date" name="date_to" value="{{ $filters['date_to'] }}"
-                            class="w-full border border-gray-300 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue" />
+                            class="w-full border border-gray-300 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-violet focus:border-brand-violet" />
                     </div>
                     <div class="lg:col-span-2">
                         <label class="block text-xs font-medium text-gray-600 mb-1" for="rpt_vendor_id">Vendor ID</label>
                         <input id="rpt_vendor_id" type="number" name="vendor_id" value="{{ $filters['vendor_id'] ?? '' }}" placeholder="All"
-                            class="w-full border border-gray-300 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-deep-blue focus:border-brand-deep-blue" />
+                            class="w-full border border-gray-300 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-violet focus:border-brand-violet" />
                     </div>
                     <div class="lg:col-span-2 flex gap-2">
                         <x-button type="submit" variant="primary" class="flex-1 justify-center">Apply</x-button>
@@ -64,7 +64,7 @@
                 <div class="px-5 py-3 border-b border-gray-100">
                     <h4 class="text-sm font-semibold text-gray-800">Orders by Day</h4>
                 </div>
-                <x-table :headers="['Date', 'Orders', 'Revenue (GHS)']">
+                <x-admin.table :headers="['Date', 'Orders', 'Revenue (GHS)']">
                     @forelse($salesByDay as $row)
                         <tr class="hover:bg-gray-50">
                             <td class="px-6 py-3 text-sm text-gray-900 font-medium whitespace-nowrap">
@@ -76,7 +76,7 @@
                     @empty
                         <tr><td colspan="3" class="px-6 py-8 text-center text-sm text-gray-500">No paid orders in this period.</td></tr>
                     @endforelse
-                </x-table>
+                </x-admin.table>
             </div>
 
             {{-- Top services --}}
@@ -84,7 +84,7 @@
                 <div class="px-5 py-3 border-b border-gray-100">
                     <h4 class="text-sm font-semibold text-gray-800">Top Services by Revenue</h4>
                 </div>
-                <x-table :headers="['Service', 'Orders', 'Revenue (GHS)']">
+                <x-admin.table :headers="['Service', 'Orders', 'Revenue (GHS)']">
                     @forelse($topServices as $row)
                         <tr class="hover:bg-gray-50">
                             <td class="px-6 py-3 text-sm text-gray-900">
@@ -96,7 +96,7 @@
                     @empty
                         <tr><td colspan="3" class="px-6 py-8 text-center text-sm text-gray-500">No data.</td></tr>
                     @endforelse
-                </x-table>
+                </x-admin.table>
             </div>
         </div>
 
@@ -134,7 +134,7 @@
                     <div class="px-5 py-3 border-b border-gray-100">
                         <h4 class="text-sm font-semibold text-gray-800">By Payment Source</h4>
                     </div>
-                    <x-table :headers="['Source', 'Orders', 'Revenue (GHS)']">
+                    <x-admin.table :headers="['Source', 'Orders', 'Revenue (GHS)']">
                         @forelse($byPaymentSource as $row)
                             <tr class="hover:bg-gray-50">
                                 <td class="px-6 py-3 text-sm text-gray-900 capitalize">{{ $row->payment_source ?: 'unknown' }}</td>
@@ -144,7 +144,7 @@
                         @empty
                             <tr><td colspan="3" class="px-6 py-8 text-center text-sm text-gray-500">No data.</td></tr>
                         @endforelse
-                    </x-table>
+                    </x-admin.table>
                 </div>
             </div>
 
@@ -153,7 +153,7 @@
                 <div class="px-5 py-3 border-b border-gray-100">
                     <h4 class="text-sm font-semibold text-gray-800">Top Vendors by Revenue</h4>
                 </div>
-                <x-table :headers="['Vendor', 'Orders', 'Revenue (GHS)']">
+                <x-admin.table :headers="['Vendor', 'Orders', 'Revenue (GHS)']">
                     @forelse($topVendors as $row)
                         <tr class="hover:bg-gray-50">
                             <td class="px-6 py-3 text-sm text-gray-900">
@@ -166,7 +166,7 @@
                     @empty
                         <tr><td colspan="3" class="px-6 py-8 text-center text-sm text-gray-500">No data.</td></tr>
                     @endforelse
-                </x-table>
+                </x-admin.table>
             </div>
         </div>
 
@@ -179,7 +179,7 @@
                 <div class="px-5 py-3 border-b border-gray-100">
                     <h4 class="text-sm font-semibold text-gray-800">Topups by Status</h4>
                 </div>
-                <x-table :headers="['Status', 'Count', 'Total Amount (GHS)', 'Total Consumed (GHS)']">
+                <x-admin.table :headers="['Status', 'Count', 'Total Amount (GHS)', 'Total Consumed (GHS)']">
                     @forelse($topupsByStatus as $row)
                         <tr class="hover:bg-gray-50">
                             <td class="px-6 py-3 text-sm">
@@ -198,7 +198,7 @@
                     @empty
                         <tr><td colspan="4" class="px-6 py-8 text-center text-sm text-gray-500">No topups in this period.</td></tr>
                     @endforelse
-                </x-table>
+                </x-admin.table>
             </div>
 
             {{-- Recent topups --}}
@@ -206,7 +206,7 @@
                 <div class="px-5 py-3 border-b border-gray-100">
                     <h4 class="text-sm font-semibold text-gray-800">Recent Topups <span class="text-xs font-normal text-gray-400">(latest 25)</span></h4>
                 </div>
-                <x-table :headers="['Date', 'Vendor', 'Reference', 'Amount (GHS)', 'Consumed (GHS)', 'Status']">
+                <x-admin.table :headers="['Date', 'Vendor', 'Reference', 'Amount (GHS)', 'Consumed (GHS)', 'Status']">
                     @forelse($recentTopups as $topup)
                         <tr class="hover:bg-gray-50">
                             <td class="px-6 py-3 text-sm text-gray-600 whitespace-nowrap">
@@ -237,7 +237,7 @@
                     @empty
                         <tr><td colspan="6" class="px-6 py-8 text-center text-sm text-gray-500">No topups in this period.</td></tr>
                     @endforelse
-                </x-table>
+                </x-admin.table>
             </div>
         </div>
 

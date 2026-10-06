@@ -6,7 +6,7 @@
 <x-admin-layout title="Edit Payment Gateway" subtitle="Modify payment gateway configuration" active="payment-gateways">
     <x-slot name="actions">
         <a href="{{ route('admin.payment-gateways.index') }}" 
-           class="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 font-medium">
+           class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-brand-violet focus:ring-offset-2">
             Back to Gateways
         </a>
     </x-slot>
@@ -43,7 +43,7 @@
             <div>
                 <label for="environment" class="block text-sm font-medium text-gray-700 mb-1">Environment</label>
                 <select name="environment" id="environment" required
-                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-violet">
                     <option value="sandbox" {{ old('environment', $gateway->environment) === 'sandbox' ? 'selected' : '' }}>Sandbox</option>
                     <option value="live" {{ old('environment', $gateway->environment) === 'live' ? 'selected' : '' }}>Live</option>
                 </select>
@@ -54,14 +54,14 @@
                 <div class="flex items-center">
                     <input type="checkbox" name="is_active" id="is_active" value="1" 
                            {{ old('is_active', $gateway->is_active) ? 'checked' : '' }}
-                           class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                           class="h-4 w-4 text-brand-violet focus:ring-brand-violet border-gray-300 rounded">
                     <label for="is_active" class="ml-2 text-sm font-medium text-gray-700">Active</label>
                 </div>
 
                 <div class="flex items-center">
                     <input type="checkbox" name="is_default" id="is_default" value="1" 
                            {{ old('is_default', $gateway->is_default) ? 'checked' : '' }}
-                           class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                           class="h-4 w-4 text-brand-violet focus:ring-brand-violet border-gray-300 rounded">
                     <label for="is_default" class="ml-2 text-sm font-medium text-gray-700">Set as Default</label>
                 </div>
             </div>
@@ -100,7 +100,7 @@
                                    value="{{ $prefillValue }}"
                                    autocomplete="off"
                                    placeholder="{{ $gatewayInfo['default_config'][$key] ?? '' }}"
-                                   class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                   class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-violet">
 
                             @if($isSensitive)
                                 <div class="mt-1 text-xs text-gray-500">
@@ -137,11 +137,11 @@
                 Cancel
             </a>
             <button type="button" onclick="testGateway()" 
-                    class="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 font-medium">
+                    class="inline-flex items-center justify-center rounded-lg font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 px-4 py-2 text-sm bg-brand-violet text-white hover:bg-brand-violet-deep focus:ring-brand-violet">
                 Test Configuration
             </button>
             <button type="submit" 
-                    class="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 font-medium">
+                    class="inline-flex items-center justify-center rounded-lg font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 px-4 py-2 text-sm bg-brand-violet text-white hover:bg-brand-violet-deep focus:ring-brand-violet">
                 Update Gateway
             </button>
         </div>

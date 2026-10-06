@@ -40,7 +40,7 @@
                     <input name="q" value="{{ $searchTerm }}" class="mt-1 w-full rounded-md border-gray-300 shadow-sm" placeholder="Order ID, phone, reference">
                 </div>
                 <div class="sm:col-span-4 flex gap-2">
-                    <button type="submit" class="inline-flex items-center px-4 py-2 bg-gray-900 text-white rounded-md text-sm font-semibold">
+                    <button type="submit" class="inline-flex items-center px-4 py-2 bg-brand-violet text-white rounded-lg text-sm font-semibold hover:bg-brand-violet-deep">
                         Apply Filters
                     </button>
                     <a href="{{ route('admin.result-checkers.orders.index') }}" class="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-md text-sm font-semibold">
@@ -63,7 +63,7 @@
             };
         @endphp
 
-        <x-table :headers="['Order', 'Customer', 'Service', 'Qty', 'Status', 'Pins', 'Actions']">
+        <x-admin.table :headers="['Order', 'Customer', 'Service', 'Qty', 'Status', 'Pins', 'Actions']">
             @forelse ($orders as $order)
                 <tr class="hover:bg-gray-50">
                     <td class="px-6 py-4 text-sm text-gray-900 font-medium">#{{ $order->id }}</td>
@@ -86,10 +86,10 @@
                         @endif
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-900 space-x-2">
-                        <a href="{{ route('admin.result-checkers.orders.show', $order) }}" class="text-brand-deep-blue font-semibold">View</a>
+                        <a href="{{ route('admin.result-checkers.orders.show', $order) }}" class="text-brand-violet font-semibold">View</a>
                         <form action="{{ route('admin.result-checkers.orders.retry', $order) }}" method="POST" class="inline">
                             @csrf
-                            <button type="submit" class="text-blue-600 font-semibold">Retry</button>
+                            <button type="submit" class="text-brand-violet font-semibold">Retry</button>
                         </form>
                         <form action="{{ route('admin.result-checkers.orders.mark-failed', $order) }}" method="POST" class="inline">
                             @csrf
@@ -102,7 +102,7 @@
                     <td colspan="7" class="px-6 py-4 text-center text-sm text-gray-500">No orders found.</td>
                 </tr>
             @endforelse
-        </x-table>
+        </x-admin.table>
 
         @if($orders->hasPages())
             <div class="flex justify-end pt-2">

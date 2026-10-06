@@ -23,7 +23,7 @@
                         <div>
                             <label for="name" class="block text-sm font-semibold text-gray-700">Name</label>
                             <input type="text" id="name" name="name" value="{{ old('name') }}" required
-                                   class="mt-1 block w-full rounded-lg border-gray-200 shadow-sm focus:border-purple-500 focus:ring-purple-500">
+                                   class="mt-1 block w-full rounded-lg border-gray-200 shadow-sm focus:border-brand-violet focus:ring-brand-violet">
                             @error('name')
                                 <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
                             @enderror
@@ -31,7 +31,7 @@
                         <div>
                             <label for="category" class="block text-sm font-semibold text-gray-700">Category</label>
                             <select id="category" name="category" required
-                                    class="mt-1 block w-full rounded-lg border-gray-200 shadow-sm focus:border-purple-500 focus:ring-purple-500">
+                                    class="mt-1 block w-full rounded-lg border-gray-200 shadow-sm focus:border-brand-violet focus:ring-brand-violet">
                                 @foreach($categories as $categoryKey)
                                     <option value="{{ $categoryKey }}" {{ old('category') === $categoryKey ? 'selected' : '' }}>{{ Str::title(str_replace(['-', '_'], ' ', $categoryKey)) }}</option>
                                 @endforeach
@@ -43,7 +43,7 @@
                         <div>
                             <label for="service_type" class="block text-sm font-semibold text-gray-700">Service Type</label>
                             <select id="service_type" name="service_type"
-                                    class="mt-1 block w-full rounded-lg border-gray-200 shadow-sm focus:border-purple-500 focus:ring-purple-500">
+                                    class="mt-1 block w-full rounded-lg border-gray-200 shadow-sm focus:border-brand-violet focus:ring-brand-violet">
                                 <option value="general" {{ old('service_type', 'general') === 'general' ? 'selected' : '' }}>General</option>
                                 <option value="results_checker" {{ old('service_type') === 'results_checker' ? 'selected' : '' }}>Result Checker</option>
                             </select>
@@ -63,7 +63,7 @@
                                     <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                                 </svg>
                                 <p class="mt-2 text-sm text-gray-600 font-medium">
-                                    <span class="text-purple-600">Click to upload</span> or drag and drop
+                                    <span class="text-brand-violet">Click to upload</span> or drag and drop
                                 </p>
                                 <p class="mt-1 text-xs text-gray-500" id="file-name">Max 2MB. Supports: JPEG, PNG, GIF, WebP</p>
                             </div>
@@ -73,11 +73,11 @@
                         @enderror
                     </div>
                     <div class="flex items-center gap-2">
-                        <input type="checkbox" name="is_active" id="is_active" value="1" {{ old('is_active', true) ? 'checked' : '' }} class="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500">
+                        <input type="checkbox" name="is_active" id="is_active" value="1" {{ old('is_active', true) ? 'checked' : '' }} class="h-4 w-4 rounded border-gray-300 text-brand-violet focus:ring-brand-violet">
                         <label for="is_active" class="text-sm text-gray-700">Active</label>
                     </div>
                     <div>
-                        <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-5 py-2 text-sm font-semibold text-white hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <button type="submit" class="inline-flex items-center justify-center rounded-lg font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 px-4 py-2 text-sm bg-brand-violet text-white hover:bg-brand-violet-deep focus:ring-brand-violet">
                             Add Network / Service
                         </button>
                     </div>
@@ -124,7 +124,7 @@
                                         @endif
                                     </td>
                                     <td class="px-6 py-3 text-right space-x-2">
-                                        <a href="{{ route('admin.network-services.edit', $service) }}" class="text-xs font-semibold text-purple-600 hover:text-purple-700">Edit</a>
+                                        <a href="{{ route('admin.network-services.edit', $service) }}" class="text-xs font-semibold text-brand-violet hover:text-brand-violet-deep">Edit</a>
                                         <form action="{{ route('admin.network-services.destroy', $service) }}" method="POST" class="inline">
                                             @csrf
                                             @method('DELETE')
@@ -151,7 +151,7 @@
             const fileNameDisplay = document.getElementById('file-name');
             if (fileName) {
                 fileNameDisplay.textContent = '✓ ' + fileName;
-                fileNameDisplay.classList.add('text-purple-600', 'font-semibold');
+                fileNameDisplay.classList.add('text-brand-violet', 'font-semibold');
             }
         }
     </script>

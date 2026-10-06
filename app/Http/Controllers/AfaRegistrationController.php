@@ -619,6 +619,23 @@ class AfaRegistrationController extends Controller
                 ->with('success', 'Payment pending. Please approve the MoMo prompt or try again shortly.');
         }
 
+        // Amount mismatch guard, same as the verify endpoint: Payaza's Web
+        // Checkout SDK sets the charge amount client-side, so an underpaid
+        // charge can still verify as successful. Never fulfil it.
+        $verifiedAmount = data_get($verificationResult, 'data.amount');
+        $expectedAmount = (float) $registration->amount;
+        if ($verifiedAmount !== null && $expectedAmount > 0 && round((float) $verifiedAmount, 2) < round($expectedAmount, 2)) {
+            Log::error('AFA callback: verified amount is less than expected registration amount - refusing to fulfil', [
+                'registration_id' => $registration->id,
+                'reference' => $reference,
+                'expected_amount' => $expectedAmount,
+                'verified_amount' => $verifiedAmount,
+            ]);
+
+            return redirect()->route('storefront.vendor', $registration->vendor->vendor_code)
+                ->with('error', 'We could not confirm this payment. Please contact support.');
+        }
+
         // Use dedicated AFA payment service to handle completion
         $this->afaPaymentService->completeRegistration($registration);
 

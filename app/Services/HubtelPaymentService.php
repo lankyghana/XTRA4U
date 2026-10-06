@@ -16,11 +16,11 @@ class HubtelPaymentService
 
     public function __construct(array $config = [])
     {
-        $this->clientId = $config['client_id'] ?? env('HUBTEL_CLIENT_ID');
-        $this->clientSecret = $config['client_secret'] ?? env('HUBTEL_CLIENT_SECRET');
-        $this->username = $config['username'] ?? env('HUBTEL_USERNAME');
-        $this->password = $config['password'] ?? env('HUBTEL_PASSWORD');
-        $this->baseUrl = $config['base_url'] ?? env('HUBTEL_BASE_URL', 'https://api.hubtel.com');
+        $this->clientId = $config['client_id'] ?? config('services.hubtel.client_id');
+        $this->clientSecret = $config['client_secret'] ?? config('services.hubtel.client_secret');
+        $this->username = $config['username'] ?? config('services.hubtel.username');
+        $this->password = $config['password'] ?? config('services.hubtel.password');
+        $this->baseUrl = $config['base_url'] ?? config('services.hubtel.base_url');
     }
 
     /**

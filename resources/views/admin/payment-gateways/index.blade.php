@@ -6,7 +6,7 @@
 <x-admin-layout title="Payment Gateway Settings" subtitle="Manage payment gateway configurations and API settings" active="payment-gateways">
     <x-slot name="actions">
         <a href="{{ route('admin.payment-gateways.create') }}" 
-           class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-medium">
+           class="bg-brand-violet text-white px-4 py-2 rounded-md hover:bg-brand-violet-deep font-medium">
             Add New Gateway
         </a>
     </x-slot>
@@ -104,7 +104,7 @@
                                                 @csrf
                                                 @method('PATCH')
                                                 <button type="submit"
-                                                        class="text-sm text-blue-600 hover:text-blue-800"
+                                                        class="text-sm text-brand-violet hover:text-brand-violet-deep"
                                                         @if(! $supportsThisType || ($isPaymentCollectionType && ! $supportsGenericPayments))
                                                             disabled
                                                             class="text-sm text-gray-400 cursor-not-allowed"
@@ -133,7 +133,7 @@
                                                 </span>
                                             @endif
                                             <button onclick="testGateway({{ $gateway->id }})" 
-                                                    class="text-sm text-indigo-600 hover:text-indigo-800">
+                                                    class="text-sm text-brand-violet hover:text-brand-violet-deep">
                                                 Test
                                             </button>
                                         </div>
@@ -141,7 +141,7 @@
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                         <div class="flex space-x-2">
                                             <a href="{{ route('admin.payment-gateways.edit', $gateway) }}" 
-                                               class="text-indigo-600 hover:text-indigo-900">Edit</a>
+                                               class="text-brand-violet hover:text-brand-violet-deep">Edit</a>
                                             
                                             @unless($gateway->is_default && $gateways[$typeKey]->where('is_active', true)->count() === 1)
                                                 <form method="POST" action="{{ route('admin.payment-gateways.destroy', $gateway) }}" 
@@ -161,7 +161,7 @@
             @else
                 <div class="px-6 py-4 text-center text-gray-500">
                     No gateways configured for {{ strtolower($typeName) }}.
-                    <a href="{{ route('admin.payment-gateways.create') }}" class="text-blue-600 hover:text-blue-800">
+                    <a href="{{ route('admin.payment-gateways.create') }}" class="text-brand-violet hover:text-brand-violet-deep">
                         Add one now
                     </a>
                 </div>
@@ -170,8 +170,8 @@
     @endforeach
 
     <!-- Gateway Features Info -->
-    <div class="bg-blue-50 rounded-lg p-6 mt-6">
-        <h3 class="text-lg font-semibold text-blue-900 mb-4">Gateway Information</h3>
+    <div class="bg-violet-50 rounded-lg p-6 mt-6">
+        <h3 class="text-lg font-semibold text-brand-dark mb-4">Gateway Information</h3>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             @foreach($availableGateways as $gatewayKey => $gatewayInfo)
                 <div class="bg-white rounded-lg p-4 border">

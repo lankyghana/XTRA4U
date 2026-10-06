@@ -16,6 +16,14 @@ class ContentSecurityPolicy
     {
         $response = $next($request);
 
+        // Voice notes: only the pages that contain the recorder may use the microphone
+        // and play back local blob: audio. Everything else keeps microphone=().
+        $supportComposer = $request->routeIs(
+            'vendor.support.new',
+            'vendor.support.show',
+            'admin.support.show',
+        );
+
         // Only apply CSP to HTML responses
         if ($response instanceof Response &&
             str_contains($response->headers->get('Content-Type', ''), 'text/html')) {
@@ -47,6 +55,9 @@ class ContentSecurityPolicy
                 // Connect: allow API calls to self and active payment gateway
                 "connect-src 'self'{$localDevHosts}{$connectGatewayUrls}".$this->getViteConnectSrc(),
 
+                // Local preview of a just-recorded voice note (support composer pages only).
+                $supportComposer ? "media-src 'self' blob:" : '',
+
                 // Frames: only self and active payment gateway (for payment modals/checkout iframes)
                 "frame-src 'self'{$localDevHosts}{$frameGatewayUrls}",
 
@@ -77,7 +88,7 @@ class ContentSecurityPolicy
 
             // Permissions Policy (formerly Feature-Policy)
             $response->headers->set('Permissions-Policy',
-                'camera=(), microphone=(), geolocation=(), payment=(self)'
+                'camera=(), microphone='.($supportComposer ? '(self)' : '()').', geolocation=(), payment=(self)'
             );
         }
 

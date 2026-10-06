@@ -28,7 +28,7 @@
                     Cancel
                 </a>
                 <button type="submit"
-                        class="px-6 py-3 bg-brand-deep-blue text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-brand-bright-blue transition-colors">
+                        class="inline-flex items-center justify-center rounded-lg font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 px-4 py-2 text-sm bg-brand-violet text-white hover:bg-brand-violet-deep focus:ring-brand-violet">
                     Save Changes
                 </button>
             </div>

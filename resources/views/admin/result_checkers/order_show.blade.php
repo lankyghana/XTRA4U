@@ -6,13 +6,13 @@
         <div class="flex flex-wrap gap-3">
             <form action="{{ route('admin.result-checkers.orders.retry', $order) }}" method="POST">
                 @csrf
-                <button type="submit" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-semibold">
+                <button type="submit" class="inline-flex items-center justify-center rounded-lg font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 px-4 py-2 text-sm bg-brand-violet text-white hover:bg-brand-violet-deep focus:ring-brand-violet">
                     Retry Fulfillment
                 </button>
             </form>
             <form action="{{ route('admin.result-checkers.orders.mark-failed', $order) }}" method="POST">
                 @csrf
-                <button type="submit" class="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-md text-sm font-semibold" @disabled($order->status === 'completed')>
+                <button type="submit" class="inline-flex items-center justify-center rounded-lg font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 px-4 py-2 text-sm bg-[#DC2626] text-white hover:bg-red-700 focus:ring-[#DC2626]" @disabled($order->status === 'completed')>
                     Mark Failed
                 </button>
             </form>
@@ -54,7 +54,7 @@
 
         <div class="bg-white shadow-sm rounded-lg p-6 space-y-4">
             <h3 class="text-base font-semibold text-gray-900">Assigned PINs</h3>
-            <x-table :headers="['Serial', 'PIN', 'Status']">
+            <x-admin.table :headers="['Serial', 'PIN', 'Status']">
                 @forelse ($order->pins as $pin)
                     <tr class="hover:bg-gray-50">
                         <td class="px-6 py-4 text-sm text-gray-900">{{ $mask($pin->serial) }}</td>
@@ -66,7 +66,7 @@
                         <td colspan="3" class="px-6 py-4 text-center text-sm text-gray-500">No pins assigned.</td>
                     </tr>
                 @endforelse
-            </x-table>
+            </x-admin.table>
         </div>
     </div>
 </x-admin-layout>

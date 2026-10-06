@@ -5,7 +5,7 @@
         message: @js($deliveryMessage),
         levels: {
             fast:   { label: 'Fast delivery', badge: 'bg-green-100 text-green-700', ring: 'peer-checked:border-green-500 peer-checked:ring-green-500/30', dot: 'bg-green-500' },
-            normal: { label: 'Normal',        badge: 'bg-blue-100 text-blue-700',   ring: 'peer-checked:border-blue-500 peer-checked:ring-blue-500/30',   dot: 'bg-blue-500' },
+            normal: { label: 'Normal',        badge: 'bg-blue-100 text-blue-700',   ring: 'peer-checked:border-brand-violet peer-checked:ring-brand-violet/30',   dot: 'bg-blue-500' },
             slow:   { label: 'Slow delivery', badge: 'bg-amber-100 text-amber-700', ring: 'peer-checked:border-amber-500 peer-checked:ring-amber-500/30', dot: 'bg-amber-500' },
         }
      }">
@@ -20,9 +20,9 @@
     </div>
 
     {{-- Intro --}}
-    <div class="mb-8 bg-gradient-to-r from-brand-deep-blue to-brand-bright-blue rounded-xl p-6 text-white">
+    <div class="mb-8 rounded-xl border border-violet-200 bg-violet-50 p-5 text-gray-800">
         <h2 class="text-lg font-semibold">Tell vendors how delivery is running</h2>
-        <p class="mt-1 text-sm text-white/80">
+        <p class="mt-1 text-sm text-gray-600">
             When active, this notice pops up on each vendor's main dashboard the next time they visit.
             They can dismiss it and continue. Editing the notice re-shows it to everyone.
         </p>
@@ -70,7 +70,7 @@
             <p class="mt-0.5 text-xs text-gray-500">What vendors read. Keep it short and clear.</p>
             <textarea id="delivery-message" name="message" rows="3" maxlength="500" x-model="message"
                       placeholder="e.g. Data deliveries are slower than usual today due to a network provider issue. Thank you for your patience."
-                      class="mt-3 block w-full rounded-lg border-gray-300 shadow-sm focus:border-brand-bright-blue focus:ring-brand-bright-blue text-sm">{{ old('message', $deliveryMessage) }}</textarea>
+                      class="mt-3 block w-full rounded-lg border-gray-300 shadow-sm focus:border-brand-violet focus:ring-brand-violet text-sm">{{ old('message', $deliveryMessage) }}</textarea>
         </div>
 
         {{-- Live preview --}}
@@ -87,7 +87,7 @@
                             </span>
                         </div>
                         <p class="mt-3 text-sm text-gray-700 whitespace-pre-line" x-text="message || 'Your message will appear here.'"></p>
-                        <button type="button" class="mt-4 w-full rounded-xl bg-brand-deep-blue text-white text-sm font-semibold py-2.5">Got it — Continue</button>
+                        <button type="button" class="mt-4 w-full rounded-xl bg-brand-violet text-white text-sm font-semibold py-2.5">Got it — Continue</button>
                     </div>
                 </div>
             </div>
@@ -95,7 +95,7 @@
 
         <div class="mt-6 flex justify-end">
             <button type="submit"
-                    class="inline-flex items-center px-5 py-2.5 rounded-lg text-sm font-semibold text-white bg-brand-deep-blue hover:bg-brand-bright-blue transition-colors">
+                    class="inline-flex items-center justify-center rounded-lg font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 px-4 py-2 text-sm bg-brand-violet text-white hover:bg-brand-violet-deep focus:ring-brand-violet">
                 Save changes
             </button>
         </div>

@@ -66,7 +66,7 @@
         @endif
 
         <!-- cPanel SMTP Guide Card -->
-        <div class="mb-8 bg-gradient-to-r from-brand-deep-blue to-brand-bright-blue rounded-xl p-6 text-white">
+        <div class="mb-8 rounded-xl border border-violet-200 bg-violet-50 p-5 text-gray-800">
             <div class="flex items-start">
                 <div class="flex-shrink-0">
                     <svg class="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -75,10 +75,10 @@
                 </div>
                 <div class="ml-4">
                     <h3 class="text-lg font-semibold">For cPanel Hosting</h3>
-                    <p class="mt-1 text-blue-100 text-sm">
+                    <p class="mt-1 text-gray-600 text-sm">
                         Use these settings for most cPanel hosting providers:
                     </p>
-                    <ul class="mt-2 text-sm text-blue-100 space-y-1">
+                    <ul class="mt-2 text-sm text-gray-600 space-y-1">
                         <li>• <strong>Host:</strong> mail.yourdomain.com (or localhost)</li>
                         <li>• <strong>Port:</strong> 465 (SSL) or 587 (TLS)</li>
                         <li>• <strong>Username:</strong> Your full email (e.g., noreply@yourdomain.com)</li>
@@ -92,7 +92,7 @@
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
                 <h2 class="text-lg font-semibold text-gray-900 flex items-center">
-                    <svg class="w-5 h-5 mr-2 text-brand-deep-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-5 h-5 mr-2 text-brand-violet" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                     </svg>
                     SMTP Configuration
@@ -110,7 +110,7 @@
                             Mail Driver <span class="text-red-500">*</span>
                         </label>
                         <select name="mail_mailer" id="mail_mailer" 
-                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-violet focus:border-brand-violet"
                                 required>
                             <option value="smtp" {{ ($settings['mail_mailer'] ?? '') == 'smtp' ? 'selected' : '' }}>SMTP</option>
                             <option value="sendmail" {{ ($settings['mail_mailer'] ?? '') == 'sendmail' ? 'selected' : '' }}>Sendmail</option>
@@ -125,7 +125,7 @@
                             Encryption
                         </label>
                         <select name="mail_encryption" id="mail_encryption" 
-                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue">
+                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-violet focus:border-brand-violet">
                             <option value="tls" {{ ($settings['mail_encryption'] ?? '') == 'tls' ? 'selected' : '' }}>TLS</option>
                             <option value="ssl" {{ ($settings['mail_encryption'] ?? '') == 'ssl' ? 'selected' : '' }}>SSL</option>
                             <option value="null" {{ ($settings['mail_encryption'] ?? '') == 'null' ? 'selected' : '' }}>None</option>
@@ -140,7 +140,7 @@
                         </label>
                         <input type="text" name="mail_host" id="mail_host" 
                                value="{{ $settings['mail_host'] ?? '' }}"
-                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-violet focus:border-brand-violet"
                                placeholder="mail.yourdomain.com">
                         <p class="mt-1 text-xs text-gray-500">cPanel: mail.yourdomain.com or localhost</p>
                     </div>
@@ -152,7 +152,7 @@
                         </label>
                         <input type="number" name="mail_port" id="mail_port" 
                                value="{{ $settings['mail_port'] ?? '587' }}"
-                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-violet focus:border-brand-violet"
                                placeholder="587">
                         <p class="mt-1 text-xs text-gray-500">Common: 587 (TLS), 465 (SSL), 25</p>
                     </div>
@@ -164,7 +164,7 @@
                         </label>
                         <input type="text" name="mail_username" id="mail_username" 
                                value="{{ $settings['mail_username'] ?? '' }}"
-                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-violet focus:border-brand-violet"
                                placeholder="noreply@yourdomain.com">
                         <p class="mt-1 text-xs text-gray-500">Usually your full email address</p>
                     </div>
@@ -177,7 +177,7 @@
                         <div class="relative">
                             <input type="password" name="mail_password" id="mail_password" 
                                    placeholder="{{ !empty($settings['mail_password']) ? '••••••••' : 'Enter password' }}"
-                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue pr-10">
+                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-violet focus:border-brand-violet pr-10">
                             <button type="button" onclick="togglePassword('mail_password')" 
                                     class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
                                 <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -196,7 +196,7 @@
                         </label>
                         <input type="email" name="mail_from_address" id="mail_from_address" 
                                value="{{ $settings['mail_from_address'] ?? '' }}"
-                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-violet focus:border-brand-violet"
                                placeholder="noreply@yourdomain.com"
                                required>
                         <p class="mt-1 text-xs text-gray-500">Emails will be sent from this address</p>
@@ -209,7 +209,7 @@
                         </label>
                         <input type="text" name="mail_from_name" id="mail_from_name" 
                                value="{{ $settings['mail_from_name'] ?? 'XTRA4U' }}"
-                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-violet focus:border-brand-violet"
                                placeholder="XTRA4U"
                                required>
                         <p class="mt-1 text-xs text-gray-500">Display name in recipient's inbox</p>
@@ -218,7 +218,7 @@
 
                 <div class="pt-4 border-t border-gray-200 flex justify-end">
                     <button type="submit" 
-                            class="inline-flex items-center px-6 py-3 bg-brand-deep-blue text-white font-semibold rounded-lg shadow-sm hover:bg-brand-bright-blue focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-deep-blue transition-colors">
+                            class="inline-flex items-center justify-center rounded-lg font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 px-4 py-2 text-sm bg-brand-violet text-white hover:bg-brand-violet-deep focus:ring-brand-violet">
                         <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                         </svg>
@@ -247,12 +247,12 @@
                 <div class="flex flex-col sm:flex-row gap-4">
                     <div class="flex-1">
                         <input type="email" name="test_email" 
-                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-violet focus:border-brand-violet"
                                placeholder="Enter email to receive test"
                                required>
                     </div>
                     <button type="submit" 
-                            class="inline-flex items-center justify-center px-6 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
+                            class="inline-flex items-center justify-center rounded-lg font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 px-4 py-2 text-sm bg-[#00942C] text-white hover:bg-[#009633] focus:ring-[#00942C]">
                         <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
                         </svg>
@@ -262,9 +262,6 @@
             </form>
         </div>
     </div>
-</x-admin-layout>
-@endsection
-
 @push('scripts')
 <script>
 function togglePassword(inputId) {
@@ -273,3 +270,6 @@ function togglePassword(inputId) {
 }
 </script>
 @endpush
+</x-admin-layout>
+@endsection
+

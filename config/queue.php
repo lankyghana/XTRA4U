@@ -126,4 +126,20 @@ return [
         'table' => 'failed_jobs',
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Queue Health Check
+    |--------------------------------------------------------------------------
+    |
+    | Used by `queue:health-check` (scheduled every 5 minutes). ping_url is an
+    | optional heartbeat URL (e.g. healthchecks.io) hit only when the queue is
+    | healthy, so a dead scheduler cron is also noticed externally.
+    |
+    */
+
+    'health' => [
+        'stale_minutes' => (int) env('QUEUE_HEALTH_STALE_MINUTES', 15),
+        'ping_url' => env('QUEUE_HEALTH_PING_URL'),
+    ],
+
 ];

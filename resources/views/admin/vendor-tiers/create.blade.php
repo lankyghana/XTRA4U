@@ -32,14 +32,14 @@
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Tier Name <span class="text-red-500">*</span></label>
                             <input type="text" name="name" value="{{ old('name') }}" required
-                                   class="w-full rounded-lg border-gray-300 shadow-sm focus:border-brand-deep-blue focus:ring-brand-deep-blue text-sm"
+                                   class="w-full rounded-lg border-gray-300 shadow-sm focus:border-brand-violet focus:ring-brand-violet text-sm"
                                    placeholder="e.g. Silver">
                         </div>
 
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
                             <textarea name="description" rows="2"
-                                      class="w-full rounded-lg border-gray-300 shadow-sm focus:border-brand-deep-blue focus:ring-brand-deep-blue text-sm"
+                                      class="w-full rounded-lg border-gray-300 shadow-sm focus:border-brand-violet focus:ring-brand-violet text-sm"
                                       placeholder="Brief description of this tier...">{{ old('description') }}</textarea>
                         </div>
 
@@ -47,13 +47,13 @@
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Priority <span class="text-red-500">*</span></label>
                                 <input type="number" name="priority" value="{{ old('priority', 0) }}" min="0" max="999" required
-                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-brand-deep-blue focus:ring-brand-deep-blue text-sm">
+                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-brand-violet focus:ring-brand-violet text-sm">
                                 <p class="text-xs text-gray-500 mt-1">Higher number = higher tier.</p>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Discount Type <span class="text-red-500">*</span></label>
                                 <select name="discount_type"
-                                        class="w-full rounded-lg border-gray-300 shadow-sm focus:border-brand-deep-blue focus:ring-brand-deep-blue text-sm">
+                                        class="w-full rounded-lg border-gray-300 shadow-sm focus:border-brand-violet focus:ring-brand-violet text-sm">
                                     <option value="percentage" {{ old('discount_type', 'percentage') === 'percentage' ? 'selected' : '' }}>Percentage (%)</option>
                                     <option value="fixed" {{ old('discount_type') === 'fixed' ? 'selected' : '' }}>Fixed (GHS)</option>
                                 </select>
@@ -61,13 +61,13 @@
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Discount Value <span class="text-red-500">*</span></label>
                                 <input type="number" name="discount_value" value="{{ old('discount_value', 0) }}" min="0" max="100" step="0.01" required
-                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-brand-deep-blue focus:ring-brand-deep-blue text-sm">
+                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-brand-violet focus:ring-brand-violet text-sm">
                             </div>
                         </div>
 
                         <div class="flex items-center gap-3">
                             <input type="checkbox" name="is_active" id="is_active" value="1" {{ old('is_active', '1') ? 'checked' : '' }}
-                                   class="h-4 w-4 rounded border-gray-300 text-brand-deep-blue focus:ring-brand-deep-blue">
+                                   class="h-4 w-4 rounded border-gray-300 text-brand-violet focus:ring-brand-violet">
                             <label for="is_active" class="text-sm font-medium text-gray-700">Active</label>
                         </div>
                     </div>
@@ -79,7 +79,7 @@
                         <div class="flex items-center justify-between mb-4">
                             <h2 class="text-base font-semibold text-gray-900">Qualification Rules</h2>
                             <button type="button" @click="addRule()"
-                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-brand-deep-blue bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">
+                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-brand-violet bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                                 </svg>
@@ -94,7 +94,7 @@
                                 <div class="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
                                     <select :name="`rules[${index}][rule_key]`"
                                             x-model="rule.rule_key"
-                                            class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-brand-deep-blue focus:ring-brand-deep-blue text-sm">
+                                            class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-brand-violet focus:ring-brand-violet text-sm">
                                         <option value="">Select rule...</option>
                                         @foreach($ruleKeys as $key => $label)
                                             <option value="{{ $key }}">{{ $label }}</option>
@@ -102,14 +102,14 @@
                                     </select>
                                     <select :name="`rules[${index}][operator]`"
                                             x-model="rule.operator"
-                                            class="w-20 rounded-lg border-gray-300 shadow-sm focus:border-brand-deep-blue focus:ring-brand-deep-blue text-sm">
+                                            class="w-20 rounded-lg border-gray-300 shadow-sm focus:border-brand-violet focus:ring-brand-violet text-sm">
                                         @foreach($operators as $op)
                                             <option value="{{ $op }}">{{ $op }}</option>
                                         @endforeach
                                     </select>
                                     <input type="number" :name="`rules[${index}][value]`"
                                            x-model="rule.value"
-                                           class="w-28 rounded-lg border-gray-300 shadow-sm focus:border-brand-deep-blue focus:ring-brand-deep-blue text-sm"
+                                           class="w-28 rounded-lg border-gray-300 shadow-sm focus:border-brand-violet focus:ring-brand-violet text-sm"
                                            placeholder="Value" step="0.01" min="0">
                                     <button type="button" @click="removeRule(index)"
                                             class="p-1.5 text-gray-400 hover:text-red-500 rounded transition-colors">
@@ -154,9 +154,6 @@
             </div>
         </div>
     </form>
-</x-admin-layout>
-@endsection
-
 @push('scripts')
 <script>
 function tierForm() {
@@ -172,3 +169,6 @@ function tierForm() {
 }
 </script>
 @endpush
+</x-admin-layout>
+@endsection
+

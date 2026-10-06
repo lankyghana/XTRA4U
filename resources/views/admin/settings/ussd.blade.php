@@ -67,7 +67,7 @@
         @endif
 
         {{-- Setup guide --}}
-        <div class="mb-8 bg-gradient-to-r from-brand-deep-blue to-brand-bright-blue rounded-xl p-6 text-white">
+        <div class="mb-8 rounded-xl border border-violet-200 bg-violet-50 p-5 text-gray-800">
             <div class="flex items-start">
                 <div class="flex-shrink-0">
                     <svg class="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -76,13 +76,13 @@
                 </div>
                 <div class="ml-4">
                     <h3 class="text-lg font-semibold">Moolre USSD Setup</h3>
-                    <p class="mt-1 text-blue-100 text-sm">To activate the USSD channel, give Moolre the callback URL below and ask them to:</p>
-                    <ul class="mt-2 text-sm text-blue-100 space-y-1">
+                    <p class="mt-1 text-gray-600 text-sm">To activate the USSD channel, give Moolre the callback URL below and ask them to:</p>
+                    <ul class="mt-2 text-sm text-gray-600 space-y-1">
                         <li>• Assign you a USSD service code (e.g. <strong>*714*X#</strong>)</li>
                         <li>• Set the <strong>callback URL</strong> to the one shown in the Endpoint Info card</li>
                         <li>• Configure the method as <strong>POST</strong></li>
                     </ul>
-                    <p class="mt-3 text-sm text-blue-100">
+                    <p class="mt-3 text-sm text-gray-600">
                         Each subscribed vendor is issued a code in the form
                         <strong>&lt;base code&gt;&lt;plan extension&gt;*&lt;vendor id&gt;#</strong> — for example
                         <strong>*203*45*102#</strong>. Dialling the base code alone reaches the default vendor below.
@@ -95,7 +95,7 @@
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
                 <h2 class="text-lg font-semibold text-gray-900 flex items-center">
-                    <svg class="w-5 h-5 mr-2 text-brand-deep-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-5 h-5 mr-2 text-brand-violet" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                     </svg>
@@ -116,7 +116,7 @@
                     <label class="relative inline-flex items-center cursor-pointer ml-4 flex-shrink-0">
                         <input type="checkbox" name="ussd_enabled" value="1" class="sr-only peer"
                                {{ ($settings['ussd_enabled'] ?? '1') === '1' ? 'checked' : '' }}>
-                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-brand-deep-blue/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-deep-blue"></div>
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-brand-violet/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-violet"></div>
                     </label>
                 </div>
 
@@ -129,7 +129,7 @@
                         </label>
                         <input type="text" name="ussd_base_code" id="ussd_base_code"
                                value="{{ $settings['ussd_base_code'] ?? '' }}"
-                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-violet focus:border-brand-violet"
                                placeholder="e.g. *203*">
                         <p class="mt-1 text-xs text-gray-500">Prefix for every generated vendor code, e.g. <code>*203*</code> &rarr; <code>*203*45*102#</code>.</p>
                     </div>
@@ -140,7 +140,7 @@
                             Provider
                         </label>
                         <select name="ussd_provider" id="ussd_provider"
-                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue">
+                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-violet focus:border-brand-violet">
                             <option value="moolre" {{ ($settings['ussd_provider'] ?? 'moolre') === 'moolre' ? 'selected' : '' }}>Moolre</option>
                         </select>
                         <p class="mt-1 text-xs text-gray-500">The aggregator delivering USSD traffic to this platform.</p>
@@ -153,7 +153,7 @@
                         </label>
                         <input type="text" name="ussd_service_code" id="ussd_service_code"
                                value="{{ $settings['ussd_service_code'] ?? '' }}"
-                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-violet focus:border-brand-violet"
                                placeholder="e.g. *714*5#">
                         <p class="mt-1 text-xs text-gray-500">Assigned by Moolre — for display and reference only.</p>
                     </div>
@@ -165,7 +165,7 @@
                         </label>
                         <input type="text" name="ussd_support_number" id="ussd_support_number"
                                value="{{ $settings['ussd_support_number'] ?? '' }}"
-                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-violet focus:border-brand-violet"
                                placeholder="e.g. 0531192005">
                         <p class="mt-1 text-xs text-gray-500">Shown at the bottom of every USSD menu screen.</p>
                     </div>
@@ -178,7 +178,7 @@
                         <input type="text" name="ussd_welcome_message" id="ussd_welcome_message"
                                value="{{ $settings['ussd_welcome_message'] ?? 'Welcome to XTRA4U' }}"
                                maxlength="100"
-                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-violet focus:border-brand-violet"
                                required>
                         <p class="mt-1 text-xs text-gray-500">Greeting shown on the main menu. Max 100 characters.</p>
                     </div>
@@ -189,7 +189,7 @@
                             Default Vendor
                         </label>
                         <select name="ussd_default_vendor_id" id="ussd_default_vendor_id"
-                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue">
+                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-violet focus:border-brand-violet">
                             <option value="">— First approved vendor (automatic) —</option>
                             @foreach ($vendors as $vendor)
                                 <option value="{{ $vendor->id }}"
@@ -215,7 +215,7 @@
                             </label>
                             <input type="number" name="ussd_session_timeout_seconds" id="ussd_session_timeout_seconds"
                                    value="{{ $settings['ussd_session_timeout_seconds'] ?? 240 }}" min="30" max="600"
-                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue">
+                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-violet focus:border-brand-violet">
                             <p class="mt-1 text-xs text-gray-500">Idle time before a session is rejected. Between 30 and 600.</p>
                         </div>
 
@@ -225,7 +225,7 @@
                             </label>
                             <input type="number" name="ussd_max_requests_per_session" id="ussd_max_requests_per_session"
                                    value="{{ $settings['ussd_max_requests_per_session'] ?? 20 }}" min="1" max="100"
-                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue">
+                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-violet focus:border-brand-violet">
                             <p class="mt-1 text-xs text-gray-500">Caps how many screens one session may request.</p>
                         </div>
 
@@ -235,7 +235,7 @@
                             </label>
                             <input type="number" name="ussd_max_retry_attempts" id="ussd_max_retry_attempts"
                                    value="{{ $settings['ussd_max_retry_attempts'] ?? 3 }}" min="1" max="10"
-                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue">
+                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-violet focus:border-brand-violet">
                             <p class="mt-1 text-xs text-gray-500">Invalid entries allowed before the session is ended.</p>
                         </div>
                     </div>
@@ -254,7 +254,7 @@
                             </label>
                             <input type="text" name="ussd_gateway_ip_allowlist" id="ussd_gateway_ip_allowlist"
                                    value="{{ $settings['ussd_gateway_ip_allowlist'] ?? '' }}"
-                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-violet focus:border-brand-violet"
                                    placeholder="e.g. 41.210.0.0/16, 197.251.1.20">
                             <p class="mt-1 text-xs text-gray-500">Comma-separated IPs or CIDR blocks. Leave blank to allow any source IP.</p>
                         </div>
@@ -268,13 +268,13 @@
                             </label>
                             <input type="password" name="ussd_gateway_secret" id="ussd_gateway_secret"
                                    autocomplete="new-password"
-                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-deep-blue focus:border-brand-deep-blue"
+                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-brand-violet focus:border-brand-violet"
                                    placeholder="{{ ($hasGatewaySecret ?? false) ? 'Leave blank to keep the current secret' : 'At least 16 characters' }}">
                             <p class="mt-1 text-xs text-gray-500">Stored encrypted and never displayed again.</p>
                             @if ($hasGatewaySecret ?? false)
                                 <label class="mt-2 inline-flex items-center text-xs text-gray-600">
                                     <input type="checkbox" name="ussd_gateway_secret_clear" value="1"
-                                           class="rounded border-gray-300 text-brand-deep-blue focus:ring-brand-deep-blue mr-2">
+                                           class="rounded border-gray-300 text-brand-violet focus:ring-brand-violet mr-2">
                                     Remove the stored secret
                                 </label>
                             @endif
@@ -284,7 +284,7 @@
 
                 <div class="pt-4 border-t border-gray-200 flex justify-end">
                     <button type="submit"
-                            class="inline-flex items-center px-6 py-3 bg-brand-deep-blue text-white font-semibold rounded-lg shadow-sm hover:bg-brand-bright-blue focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-deep-blue transition-colors">
+                            class="inline-flex items-center justify-center rounded-lg font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 px-4 py-2 text-sm bg-brand-violet text-white hover:bg-brand-violet-deep focus:ring-brand-violet">
                         <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                         </svg>
@@ -298,7 +298,7 @@
         <div class="mt-8 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
                 <h2 class="text-lg font-semibold text-gray-900 flex items-center">
-                    <svg class="w-5 h-5 mr-2 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-5 h-5 mr-2 text-brand-violet" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
                     </svg>
                     Endpoint Info
@@ -344,11 +344,11 @@
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100">
-                                <tr><td class="px-4 py-2 font-mono text-indigo-600">sessionId</td><td class="px-4 py-2 text-gray-600">Unique session identifier</td></tr>
-                                <tr><td class="px-4 py-2 font-mono text-indigo-600">phoneNumber</td><td class="px-4 py-2 text-gray-600">Customer's phone number</td></tr>
-                                <tr><td class="px-4 py-2 font-mono text-indigo-600">network</td><td class="px-4 py-2 text-gray-600">Mobile network (MTN, Telecel, AT)</td></tr>
-                                <tr><td class="px-4 py-2 font-mono text-indigo-600">serviceCode</td><td class="px-4 py-2 text-gray-600">The USSD service code dialled</td></tr>
-                                <tr><td class="px-4 py-2 font-mono text-indigo-600">text</td><td class="px-4 py-2 text-gray-600">Concatenated user input (e.g. <code class="bg-gray-100 px-1 rounded">1*2*0244123456</code>)</td></tr>
+                                <tr><td class="px-4 py-2 font-mono text-brand-violet">sessionId</td><td class="px-4 py-2 text-gray-600">Unique session identifier</td></tr>
+                                <tr><td class="px-4 py-2 font-mono text-brand-violet">phoneNumber</td><td class="px-4 py-2 text-gray-600">Customer's phone number</td></tr>
+                                <tr><td class="px-4 py-2 font-mono text-brand-violet">network</td><td class="px-4 py-2 text-gray-600">Mobile network (MTN, Telecel, AT)</td></tr>
+                                <tr><td class="px-4 py-2 font-mono text-brand-violet">serviceCode</td><td class="px-4 py-2 text-gray-600">The USSD service code dialled</td></tr>
+                                <tr><td class="px-4 py-2 font-mono text-brand-violet">text</td><td class="px-4 py-2 text-gray-600">Concatenated user input (e.g. <code class="bg-gray-100 px-1 rounded">1*2*0244123456</code>)</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -357,9 +357,6 @@
         </div>
 
     </div>
-</x-admin-layout>
-@endsection
-
 @push('scripts')
 <script>
 function copyCallbackUrl() {
@@ -374,3 +371,6 @@ function copyCallbackUrl() {
 }
 </script>
 @endpush
+</x-admin-layout>
+@endsection
+

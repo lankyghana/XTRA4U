@@ -24,7 +24,7 @@
                             <td class="px-6 py-4 text-sm">
                                 <form method="POST" action="{{ route('admin.vendor.approve', $vendor->id) }}">
                                     @csrf
-                                    <button type="submit" class="px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-semibold hover:bg-green-700">
+                                    <button type="submit" class="inline-flex items-center justify-center rounded-lg font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 px-3 py-1.5 text-xs bg-[#00942C] text-white hover:bg-[#009633] focus:ring-[#00942C]">
                                         Approve
                                     </button>
                                 </form>

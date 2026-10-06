@@ -51,7 +51,9 @@
                         : 0;
                 @endphp
                 <tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4 text-sm text-gray-900 font-medium">#{{ $order->id }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-900 font-medium">#{{ $order->id }}
+                        <a href="{{ route('vendor.support.new', ['related_type' => 'result_checker_order', 'related_id' => $order->id, 'category' => 'result_checker']) }}" class="block text-xs font-medium text-brand-violet hover:underline">Get support</a>
+                    </td>
                     <td class="px-6 py-4 text-sm text-gray-900">{{ $order->customer_phone }}</td>
                     <td class="px-6 py-4 text-sm text-gray-700">{{ $order->service?->name ?? 'N/A' }}</td>
                     <td class="px-6 py-4 text-sm text-gray-900">{{ $order->quantity }}</td>

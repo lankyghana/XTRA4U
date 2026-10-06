@@ -135,7 +135,7 @@ class WalletService
                 Log::warning('Failed to send vendor topup email', ['err' => $e->getMessage(), 'vendor_id' => $vendor->id]);
             }
 
-            $adminEmail = config('mail.admin_email') ?? env('ADMIN_EMAIL');
+            $adminEmail = config('mail.admin_email');
             if ($adminEmail) {
                 try {
                     \Illuminate\Support\Facades\Mail::to($adminEmail)->send(new \App\Mail\AdminVendorWalletTopupMail($vendor, $amount, $reference));

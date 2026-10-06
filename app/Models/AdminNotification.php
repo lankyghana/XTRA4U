@@ -34,6 +34,7 @@ class AdminNotification extends Model
     const TYPE_WITHDRAWAL_REJECTED = 'withdrawal_rejected';
     const TYPE_NEW_PRODUCT = 'new_product';
     const TYPE_AFFILIATE_ORDER = 'affiliate_order';
+    const TYPE_SUPPORT_MESSAGE = 'support_message';
 
     /**
      * A payment was refused because it did not satisfy the order's immutable

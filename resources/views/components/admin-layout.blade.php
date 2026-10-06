@@ -32,6 +32,19 @@
                         . '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />',
                     'payment-health' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />'
                         . '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h1.5l1-2 2 4 1-2H16" />',
+                    'wallet-topups' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h2m4 0h4M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z" />',
+                    'cms' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10l4 4v10a2 2 0 01-2 2zM9 12h6m-6 4h6M9 8h2" />',
+                    'cms-pages' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />',
+                    'cms-home' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />',
+                    'cms-about' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />',
+                    'cms-banners' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />',
+                    'cms-announcements' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />',
+                    'cms-faqs' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />',
+                    'cms-media' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />',
+                    'cms-navigation' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" />',
+                    'cms-settings' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />',
+                    'support-replies' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />',
+                    'support' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8M8 14h5m-9 6l3-3h11a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v14z" />',
                     default => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />',
                 };
             }
@@ -40,119 +53,89 @@
 @endonce
 
 @php
-    $navLinks = [
-        [
-            'key' => 'dashboard',
-            'label' => 'Dashboard',
-            'href' => route('admin.dashboard'),
-            'matches' => ['admin.dashboard'],
+    // Conversations unread for THIS admin (per-admin read state). Never breaks the page.
+    try {
+        $supportPrincipal = \App\Support\Support\SupportPrincipal::tryAdmin();
+        $supportUnread = $supportPrincipal ? app(\App\Services\Support\SupportInbox::class)->unreadConversations($supportPrincipal) : 0;
+    } catch (\Throwable $e) {
+        $supportUnread = 0;
+    }
+
+    // Grouped navigation. Every route below already existed in the flat list this
+    // replaces (plus Wallet Top-ups, which had a route + page but no menu entry).
+    $navGroups = [
+        'Overview' => [
+            ['key' => 'dashboard', 'label' => 'Dashboard', 'href' => route('admin.dashboard'), 'matches' => ['admin.dashboard']],
         ],
-        [
-            'key' => 'vendors',
-            'label' => 'Vendors',
-            'href' => route('admin.vendors.index'),
-            'matches' => ['admin.vendors.*'],
+        'Commerce' => [
+            ['key' => 'orders', 'label' => 'Orders', 'href' => route('admin.orders.index'), 'matches' => ['admin.orders.*']],
+            ['key' => 'transactions', 'label' => 'Transactions', 'href' => route('admin.transactions.index'), 'matches' => ['admin.transactions.*']],
+            ['key' => 'vendors', 'label' => 'Vendors', 'href' => route('admin.vendors.index'), 'matches' => ['admin.vendors.*']],
+            ['key' => 'network-services', 'label' => 'Networks', 'href' => route('admin.network-services.index'), 'matches' => ['admin.network-services.*']],
+            ['key' => 'recipient-numbers', 'label' => 'Recipient Numbers', 'href' => route('admin.recipient-numbers.index'), 'matches' => ['admin.recipient-numbers.*']],
         ],
-        [
-            'key' => 'network-services',
-            'label' => 'Networks',
-            'href' => route('admin.network-services.index'),
-            'matches' => ['admin.network-services.*'],
+        'Finance' => [
+            ['key' => 'withdrawals', 'label' => 'Withdrawals', 'href' => route('admin.withdrawals.index'), 'matches' => ['admin.withdrawals.*']],
+            ['key' => 'wallet-topups', 'label' => 'Wallet Top-ups', 'href' => route('admin.wallet-topups.index'), 'matches' => ['admin.wallet-topups.*']],
+            ['key' => 'payment-gateways', 'label' => 'Payment Gateways', 'href' => route('admin.payment-gateways.index'), 'matches' => ['admin.payment-gateways.*']],
+            ['key' => 'payment-health', 'label' => 'Payment Health', 'href' => route('admin.payment-health.index'), 'matches' => ['admin.payment-health.*']],
+            ['key' => 'reports', 'label' => 'Reports', 'href' => route('admin.reports.index'), 'matches' => ['admin.reports.*']],
         ],
-        [
-            'key' => 'orders',
-            'label' => 'Orders',
-            'href' => route('admin.orders.index'),
-            'matches' => ['admin.orders.*'],
+        'Services' => [
+            ['key' => 'result-checkers', 'label' => 'Result Checkers', 'href' => route('admin.result-checkers.dashboard'), 'matches' => ['admin.result-checkers.*']],
+            ['key' => 'ussd-plans', 'label' => 'USSD Plans', 'href' => route('admin.ussd-plans.index'), 'matches' => ['admin.ussd-plans.*']],
+            ['key' => 'ussd-events', 'label' => 'USSD Audit Log', 'href' => route('admin.ussd-events.index'), 'matches' => ['admin.ussd-events.*']],
         ],
-        [
-            'key' => 'transactions',
-            'label' => 'Transactions',
-            'href' => route('admin.transactions.index'),
-            'matches' => ['admin.transactions.*'],
+        'Content' => [
+            ['key' => 'cms', 'label' => 'Overview', 'href' => route('admin.cms.dashboard'), 'matches' => ['admin.cms.dashboard']],
+            ['key' => 'cms-home', 'label' => 'Homepage', 'href' => route('admin.cms.site.edit', 'home'), 'matches' => []],
+            ['key' => 'cms-about', 'label' => 'About Page', 'href' => route('admin.cms.site.edit', 'about'), 'matches' => []],
+            ['key' => 'cms-pages', 'label' => 'Pages', 'href' => route('admin.cms.pages.index'), 'matches' => ['admin.cms.pages.*']],
+            ['key' => 'cms-banners', 'label' => 'Banners', 'href' => route('admin.cms.banners.index'), 'matches' => ['admin.cms.banners.*']],
+            ['key' => 'cms-announcements', 'label' => 'Announcements', 'href' => route('admin.cms.announcements.index'), 'matches' => ['admin.cms.announcements.*']],
+            ['key' => 'cms-faqs', 'label' => 'FAQs', 'href' => route('admin.cms.faqs.index'), 'matches' => ['admin.cms.faqs.*']],
+            ['key' => 'cms-media', 'label' => 'Media', 'href' => route('admin.cms.media.index'), 'matches' => ['admin.cms.media.*']],
+            ['key' => 'cms-navigation', 'label' => 'Navigation', 'href' => route('admin.cms.navigation.index'), 'matches' => ['admin.cms.navigation.*']],
+            ['key' => 'cms-settings', 'label' => 'Site Settings', 'href' => route('admin.cms.settings.edit'), 'matches' => ['admin.cms.settings.*']],
         ],
-        [
-            'key' => 'withdrawals',
-            'label' => 'Withdrawals',
-            'href' => route('admin.withdrawals.index'),
-            'matches' => ['admin.withdrawals.*'],
+        'Support' => [
+            ['key' => 'support', 'label' => 'Support Inbox', 'href' => route('admin.support.index'), 'matches' => ['admin.support.index', 'admin.support.show'], 'badge' => $supportUnread],
+            ['key' => 'support-replies', 'label' => 'Quick Replies', 'href' => route('admin.support.quick-replies.index'), 'matches' => ['admin.support.quick-replies.*']],
         ],
-        [
-            'key' => 'recipient-numbers',
-            'label' => 'Recipient Numbers',
-            'href' => route('admin.recipient-numbers.index'),
-            'matches' => ['admin.recipient-numbers.*'],
-        ],
-        [
-            'key' => 'reports',
-            'label' => 'Reports',
-            'href' => route('admin.reports.index'),
-            'matches' => ['admin.reports.*'],
-        ],
-        [
-            'key' => 'payment-gateways',
-            'label' => 'Payment Gateways',
-            'href' => route('admin.payment-gateways.index'),
-            'matches' => ['admin.payment-gateways.*'],
-        ],
-        [
-            'key' => 'payment-health',
-            'label' => 'Payment Health',
-            'href' => route('admin.payment-health.index'),
-            'matches' => ['admin.payment-health.*'],
-        ],
-        [
-            'key' => 'result-checkers',
-            'label' => 'Result Checkers',
-            'href' => route('admin.result-checkers.dashboard'),
-            'matches' => ['admin.result-checkers.*'],
-        ],
-        [
-            'key' => 'settings',
-            'label' => 'Settings',
-            'href' => route('admin.settings.service-availability'),
-            'matches' => [
+        'System' => [
+            ['key' => 'settings', 'label' => 'Settings', 'href' => route('admin.settings.service-availability'), 'matches' => [
                 'admin.settings.service-availability*',
                 'admin.settings.delivery-status*',
                 'admin.settings.vendor-approval*',
+                'admin.settings.platform-service-vendors*',
                 'admin.vendor-tiers.*',
                 'admin.vendor-tier-promotions.*',
                 'admin.vendor-tier-history.*',
-            ],
-        ],
-        [
-            'key' => 'email-settings',
-            'label' => 'Email Settings',
-            'href' => route('admin.settings.email'),
-            'matches' => ['admin.settings.email*'],
-        ],
-        [
-            'key' => 'ussd-settings',
-            'label' => 'USSD Settings',
-            'href' => route('admin.settings.ussd'),
-            'matches' => ['admin.settings.ussd*'],
-        ],
-        [
-            'key' => 'ussd-plans',
-            'label' => 'USSD Plans',
-            'href' => route('admin.ussd-plans.index'),
-            'matches' => ['admin.ussd-plans.*'],
-        ],
-        [
-            'key' => 'ussd-events',
-            'label' => 'USSD Audit Log',
-            'href' => route('admin.ussd-events.index'),
-            'matches' => ['admin.ussd-events.*'],
+            ]],
+            ['key' => 'email-settings', 'label' => 'Email Settings', 'href' => route('admin.settings.email'), 'matches' => ['admin.settings.email*']],
+            ['key' => 'ussd-settings', 'label' => 'USSD Settings', 'href' => route('admin.settings.ussd'), 'matches' => ['admin.settings.ussd*']],
         ],
     ];
 
-    foreach ($navLinks as &$link) {
-        $link['isActive'] = (($active ?? null) === $link['key'])
-            || (!empty($link['matches']) && request()->routeIs(...$link['matches']));
+    $currentGroup = null;
+    $currentLabel = $title;
+    foreach ($navGroups as $groupLabel => &$groupLinks) {
+        foreach ($groupLinks as &$link) {
+            $link['isActive'] = (($active ?? null) === $link['key'])
+                || (! empty($link['matches']) && request()->routeIs(...$link['matches']));
+            if ($link['isActive'] && $currentGroup === null) {
+                $currentGroup = $groupLabel;
+                $currentLabel = $link['label'];
+            }
+        }
+        unset($link);
     }
-    unset($link);
+    unset($groupLinks);
 
-    $linkBaseClasses = 'group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors';
+    $adminUser = Auth::guard('admin')->user() ?: Auth::user();
+    $adminName = $adminUser->name ?? 'Admin User';
+    $adminEmail = $adminUser->email ?? '';
+    $adminInitials = strtoupper(substr($adminName, 0, 2));
 @endphp
 
 <!DOCTYPE html>
@@ -162,159 +145,104 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('favicon-32x32.png') }}">
-    
+
     <title>{{ $title }} - Admin Portal - XTRA4U</title>
     <meta name="description" content="System administration portal for XTRA4U">
-    
-    <!-- Styles & Scripts -->
+
     @vite(['resources/css/app.css', 'resources/js/app.js'])
-    
+
     @stack('styles')
 </head>
-<body class="font-sans antialiased bg-gray-50">
+<body class="font-sans antialiased bg-gray-50 text-gray-900">
 
-<div x-data="{ openSidebar: false }" @keydown.window.escape="openSidebar = false" class="flex min-h-screen bg-gray-50">
+<a href="#admin-main" class="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[100] focus:rounded-lg focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:shadow-lg">Skip to content</a>
+
+<div x-data="{ openSidebar: false }" @keydown.window.escape="openSidebar = false" class="admin-shell flex min-h-screen bg-gray-50">
     <!-- Mobile sidebar -->
-    <div x-cloak x-show="openSidebar" class="fixed inset-0 z-40 flex md:hidden" role="dialog" aria-modal="true">
-        <div x-show="openSidebar" x-transition.opacity class="fixed inset-0 bg-black/30" @click="openSidebar = false"></div>
+    <div x-cloak x-show="openSidebar" class="fixed inset-0 z-40 flex md:hidden" role="dialog" aria-modal="true" aria-label="Admin navigation">
+        <div x-show="openSidebar" x-transition.opacity class="fixed inset-0 bg-brand-dark/50" @click="openSidebar = false"></div>
         <div x-show="openSidebar"
              x-transition:enter="transform transition ease-out duration-300"
-             x-transition:enter-start="-translate-x-full opacity-0"
-             x-transition:enter-end="translate-x-0 opacity-100"
+             x-transition:enter-start="-translate-x-full"
+             x-transition:enter-end="translate-x-0"
              x-transition:leave="transform transition ease-in duration-200"
-             x-transition:leave-start="translate-x-0 opacity-100"
-             x-transition:leave-end="-translate-x-full opacity-0"
-             class="relative flex w-4/5 max-w-sm flex-col bg-white shadow-2xl rounded-r-2xl">
-            <div class="flex items-center justify-between px-4 pt-5 pb-4 border-b border-gray-100">
-                <div class="flex items-center">
-                    <div class="w-8 h-8 bg-brand-deep-blue rounded-lg flex items-center justify-center">
-                        <span class="text-white font-bold text-sm">X4U</span>
-                    </div>
-                    <span class="ml-2 text-lg font-bold text-gray-900">Admin Portal</span>
+             x-transition:leave-start="translate-x-0"
+             x-transition:leave-end="-translate-x-full"
+             class="relative flex w-4/5 max-w-sm flex-col bg-brand-dark text-white shadow-2xl">
+            <div class="flex items-center justify-between px-4 pt-5 pb-4 border-b border-white/10">
+                <div class="flex items-center gap-2">
+                    <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-violet text-sm font-bold">X4U</span>
+                    <span class="text-lg font-bold">Admin</span>
                 </div>
-                <button type="button" class="rounded-md p-2 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-brand-deep-blue" @click="openSidebar = false" aria-label="Close sidebar">
-                    <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+                <button type="button" class="rounded-md p-2 text-white/80 hover:text-white focus:outline-none focus:ring-2 focus:ring-white" @click="openSidebar = false" aria-label="Close menu">
+                    <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
             </div>
-            <div class="flex-1 overflow-y-auto px-4 py-6 space-y-1">
-                @foreach ($navLinks as $link)
-                    @php
-                        $linkClasses = $link['isActive']
-                            ? 'bg-brand-deep-blue text-white'
-                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100';
-                        $iconClasses = $link['isActive']
-                            ? 'text-white'
-                            : 'text-gray-400 group-hover:text-gray-500';
-                    @endphp
-                    <a href="{{ $link['href'] }}" class="{{ $linkBaseClasses }} {{ $linkClasses }}" @click="openSidebar = false">
-                        <svg class="{{ $iconClasses }} mr-3 h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            {!! admin_nav_paths($link['key']) !!}
-                        </svg>
-                        {{ $link['label'] }}
-                    </a>
-                @endforeach
-            </div>
-            <div class="border-t border-gray-100 px-4 py-4">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center">
-                        <div class="w-8 h-8 bg-brand-deep-blue rounded-full flex items-center justify-center">
-                            <span class="text-white font-medium text-sm">{{ strtoupper(substr(Auth::user()->name ?? 'AD', 0, 2)) }}</span>
-                        </div>
-                        <div class="ml-3">
-                            <p class="text-sm font-medium text-gray-700">{{ Auth::user()->name ?? 'Admin User' }}</p>
-                            <p class="text-xs text-gray-500">{{ Auth::user()->email ?? '' }}</p>
-                        </div>
-                    </div>
-                    <form method="POST" action="{{ route('admin.logout') }}">
-                        @csrf
-                        <button type="submit" class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors" title="Logout">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
-                            </svg>
-                        </button>
-                    </form>
-                </div>
+            <x-admin.sidebar-nav :groups="$navGroups" :mobile="true" class="flex-1 overflow-y-auto px-3 py-5" />
+            <div class="border-t border-white/10 p-4">
+                <p class="truncate text-sm font-medium">{{ $adminName }}</p>
+                <p class="truncate text-xs text-white/50">{{ $adminEmail }}</p>
+                <a href="{{ route('storefront.index') }}" target="_blank" rel="noopener" class="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-2.5 text-sm font-medium text-white hover:bg-white/15">View site</a>
+                <form method="POST" action="{{ route('admin.logout') }}" class="mt-2">
+                    @csrf
+                    <button type="submit" class="flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-2.5 text-sm font-medium text-white hover:bg-white/15">Log out</button>
+                </form>
             </div>
         </div>
     </div>
 
     <!-- Desktop sidebar -->
-    <div class="hidden md:flex md:w-64 md:flex-col bg-white text-gray-900 shadow-lg" aria-label="Admin navigation">
-        <div class="flex flex-col grow pt-5 overflow-y-auto">
-            <div class="flex items-center shrink-0 px-4 pb-4 border-b border-gray-200">
-                <div class="w-8 h-8 bg-brand-deep-blue rounded-lg flex items-center justify-center">
-                    <span class="text-white font-bold text-sm">X4U</span>
-                </div>
-                <span class="ml-2 text-lg font-bold text-gray-900">Admin Portal</span>
+    <aside class="hidden md:flex md:w-64 md:flex-shrink-0 md:flex-col bg-brand-dark text-white" aria-label="Admin sidebar">
+        <div class="sticky top-0 flex h-screen flex-col">
+            <div class="flex shrink-0 items-center gap-2 px-4 pt-5 pb-4">
+                <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-violet text-sm font-bold">X4U</span>
+                <span class="text-lg font-bold">Admin</span>
+                <span class="ml-1 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/70">Console</span>
             </div>
-            <div class="mt-6 grow flex flex-col">
-                <nav class="flex-1 px-2 pb-4 space-y-1">
-                    @foreach ($navLinks as $link)
-                        @php
-                            $linkClasses = $link['isActive']
-                                ? 'bg-brand-deep-blue text-white'
-                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100';
-                            $iconClasses = $link['isActive']
-                                ? 'text-white'
-                                : 'text-gray-400 group-hover:text-gray-500';
-                        @endphp
-                        <a href="{{ $link['href'] }}" class="{{ $linkBaseClasses }} {{ $linkClasses }}">
-                            <svg class="{{ $iconClasses }} mr-3 h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                {!! admin_nav_paths($link['key']) !!}
-                            </svg>
-                            {{ $link['label'] }}
-                        </a>
-                    @endforeach
-                </nav>
-                <div class="shrink-0 flex border-t border-gray-200 p-4">
-                    <div class="flex items-center w-full justify-between">
-                        <div class="flex items-center">
-                            <div class="w-8 h-8 bg-brand-deep-blue rounded-full flex items-center justify-center">
-                                <span class="text-white font-medium text-sm">{{ strtoupper(substr(Auth::user()->name ?? 'AD', 0, 2)) }}</span>
-                            </div>
-                            <div class="ml-3">
-                                <p class="text-sm font-medium text-gray-700">{{ Auth::user()->name ?? 'Admin User' }}</p>
-                                <p class="text-xs text-gray-500">{{ Auth::user()->email ?? '' }}</p>
-                            </div>
-                        </div>
-                        <form method="POST" action="{{ route('admin.logout') }}">
-                            @csrf
-                            <button type="submit" class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors" title="Logout">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
-                                </svg>
-                            </button>
-                        </form>
+            <x-admin.sidebar-nav :groups="$navGroups" class="min-h-0 flex-1 overflow-y-auto px-3 pb-4" />
+            <div class="shrink-0 border-t border-white/10 p-4">
+                <div class="flex items-center gap-3">
+                    <span class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-brand-violet text-sm font-medium">{{ $adminInitials }}</span>
+                    <div class="min-w-0 flex-1">
+                        <p class="truncate text-sm font-medium text-white">{{ $adminName }}</p>
+                        <p class="truncate text-xs text-white/50">{{ $adminEmail }}</p>
                     </div>
+                    <form method="POST" action="{{ route('admin.logout') }}">
+                        @csrf
+                        <button type="submit" class="rounded-md p-2 text-white/50 hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-white" aria-label="Log out" title="Log out">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                        </button>
+                    </form>
                 </div>
             </div>
         </div>
-    </div>
+    </aside>
 
     <!-- Main content -->
-    <div class="flex flex-col flex-1 overflow-hidden">
-        <header class="bg-white shadow-sm border-b border-gray-200">
-            <div class="flex items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-                <div class="flex items-center gap-3 min-w-0 flex-1">
-                    <button class="md:hidden p-2 -ml-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-deep-blue flex-shrink-0" @click="openSidebar = true" aria-label="Open sidebar">
-                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-                        </svg>
+    <div class="flex min-w-0 flex-1 flex-col">
+        <header class="sticky top-0 z-30 border-b border-gray-200 bg-white">
+            <div class="flex h-14 items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+                <div class="flex min-w-0 items-center gap-2">
+                    <button type="button" class="-ml-2 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-violet md:hidden" @click="openSidebar = true" aria-label="Open menu">
+                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
                     </button>
-                    <div class="min-w-0">
-                        <h1 class="text-lg sm:text-2xl font-bold text-gray-900 truncate">{{ $title }}</h1>
-                        @if ($subtitle)
-                            <p class="text-xs sm:text-sm text-gray-500 truncate">{{ $subtitle }}</p>
+                    <nav aria-label="Breadcrumb" class="min-w-0 truncate text-sm text-gray-500">
+                        <a href="{{ route('admin.dashboard') }}" class="hover:text-brand-violet">Admin</a>
+                        @if ($currentGroup && $currentGroup !== 'Overview')
+                            <span class="hidden sm:inline"><span class="mx-1.5 text-gray-300" aria-hidden="true">/</span>{{ $currentGroup }}</span>
                         @endif
-                    </div>
+                        <span class="mx-1.5 text-gray-300" aria-hidden="true">/</span><span class="font-medium text-gray-900">{{ $currentLabel }}</span>
+                    </nav>
                 </div>
-                <div class="flex items-center gap-2 flex-shrink-0 ml-2">
+                <div class="flex flex-shrink-0 items-center gap-1">
+                    <a href="{{ route('storefront.index') }}" target="_blank" rel="noopener" class="inline-flex h-10 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-brand-violet focus:outline-none focus:ring-2 focus:ring-brand-violet" title="Open the public homepage in a new tab">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3v-6h6v6h3a1 1 0 001-1V10"/></svg>
+                        <span class="hidden sm:inline">View site</span>
+                    </a>
                     <!-- Admin Notification Bell -->
                     <div x-data="adminNotificationBell()" class="relative" @keydown.escape.window="isOpen = false">
                         <button @click="toggleDropdown()" 
-                                class="relative p-2 rounded-full text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-deep-blue transition-colors"
+                                class="relative flex h-10 w-10 items-center justify-center rounded-full text-gray-500 hover:text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-violet transition-colors"
                                 aria-label="View notifications">
                             <svg class="h-5 w-5 sm:h-6 sm:w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
@@ -344,7 +272,7 @@
                                 <div class="flex items-center gap-3">
                                     <button x-show="unreadCount > 0" 
                                             @click="markAllRead()" 
-                                            class="text-xs text-brand-deep-blue hover:text-brand-deep-blue/80 font-medium">
+                                            class="text-xs text-brand-violet hover:text-brand-violet-deep font-medium">
                                         Mark all read
                                     </button>
                                     <button @click="isOpen = false" class="sm:hidden p-1 -mr-1 rounded text-gray-400 hover:text-gray-600">
@@ -359,7 +287,7 @@
                             <div class="flex-1 overflow-y-auto overscroll-contain">
                                 <template x-if="loading">
                                     <div class="px-4 py-12 text-center text-gray-500">
-                                        <svg class="animate-spin h-8 w-8 mx-auto text-brand-deep-blue" fill="none" viewBox="0 0 24 24">
+                                        <svg class="animate-spin h-8 w-8 mx-auto text-brand-violet" fill="none" viewBox="0 0 24 24">
                                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                         </svg>
@@ -378,8 +306,8 @@
                                 </template>
 
                                 <template x-for="notification in notifications" :key="notification.id">
-                                    <div @click="markAsRead(notification.id)" 
-                                         :class="{ 'bg-blue-50/70': !notification.read_at }"
+                                    <div @click="openNotification(notification)" 
+                                         :class="{ 'bg-violet-50': !notification.read_at }"
                                          class="px-4 py-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors active:bg-gray-100">
                                         <div class="flex items-start gap-3">
                                             <div :class="getIconBgClass(notification.type)" class="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center shadow-sm">
@@ -395,7 +323,7 @@
                                             <div class="flex-1 min-w-0">
                                                 <div class="flex items-start justify-between gap-2">
                                                     <p class="text-sm font-medium text-gray-900 leading-tight" x-text="notification.title"></p>
-                                                    <span x-show="!notification.read_at" class="flex-shrink-0 w-2 h-2 bg-blue-500 rounded-full mt-1.5"></span>
+                                                    <span x-show="!notification.read_at" class="flex-shrink-0 w-2 h-2 bg-brand-violet rounded-full mt-1.5"></span>
                                                 </div>
                                                 <p class="text-xs text-gray-600 mt-1 line-clamp-2 leading-relaxed" x-text="notification.message"></p>
                                                 <p class="text-[11px] text-gray-400 mt-1.5" x-text="formatTime(notification.created_at)"></p>
@@ -406,18 +334,27 @@
                             </div>
                         </div>
                     </div>
-                    
-                    @isset($actions)
-                        <div class="hidden sm:flex items-center gap-3">
-                            {{ $actions }}
-                        </div>
-                    @endisset
                 </div>
             </div>
         </header>
 
-        <main class="flex-1 overflow-y-auto bg-gray-50">
-            <div class="py-6 px-4 sm:px-6 lg:px-8">
+        <main id="admin-main" class="flex-1 min-w-0">
+            <div class="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">
+                {{-- Standard page header: every admin page gets the same title / description / actions hierarchy. --}}
+                <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div class="min-w-0">
+                        <h1 class="text-2xl font-semibold tracking-tight text-gray-900">{{ $title }}</h1>
+                        @if ($subtitle)
+                            <p class="mt-1 text-sm text-gray-500">{{ $subtitle }}</p>
+                        @endif
+                    </div>
+                    @isset($actions)
+                        <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                            {{ $actions }}
+                        </div>
+                    @endisset
+                </div>
+
                 {{ $slot }}
             </div>
         </main>
@@ -465,6 +402,38 @@
                 }
             },
 
+            urlFor(n) {
+                const d = n.data || {};
+                switch (n.type) {
+                    case 'support_message':
+                        return d.conversation_id ? '{{ url('/admin/support') }}/' + d.conversation_id : '{{ route('admin.support.index') }}';
+                    case 'new_order':
+                    case 'order_completed':
+                    case 'order_cancelled':
+                    case 'affiliate_order':
+                        return (n.order_id || d.order_id) ? '{{ url('/admin/orders') }}/' + (n.order_id || d.order_id) : '{{ route('admin.orders.index') }}';
+                    case 'new_vendor':
+                    case 'vendor_approved':
+                    case 'vendor_rejected':
+                    case 'new_product':
+                        return '{{ route('admin.vendors.index') }}';
+                    case 'withdrawal_request':
+                    case 'withdrawal_approved':
+                    case 'withdrawal_rejected':
+                        return '{{ route('admin.withdrawals.index') }}';
+                    case 'payment_integrity_alert':
+                        return '{{ route('admin.payment-health.index') }}';
+                    default:
+                        return null;
+                }
+            },
+
+            async openNotification(n) {
+                const url = this.urlFor(n);
+                await this.markAsRead(n.id);
+                if (url) window.location.href = url;
+            },
+
             async markAsRead(id) {
                 try {
                     await fetch(`/admin/notifications/${id}/read`, {
@@ -509,10 +478,10 @@
             getIconBgClass(type) {
                 const classes = {
                     'new_order': 'bg-green-500',
-                    'affiliate_order': 'bg-purple-500',
-                    'order_completed': 'bg-blue-500',
+                    'affiliate_order': 'bg-brand-violet',
+                    'order_completed': 'bg-brand-violet',
                     'order_cancelled': 'bg-red-500',
-                    'new_vendor': 'bg-indigo-500',
+                    'new_vendor': 'bg-brand-violet',
                     'vendor_approved': 'bg-teal-500',
                     'vendor_rejected': 'bg-red-500',
                     'withdrawal_request': 'bg-yellow-500',

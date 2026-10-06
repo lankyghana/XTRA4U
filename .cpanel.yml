@@ -1,18 +1,7 @@
+---
 deployment:
   tasks:
-    # Set base path
+    # All logic lives in scripts/deploy.sh (maintenance mode, DB backup, clean
+    # code sync, composer --no-dev, migrate, caches, storage link, restart).
     - export DEPLOYPATH=/home/xtraucom/public_html
-
-    # Deploy Laravel core
-    - /bin/mkdir -p $DEPLOYPATH/core
-    - /bin/cp -R app bootstrap config database resources routes storage vendor artisan composer.json composer.lock $DEPLOYPATH/core
-
-    # Deploy public assets
-    - /bin/cp -R public/* $DEPLOYPATH/
-
-    # Permissions
-    - /bin/chmod -R 755 $DEPLOYPATH/core
-    - /bin/chmod -R 775 $DEPLOYPATH/core/storage $DEPLOYPATH/core/bootstrap/cache
-
-    # Run pending migrations
-    - cd $DEPLOYPATH/core && php artisan migrate --force
+    - /bin/bash scripts/deploy.sh

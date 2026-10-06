@@ -1,0 +1,143 @@
+/* =====================================================================
+   XTRA4U Admin UI primitives
+   ---------------------------------------------------------------------
+   Everything is scoped to `.admin-shell` (the wrapper rendered by
+   <x-admin-layout>) so nothing leaks into the storefront or the vendor
+   dashboard. Brand tokens come from app.css (--color-brand-violet etc.).
+
+   Form defaults live in `@layer components`, i.e. BELOW Tailwind
+   utilities: a page that sets its own width/padding/border still wins,
+   but a bare <input> gets the shared look automatically.
+   ===================================================================== */
+
+@layer components {
+    .admin-shell :is(
+        input:not([type='checkbox']):not([type='radio']):not([type='hidden']):not([type='file']):not([type='range']):not([type='color']):not([type='submit']):not([type='button']),
+        select,
+        textarea
+    ) {
+        border: 1px solid var(--color-gray-300);
+        border-radius: 0.5rem;
+        background-color: #fff;
+        color: var(--color-gray-900);
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+        padding: 0.5rem 0.75rem;
+        min-height: 2.5rem;
+        box-shadow: 0 1px 2px rgb(16 24 40 / 0.04);
+        transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .admin-shell textarea {
+        min-height: 5rem;
+    }
+
+    .admin-shell :is(input, select, textarea)::placeholder {
+        color: var(--color-gray-400);
+    }
+
+    .admin-shell :is(input, select, textarea):focus {
+        outline: none;
+        border-color: var(--color-brand-violet);
+        box-shadow: 0 0 0 3px rgb(83 58 253 / 0.18);
+    }
+
+    .admin-shell :is(input, select, textarea):disabled {
+        background-color: var(--color-gray-50);
+        color: var(--color-gray-500);
+        cursor: not-allowed;
+    }
+
+    .admin-shell :is(input[type='checkbox'], input[type='radio']) {
+        accent-color: var(--color-brand-violet);
+        width: 1rem;
+        height: 1rem;
+    }
+
+    /* Keyboard focus for links/buttons that don't define their own ring */
+    .admin-shell :is(a, button, summary):focus-visible {
+        outline: 2px solid var(--color-brand-violet);
+        outline-offset: 2px;
+    }
+
+    .admin-shell label {
+        font-size: 0.875rem;
+    }
+
+    /* Ordinary pagination (Laravel's tailwind view) */
+    .admin-shell nav[role='navigation'] a,
+    .admin-shell nav[role='navigation'] span[aria-current] > span {
+        --tw-ring-color: var(--color-brand-violet);
+    }
+}
+
+/* ---- Data tables (unlayered on purpose: wins over per-cell px-6/py-4) ---- */
+.admin-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.875rem;
+}
+
+.admin-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 0.625rem 1rem;
+    background: var(--color-gray-50);
+    border-bottom: 1px solid var(--color-gray-200);
+    color: var(--color-gray-500);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.admin-table tbody td {
+    padding: 0.625rem 1rem;
+    border-bottom: 1px solid var(--color-gray-100);
+    vertical-align: middle;
+}
+
+.admin-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.admin-table tbody tr:hover td {
+    background: rgb(237 233 254 / 0.28);
+}
+
+/* Existing "No x found." rows: keep them quiet and centred */
+.admin-table tbody td[colspan] {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+    text-align: center;
+    color: var(--color-gray-500);
+}
+
+/* Links inside tables / cards that were styled with the old indigo/blue accent */
+.admin-shell .admin-link {
+    color: var(--color-brand-violet);
+    font-weight: 500;
+}
+
+.admin-shell .admin-link:hover {
+    color: var(--color-brand-violet-deep);
+    text-decoration: underline;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .admin-shell * {
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+    }
+}
+
+/* A table card nested inside another white card drops its own chrome (no double border) */
+.bg-white .admin-table-card {
+    border-width: 1px 0 0;
+    border-radius: 0;
+    box-shadow: none;
+}

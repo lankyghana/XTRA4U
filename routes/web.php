@@ -139,15 +139,17 @@ Route::get('/store/{vendor:vendor_code}/afa', [AfaRegistrationController::class,
 Route::post('/afa/store/{vendor:vendor_code}', [AfaRegistrationController::class, 'store'])
     ->middleware('throttle:20,1,afa-store')
     ->name('afa.store');
-Route::get('/afa/callback', [AfaRegistrationController::class, 'paymentCallback'])->name('afa.callback');
+Route::get('/afa/callback', [AfaRegistrationController::class, 'paymentCallback'])
+    ->middleware('throttle:60,1,afa-callback')
+    ->name('afa.callback');
 Route::get('/afa/success/{reference}', [AfaRegistrationController::class, 'success'])->name('afa.success');
 Route::post('/afa/check-status', [AfaRegistrationController::class, 'checkStatus'])->name('afa.check-status');
 Route::post('/afa/verify', [AfaRegistrationController::class, 'verify'])->name('afa.verify');
 
 Route::get('/', [StorefrontController::class, 'index'])->name('storefront.index');
-Route::get('/about', fn () => view('pages.about'))->name('about');
-Route::get('/privacy', fn () => view('pages.privacy'))->name('privacy');
-Route::get('/terms', fn () => view('pages.terms'))->name('terms');
+Route::get('/about', [\App\Http\Controllers\CmsPageController::class, 'about'])->name('about');
+Route::get('/privacy', [\App\Http\Controllers\CmsPageController::class, 'legal'])->defaults('slug', 'privacy')->name('privacy');
+Route::get('/terms', [\App\Http\Controllers\CmsPageController::class, 'legal'])->defaults('slug', 'terms')->name('terms');
 
 // Public Marketplace alias (matches common capitalized URL)
 Route::get('/Marketplace', fn () => redirect()->route('checkout.show'));
@@ -175,21 +177,27 @@ Route::get('/store/{vendor:vendor_code}/result-checkers', [StorefrontController:
 Route::post('/store/{vendor:vendor_code}/result-checkers/checkout', [ResultCheckerCheckoutController::class, 'initiateCheckout'])
     ->middleware('throttle:20,1,rc-checkout') // 20 checkout initiations per minute
     ->name('result-checkers.checkout');
-Route::match(['GET', 'POST'], '/result-checkers/payment/callback/{order}', [ResultCheckerPaymentCallbackController::class, 'handle'])->name('result-checkers.payment.callback');
+Route::match(['GET', 'POST'], '/result-checkers/payment/callback/{order}', [ResultCheckerPaymentCallbackController::class, 'handle'])
+    ->middleware('throttle:60,1,rc-callback')
+    ->name('result-checkers.payment.callback');
 Route::post('/result-checkers/payment/webhook', [ResultCheckerPaymentCallbackController::class, 'webhook'])
     ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
+    ->middleware('throttle:120,1,rc-webhook')
     ->name('result-checkers.payment.webhook');
 // Delivery callbacks complete real orders, so they are throttled against
 // brute-forcing provider references.
 Route::post('/webhooks/gigshub', [\App\Http\Controllers\Webhooks\GigshubWebhookController::class, 'handle'])
     ->middleware('throttle:120,1,gigshub-webhook')
     ->name('api.webhooks.gigshub');
-Route::post('/webhooks/gigshub/balance-low', [\App\Http\Controllers\Webhooks\GigshubLowBalanceWebhookController::class, 'handle'])->name('webhooks.gigshub.balance-low');
+Route::post('/webhooks/gigshub/balance-low', [\App\Http\Controllers\Webhooks\GigshubLowBalanceWebhookController::class, 'handle'])
+    ->middleware('throttle:30,1,gigshub-balance-low-webhook')
+    ->name('webhooks.gigshub.balance-low');
 Route::post('/webhooks/skdataplug', [\App\Http\Controllers\Webhooks\SkdataplugWebhookController::class, 'handle'])
     ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
     ->middleware('throttle:120,1,skdataplug-webhook')
     ->name('api.webhooks.skdataplug');
 Route::post('/webhooks/paystack', [\App\Http\Controllers\Webhooks\PaystackWebhookController::class, 'handle'])
+    ->middleware('throttle:120,1,paystack-webhook')
     ->name('webhooks.paystack');
 
 // Result Checker Status pages
@@ -366,6 +374,24 @@ Route::middleware(['vendor.approved'])
         Route::get('quick-buy', [VendorQuickBuyController::class, 'show'])->name('quick-buy.show');
         Route::post('quick-buy', [VendorQuickBuyController::class, 'store'])->name('quick-buy.store');
 
+        // Support chat (vendor <-> admin). Conversations/attachments are looked up
+        // scoped to the authenticated vendor inside the controller.
+        Route::prefix('support')->name('support.')->group(function () {
+            $c = \App\Http\Controllers\Vendor\SupportController::class;
+            Route::get('/', [$c, 'index'])->name('index');
+            Route::get('new', [$c, 'create'])->name('new');
+            Route::post('/', [$c, 'store'])->middleware('throttle:20,1,support-start')->name('store');
+            Route::get('unread-count', [$c, 'unreadCount'])->middleware('throttle:120,1,support-unread')->name('unread');
+            Route::get('related-options', [$c, 'relatedOptions'])->middleware('throttle:60,1,support-related')->name('related');
+            Route::get('attachments/{attachmentId}', [$c, 'attachment'])->whereNumber('attachmentId')->name('attachments.show');
+            Route::get('{conversationId}', [$c, 'show'])->whereNumber('conversationId')->name('show');
+            Route::get('{conversationId}/messages', [$c, 'messages'])->whereNumber('conversationId')
+                ->middleware('throttle:120,1,support-poll')->name('messages');
+            Route::post('{conversationId}/messages', [$c, 'send'])->whereNumber('conversationId')
+                ->middleware('throttle:60,1,support-send')->name('send');
+            Route::post('{conversationId}/read', [$c, 'markRead'])->whereNumber('conversationId')->name('read');
+        });
+
         // NOTE: the actual payment gateway callback for top-ups should be public
         // and not require vendor authentication. The topup callback route is
         // defined outside the `vendor.approved` group below as `vendor.wallet.topup.callback`.
@@ -425,7 +451,9 @@ Route::post('/api/ussd', [\App\Http\Controllers\Api\UssdController::class, 'hand
 // Client-side polling endpoint for inline embed/iframe payment flows
 Route::get('/payment/status/{reference}', [\App\Http\Controllers\PaymentStatusController::class, 'status'])
     ->name('payment.status');
-Route::match(['GET', 'POST'], '/payment/callback', [PaymentCallbackController::class, 'handle'])->name('payment.callback');
+Route::match(['GET', 'POST'], '/payment/callback', [PaymentCallbackController::class, 'handle'])
+    ->middleware('throttle:60,1,payment-callback')
+    ->name('payment.callback');
 
 // Admin Authentication Routes
 Route::get('/admin/login', [AdminAuthController::class, 'showLoginForm'])->name('admin.login');
@@ -434,6 +462,14 @@ Route::post('/admin/logout', [AdminAuthController::class, 'logout'])->name('admi
 
 Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/', [AdminController::class, 'dashboard'])->name('dashboard');
+    // Vendor contact export. Admin-only: admin.only plus the stricter cms.admin gate (explicit guards, no default-to-admin),
+    // re-checked in the FormRequest.
+    Route::get('vendors/export', [\App\Http\Controllers\Admin\VendorContactExportController::class, 'show'])
+        ->middleware('cms.admin')->name('vendors.export');
+    Route::post('vendors/export/preview', [\App\Http\Controllers\Admin\VendorContactExportController::class, 'preview'])
+        ->middleware(['cms.admin', 'throttle:30,1,vendor-export-preview'])->name('vendors.export.preview');
+    Route::post('vendors/export/download', [\App\Http\Controllers\Admin\VendorContactExportController::class, 'download'])
+        ->middleware(['cms.admin', 'throttle:10,1,vendor-export-download'])->name('vendors.export.download');
     Route::resource('vendors', AdminVendorController::class)->only(['index', 'update', 'destroy']);
     Route::post('vendors/{vendor}/adjust-balance', [AdminVendorController::class, 'adjustBalance'])->name('vendors.adjust-balance');
     Route::resource('network-services', AdminNetworkServiceController::class)
@@ -539,6 +575,32 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
             ->name('orders.update-status');
     });
 
+    // Support inbox (vendor <-> admin chat). Read state is per admin.
+    Route::prefix('support')->name('support.')->group(function () {
+        $c = \App\Http\Controllers\Admin\SupportInboxController::class;
+        $q = \App\Http\Controllers\Admin\SupportQuickReplyController::class;
+        Route::get('/', [$c, 'index'])->name('index');
+        Route::get('unread-count', [$c, 'unreadCount'])->middleware('throttle:120,1,support-admin-unread')->name('unread');
+        Route::get('quick-replies/available', [$c, 'quickReplies'])->name('quick-replies.available');
+        Route::get('quick-replies', [$q, 'index'])->name('quick-replies.index');
+        Route::post('quick-replies', [$q, 'store'])->name('quick-replies.store');
+        Route::get('quick-replies/{reply}/edit', [$q, 'edit'])->whereNumber('reply')->name('quick-replies.edit');
+        Route::put('quick-replies/{reply}', [$q, 'update'])->whereNumber('reply')->name('quick-replies.update');
+        Route::post('quick-replies/{reply}/toggle', [$q, 'toggle'])->whereNumber('reply')->name('quick-replies.toggle');
+        Route::post('quick-replies/{reply}/move', [$q, 'move'])->whereNumber('reply')->name('quick-replies.move');
+        Route::delete('quick-replies/{reply}', [$q, 'destroy'])->whereNumber('reply')->name('quick-replies.destroy');
+        Route::get('attachments/{attachmentId}', [$c, 'attachment'])->whereNumber('attachmentId')->name('attachments.show');
+        Route::get('{conversationId}', [$c, 'show'])->whereNumber('conversationId')->name('show');
+        Route::get('{conversationId}/messages', [$c, 'messages'])->whereNumber('conversationId')
+            ->middleware('throttle:120,1,support-admin-poll')->name('messages');
+        Route::post('{conversationId}/messages', [$c, 'send'])->whereNumber('conversationId')
+            ->middleware('throttle:60,1,support-admin-send')->name('send');
+        Route::post('{conversationId}/read', [$c, 'markRead'])->whereNumber('conversationId')->name('read');
+        Route::post('{conversationId}/resolve', [$c, 'resolve'])->whereNumber('conversationId')->name('resolve');
+        Route::post('{conversationId}/close', [$c, 'close'])->whereNumber('conversationId')->name('close');
+        Route::post('{conversationId}/reopen', [$c, 'reopen'])->whereNumber('conversationId')->name('reopen');
+    });
+
     // Manual Queue Run Trigger (scheduler-bridge)
     Route::post('queue/run', [\App\Http\Controllers\Admin\ManualQueueRunController::class, 'run'])->name('queue.run');
 
@@ -566,3 +628,6 @@ Route::middleware(['web', 'admin.only'])->prefix('admin')->name('admin.')->group
     Route::delete('result-checker-pricing-tiers/{tier}', [AdminResultCheckerPricingTierController::class, 'destroy'])->name('result-checker-pricing-tiers.destroy');
     Route::patch('results-checkers/base-price', [AdminResultCheckerPinsController::class, 'updateBasePrice'])->name('result-checkers.base-price.update');
 });
+
+// Content management (public pages + admin Content section).
+require __DIR__.'/cms.php';
