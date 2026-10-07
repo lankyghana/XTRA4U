@@ -33,7 +33,8 @@ class ServiceAvailability
      */
     public static function categories(): array
     {
-        return array_keys(config('storefront.categories', []));
+        // Superseded categories (e.g. "ecg", now a Utility Bills biller) are not managed here.
+        return SupersededCategories::without(array_keys(config('storefront.categories', [])));
     }
 
     /**

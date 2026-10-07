@@ -63,13 +63,13 @@ class EcgPlatformPageTest extends TestCase
         $this->get(route('services.utility-bills'))->assertStatus(503)->assertSee('Back at 6pm')->assertDontSee('ECG payments are paused');
     }
 
-    public function test_service_availability_page_labels_the_ecg_toggle_as_legacy_products(): void
+    public function test_service_availability_no_longer_lists_ecg_as_a_service(): void
     {
         $this->actingAs(\App\Models\User::factory()->create(['role' => 'admin']));
 
         $this->get(route('admin.settings.service-availability'))->assertOk()
-            ->assertSee('ECG (legacy vendor products)')
-            ->assertSee('Does not affect Utility Bills')
+            ->assertDontSee('ECG (legacy vendor products)')
+            ->assertDontSee('name="open[ecg]"', false)
             ->assertSee(route('admin.utility-bills.settings'), false);
     }
 

@@ -145,7 +145,7 @@ class ProductController extends Controller
             'external_service_capacity' => 'nullable|string|max:80',
             'external_service_price' => 'nullable|numeric|min:0',
             'external_service_offer_slug' => 'nullable|string|max:120',
-            'category' => $this->categoryValidationRule(),
+            'category' => $this->categoryValidationRule($metadata['category'] ?? null),
             'size' => 'nullable|string|max:50',
             'validity' => 'nullable|string|max:50',
             'tag' => 'nullable|string|max:80',
@@ -237,14 +237,23 @@ class ProductController extends Controller
         return Product::where('vendor_id', $vendor->id)->findOrFail($id);
     }
 
-    protected function categoryValidationRule(): string
+    /**
+     * @param  string|null  $currentCategory  an EXISTING product's category: a legacy product keeps
+     *                                        its superseded category (e.g. ecg) on edit, but no new
+     *                                        product can be created in one.
+     */
+    protected function categoryValidationRule(?string $currentCategory = null): string
     {
-        return 'nullable|string|in:'.implode(',', $this->availableCategoryKeys());
+        return 'nullable|string|in:'.implode(',', $this->availableCategoryKeys($currentCategory));
     }
 
-    protected function availableCategoryKeys(): array
+    protected function availableCategoryKeys(?string $currentCategory = null): array
     {
-        $keys = array_keys(config('storefront.categories', []));
+        $keys = \App\Support\SupersededCategories::without(array_keys(config('storefront.categories', [])));
+
+        if ($currentCategory !== null && \App\Support\SupersededCategories::is($currentCategory)) {
+            $keys[] = $currentCategory;
+        }
 
         return $keys ?: ['data'];
     }

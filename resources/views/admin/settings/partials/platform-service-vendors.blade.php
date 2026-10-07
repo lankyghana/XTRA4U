@@ -10,6 +10,16 @@
         </p>
     </div>
 
+    <div class="mb-6 rounded-xl border border-gray-200 bg-white p-5 text-sm text-gray-700">
+        <p class="font-semibold text-gray-900">{{ \App\Support\SupersededCategories::UTILITY_BILLS_LABEL }}</p>
+        <p class="mt-1 text-xs text-gray-600">
+            Utility Bills is a platform-managed service fulfilled by KiNG FLEXY. It needs no vendor
+            assignment: it appears on every approved vendor storefront automatically, and the storefront
+            vendor only earns the commission you configure. Manage it in
+            <a href="{{ route('admin.utility-bills.settings') }}" class="text-brand-violet underline">Utility Bills Settings</a>.
+        </p>
+    </div>
+
     <form method="POST" action="{{ route('admin.settings.platform-service-vendors.update') }}">
         @csrf
         @method('PUT')

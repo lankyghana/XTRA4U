@@ -76,7 +76,8 @@
                         </div>
 
                         @php
-                            $categoryOptions = config('storefront.categories', []);
+                            // Superseded categories (ecg, now a Utility Bills biller) cannot get new vendor products.
+                            $categoryOptions = array_diff_key(config('storefront.categories', []), array_flip(\App\Support\SupersededCategories::KEYS));
                             $defaultCategory = config('storefront.default_category') ?? (array_key_first($categoryOptions) ?? 'data');
                         @endphp
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">

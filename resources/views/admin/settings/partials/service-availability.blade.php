@@ -23,19 +23,21 @@
 
         {{-- Per-category toggles --}}
         <div class="bg-white border border-gray-200 rounded-xl shadow-sm divide-y divide-gray-100">
+            {{-- Utility Bills is a platform-managed service (KiNG FLEXY): read-only here, managed in its own settings. --}}
+            @php $utilityBillsOpen = \App\Services\UtilityBills\UtilityBillSettings::enabled(); @endphp
+            <div class="flex items-center justify-between gap-4 p-5 bg-gray-50/60">
+                <div>
+                    <p class="text-sm font-semibold text-gray-900">{{ \App\Support\SupersededCategories::UTILITY_BILLS_LABEL }}</p>
+                    <p class="mt-0.5 text-xs text-gray-500">{{ \App\Support\SupersededCategories::UTILITY_BILLS_DESCRIPTION }} Includes ECG, Ghana Water, DSTV, GOtv and StarTimes.</p>
+                    <p class="mt-0.5 text-xs text-gray-500">Managed in <a href="{{ route('admin.utility-bills.settings') }}" class="text-brand-violet underline">Utility Bills Settings</a>.</p>
+                </div>
+                <span class="shrink-0 text-xs font-medium {{ $utilityBillsOpen ? 'text-green-600' : 'text-red-500' }}">{{ $utilityBillsOpen ? 'Open' : 'Closed' }}</span>
+            </div>
             @foreach ($statuses as $category => $isOpen)
                 @php
                     $label = $categoryConfig[$category]['label'] ?? \Illuminate\Support\Str::title(str_replace(['-', '_'], ' ', $category));
                     $description = $categoryConfig[$category]['description'] ?? null;
-                    $utilityNote = null;
 
-                    // "ecg" is the legacy electricity PRODUCT category. Utility Bills (ECG, water, TV) is a
-                    // separate platform service with its own switch, so this toggle must not look like it.
-                    if ($category === 'ecg') {
-                        $label = 'ECG (legacy vendor products)';
-                        $description = 'Pauses sales of ECG products created by vendors. Does not affect Utility Bills.';
-                        $utilityNote = true;
-                    }
                 @endphp
                 <label class="flex items-center justify-between gap-4 p-5 cursor-pointer hover:bg-gray-50">
                     <div>
@@ -43,9 +45,7 @@
                         @if ($description)
                             <p class="mt-0.5 text-xs text-gray-500">{{ $description }}</p>
                         @endif
-                        @if ($utilityNote)
-                            <p class="mt-0.5 text-xs text-gray-500">To open or close Utility Bills, use <a href="{{ route('admin.utility-bills.settings') }}" class="text-brand-violet underline">Utility Bills Settings</a>.</p>
-                        @endif
+
                     </div>
                     <div class="flex items-center gap-3 shrink-0">
                         <span class="text-xs font-medium {{ $isOpen ? 'text-green-600' : 'text-red-500' }}"

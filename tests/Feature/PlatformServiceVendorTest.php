@@ -48,13 +48,15 @@ class PlatformServiceVendorTest extends TestCase
     public function test_assignments_returns_every_managed_category(): void
     {
         $vendor = Vendor::factory()->create();
-        PlatformServiceVendor::setVendorFor('ecg', $vendor->id);
+        PlatformServiceVendor::setVendorFor('shop', $vendor->id);
 
         $assignments = PlatformServiceVendor::assignments();
 
         $this->assertSame(PlatformServiceVendor::categories(), array_keys($assignments));
-        $this->assertSame($vendor->id, $assignments['ecg']);
+        $this->assertSame($vendor->id, $assignments['shop']);
         $this->assertNull($assignments['data']);
+        // "ecg" is now a Utility Bills biller, not a vendor-assigned platform service.
+        $this->assertArrayNotHasKey('ecg', $assignments);
     }
 
     // -------------------------------------------------------------------------

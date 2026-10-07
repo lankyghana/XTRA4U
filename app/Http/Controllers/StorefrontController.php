@@ -339,6 +339,12 @@ class StorefrontController extends Controller
             $label = $meta['public_label'] ?? $meta['label'] ?? Str::title(str_replace(['-', '_'], ' ', $categoryKey));
             $description = $meta['public_description'] ?? $meta['description'] ?? 'Explore services in the '.Str::lower($label).' category.';
 
+            // The electricity slot is now the global Utility Bills service (ECG is one biller in it).
+            if ($categoryKey === \App\Support\SupersededCategories::UTILITY_BILLS_KEY) {
+                $label = \App\Support\SupersededCategories::UTILITY_BILLS_LABEL;
+                $description = \App\Support\SupersededCategories::UTILITY_BILLS_DESCRIPTION;
+            }
+
             return [
                 'id' => $categoryKey,
                 'value' => $categoryKey,
