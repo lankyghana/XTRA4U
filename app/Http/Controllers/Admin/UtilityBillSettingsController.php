@@ -36,8 +36,18 @@ class UtilityBillSettingsController extends Controller
             $rows[$key] ??= ['key' => $key, 'label' => $key, 'provider_enabled' => false, 'listed' => false];
         }
 
+        // What the PROVIDER has actually paid XTRA4U per biller on completed orders (observed, not a promise).
+        $observed = UtilityBillOrder::query()
+            ->where('fulfillment_status', FulfillmentStatus::COMPLETED)
+            ->whereNotNull('provider_commission_earned')
+            ->selectRaw('biller_key, COUNT(*) as n, SUM(provider_commission_earned) as provider_total, SUM(bill_amount) as bill_total')
+            ->groupBy('biller_key')
+            ->get()
+            ->keyBy('biller_key');
+
         foreach ($rows as $key => &$row) {
             $config = $configs->get($key);
+            $row['economics'] = $this->economics($observed->get($key), $config?->commission_type, $config?->commission_value);
             $row['is_enabled'] = (bool) ($config?->is_enabled);
             $row['commission_type'] = $config?->commission_type ?? 'percentage';
             $row['commission_value'] = $config ? rtrim(rtrim(number_format((float) $config->commission_value, 4, '.', ''), '0'), '.') : '0';
@@ -65,6 +75,41 @@ class UtilityBillSettingsController extends Controller
             ],
             'audits' => UtilityBillConfigAudit::query()->latest('id')->limit(15)->get(),
         ]);
+    }
+
+    /**
+     * Display-only comparison of the configured vendor commission with what the provider has
+     * actually paid XTRA4U on completed orders. Never blocks anything and never implies that
+     * provider commission is guaranteed profit.
+     *
+     * @return array{n:int, observed_pct:?string, observed_avg:?string, warn:bool}
+     */
+    private function economics(mixed $observed, ?string $type, mixed $value): array
+    {
+        if (! $observed || (int) $observed->n === 0) {
+            return ['n' => 0, 'observed_pct' => null, 'observed_avg' => null, 'warn' => false];
+        }
+
+        $n = (int) $observed->n;
+        $providerMinor = \App\Support\Money::minor($observed->provider_total);
+        $billMinor = \App\Support\Money::minor($observed->bill_total);
+
+        $pctHundredths = $billMinor > 0 ? intdiv($providerMinor * 10000, $billMinor) : 0;   // percent x 100
+        $avgMinor = intdiv($providerMinor, $n);
+
+        $vendorPctHundredths = (int) round(((float) $value) * 100);
+        $vendorFixedMinor = \App\Support\Money::minor($value);
+
+        $warn = $type === 'fixed'
+            ? $vendorFixedMinor > $avgMinor
+            : $vendorPctHundredths > $pctHundredths;
+
+        return [
+            'n' => $n,
+            'observed_pct' => number_format($pctHundredths / 100, 2, '.', ''),
+            'observed_avg' => number_format($avgMinor / 100, 2, '.', ''),
+            'warn' => (float) $value > 0 && $warn,
+        ];
     }
 
     public function update(UpdateUtilityBillSettingsRequest $request, UtilityBillConfigService $config, KingFlexyUtilityProvider $provider)

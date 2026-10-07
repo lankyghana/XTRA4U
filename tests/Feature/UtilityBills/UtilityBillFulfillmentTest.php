@@ -208,8 +208,11 @@ class UtilityBillFulfillmentTest extends UtilityBillTestCase
 
         $this->assertFalse($this->svc()->adminRetry($u->id, ['id' => 1], newAttempt: false)['ok']);
 
-        $this->fake([self::BASE.'/utilities/pay' => Http::response($this->payBody('UTIL-DSTV-bbb222'))]);
-        $res = $this->svc()->adminRetry($u->id, ['id' => 1], newAttempt: true);
+        $this->fake([
+            self::BASE.'/utilities/orders/*' => Http::response($this->statusBody('refunded')),
+            self::BASE.'/utilities/pay' => Http::response($this->payBody('UTIL-DSTV-bbb222')),
+        ]);
+        $res = $this->svc()->adminRetry($u->id, ['id' => 1], newAttempt: true, reason: 'Provider refunded; customer still needs it');
         $this->assertTrue($res['ok']);
         $u->refresh();
         $this->assertSame(2, $u->provider_attempt);

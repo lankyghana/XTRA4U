@@ -244,7 +244,8 @@ class UtilityBillVendorAndAdminTest extends UtilityBillTestCase
         $u = $this->sale($vendor);
         $u->forceFill(['fulfillment_status' => FulfillmentStatus::PROVIDER_REFUNDED, 'provider_status' => 'refunded'])->save();
 
-        $this->post(route('admin.utility-bill-sales.new-attempt', $u))->assertSessionHasErrors('confirm');
+        $this->post(route('admin.utility-bill-sales.new-attempt', $u), ['reason' => 'because'])->assertSessionHasErrors('confirm');
+        $this->post(route('admin.utility-bill-sales.new-attempt', $u), ['confirm' => 1])->assertSessionHasErrors('reason');
         $this->assertSame(1, $u->fresh()->provider_attempt);
     }
 

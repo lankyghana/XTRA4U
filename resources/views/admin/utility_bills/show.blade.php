@@ -54,30 +54,65 @@
             </dl>
         </div>
 
+        <div class="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+            <h2 class="text-base font-semibold text-gray-900">Recovery</h2>
+
+            @if ($retryable)
+                <form method="POST" action="{{ route('admin.utility-bill-sales.retry', $sale) }}" class="rounded-lg border border-gray-200 p-4">@csrf
+                    <p class="text-sm font-semibold text-gray-900">Retry the existing attempt <span class="font-normal text-gray-500">&middot; SAME provider reference</span></p>
+                    <p class="text-sm text-gray-600 mt-1">Re-sends request reference <code class="text-xs">{{ $sale->provider_request_reference ?? 'XU-…-A'.$sale->provider_attempt }}</code>. If KiNG FLEXY already has this order it simply returns it, so this <strong>cannot</strong> pay the bill twice. Use this for timeouts, a low provider wallet that has been topped up, or a lost job.</p>
+                    <button class="mt-3 px-4 py-2 bg-brand-violet text-white rounded-lg text-sm font-semibold">Retry this attempt</button>
+                </form>
+            @endif
+
+            @if ($pollable)
+                <form method="POST" action="{{ route('admin.utility-bill-sales.refresh', $sale) }}" class="rounded-lg border border-gray-200 p-4">@csrf
+                    <p class="text-sm font-semibold text-gray-900">Refresh status from the provider</p>
+                    <p class="text-sm text-gray-600 mt-1">Read-only. Asks KiNG FLEXY for the current status of <code class="text-xs">{{ $sale->provider_order_reference }}</code>.</p>
+                    <button class="mt-3 px-4 py-2 bg-gray-100 text-gray-800 rounded-lg text-sm font-semibold">Refresh status</button>
+                </form>
+            @endif
+
+            @if ($paid && $sale->fulfillment_status === FS::PROVIDER_REFUNDED)
+                <form method="POST" action="{{ route('admin.utility-bill-sales.new-attempt', $sale) }}" class="rounded-lg border-2 border-amber-300 bg-amber-50 p-4">@csrf
+                    <p class="text-sm font-semibold text-amber-900">Start a NEW provider attempt <span class="font-normal">&middot; NEW provider reference &middot; can pay the bill a second time</span></p>
+                    <p class="text-sm text-amber-900 mt-1">KiNG FLEXY refunded attempt {{ $sale->provider_attempt }} to <em>our provider wallet</em> (this is <strong>not</strong> a customer refund; the customer's payment stays paid). Starting attempt {{ $sale->provider_attempt + 1 }} creates a new request reference and debits the provider wallet again if it succeeds. XTRA4U first asks the provider live to confirm attempt {{ $sale->provider_attempt }} is still <code>refunded</code>; if it cannot confirm, nothing is created. Attempt {{ $sale->provider_attempt }} stays on record below. Only available after a provider-confirmed refund.</p>
+                    <label class="block text-sm font-medium text-amber-900 mt-3">Reason (recorded in the audit trail)
+                        <input type="text" name="reason" required minlength="5" maxlength="255" class="mt-1 w-full rounded-md border-amber-300 shadow-sm" placeholder="e.g. Provider refunded; customer still needs this bill">
+                    </label>
+                    @error('reason')<p class="text-xs text-red-700 mt-1">{{ $message }}</p>@enderror
+                    <label class="flex items-start gap-2 text-sm text-amber-900 mt-3"><input type="checkbox" name="confirm" value="1" class="mt-1"> I understand this creates a NEW provider payment attempt.</label>
+                    <button class="mt-3 px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-semibold">Start new provider attempt</button>
+                </form>
+            @endif
+
+            @if ($paid && $sale->fulfillment_status === FS::FAILED)
+                <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+                    <p class="font-semibold">Provider status: failed</p>
+                    <p class="mt-1">KiNG FLEXY's documentation does not define <code>failed</code> as final-and-refunded for utility bills (only <code>refunded</code> is documented as a definitive failure). A new provider attempt is therefore <strong>not permitted</strong> from this state. Confirm the outcome and the wallet with KiNG FLEXY support first.</p>
+                </div>
+            @endif
+
+            @if (! $retryable && ! $pollable && ! ($paid && in_array($sale->fulfillment_status, [FS::PROVIDER_REFUNDED, FS::FAILED], true)))
+                <p class="text-sm text-gray-500">No recovery action applies in the current state.</p>
+            @endif
+        </div>
+
         <div class="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 class="text-base font-semibold text-gray-900 mb-3">Recovery</h2>
-            <div class="flex flex-wrap gap-3 items-start">
-                @if ($retryable)
-                    <form method="POST" action="{{ route('admin.utility-bill-sales.retry', $sale) }}">@csrf
-                        <button class="px-4 py-2 bg-brand-violet text-white rounded-lg text-sm font-semibold">Retry submission (same provider reference)</button>
-                    </form>
-                @endif
-                @if ($pollable)
-                    <form method="POST" action="{{ route('admin.utility-bill-sales.refresh', $sale) }}">@csrf
-                        <button class="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg text-sm font-semibold">Refresh status from provider</button>
-                    </form>
-                @endif
-                @if ($paid && $closed)
-                    <form method="POST" action="{{ route('admin.utility-bill-sales.new-attempt', $sale) }}" class="border border-amber-200 bg-amber-50 rounded-lg p-3 max-w-md">@csrf
-                        <p class="text-sm text-amber-900 mb-2">The provider closed attempt {{ $sale->provider_attempt }} ({{ $sale->provider_status }}). Submitting a <strong>new</strong> attempt pays the provider again from your provider wallet. Only do this once you are sure the previous attempt did not deliver the bill.</p>
-                        <label class="flex items-start gap-2 text-sm text-amber-900 mb-2"><input type="checkbox" name="confirm" value="1" class="mt-1"> I confirm a new provider attempt is intended.</label>
-                        <button class="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-semibold">Submit new attempt</button>
-                    </form>
-                @endif
-                @if (! $retryable && ! $pollable && ! ($paid && $closed))
-                    <p class="text-sm text-gray-500">No recovery action applies in the current state.</p>
-                @endif
-            </div>
+            <h2 class="text-base font-semibold text-gray-900 mb-3">Provider attempts</h2>
+            <ol class="space-y-3 text-sm">
+                @foreach ($closedAttempts as $e)
+                    @php $m = $e->meta ?? []; @endphp
+                    <li class="rounded-lg border border-gray-200 p-3">
+                        <p class="font-medium text-gray-900">Attempt {{ $m['attempt'] ?? '?' }} <span class="text-gray-500 font-normal">&middot; closed {{ $e->created_at?->format('d M Y H:i') }}</span></p>
+                        <p class="text-gray-600 break-all">Request reference: {{ $m['request_reference'] ?? '—' }}<br>Provider order reference: {{ $m['provider_order_reference'] ?? '—' }}<br>Provider status: {{ $m['provider_status'] ?? '—' }} {{ ! empty($m['provider_status_reason']) ? '('.$m['provider_status_reason'].')' : '' }}<br>Submitted: {{ $m['submitted_at'] ?? '—' }}<br>New attempt {{ $m['new_attempt'] ?? '?' }} started by {{ $m['started_by'] ?? '—' }}: {{ $m['reason'] ?? '—' }}</p>
+                    </li>
+                @endforeach
+                <li class="rounded-lg border border-brand-violet/30 bg-brand-violet-soft p-3">
+                    <p class="font-medium text-gray-900">Attempt {{ $sale->provider_attempt }} <span class="text-gray-500 font-normal">&middot; current</span></p>
+                    <p class="text-gray-600 break-all">Request reference: {{ $sale->provider_request_reference ?? '—' }}<br>Provider order reference: {{ $sale->provider_order_reference ?? '—' }}<br>Provider status: {{ $sale->provider_status ?? '—' }}</p>
+                </li>
+            </ol>
         </div>
 
         <div class="bg-white rounded-xl border border-gray-200 p-5">

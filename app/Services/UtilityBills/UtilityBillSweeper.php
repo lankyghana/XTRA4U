@@ -3,6 +3,7 @@
 namespace App\Services\UtilityBills;
 
 use App\Models\UtilityBillOrder;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -49,11 +50,20 @@ class UtilityBillSweeper
             ->limit($limit)
             ->pluck('id');
 
+        $dispatched = 0;
+
         foreach ($ids as $id) {
+            // One dispatch per order per ~2 minutes: if workers are down the queue must not fill with
+            // duplicate jobs for the same order (the DB claim would make them harmless, but wasteful).
+            if (! Cache::add('utility_bills.dispatched.'.$id, 1, 120)) {
+                continue;
+            }
+
             $this->fulfillment->dispatchSubmit((int) $id);
+            $dispatched++;
         }
 
-        return $ids->count();
+        return $dispatched;
     }
 
     private function requeueTransientAttention(int $limit): int

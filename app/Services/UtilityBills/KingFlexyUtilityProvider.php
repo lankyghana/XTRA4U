@@ -8,6 +8,7 @@ use App\Services\UtilityBills\Data\LookupResult;
 use App\Services\UtilityBills\Data\PayResult;
 use App\Services\UtilityBills\Data\StatusResult;
 use App\Services\UtilityBills\Exceptions\NotConfigured;
+use App\Services\UtilityBills\Exceptions\ProviderDuplicateWindow;
 use App\Services\UtilityBills\Exceptions\ProviderInsufficientBalance;
 use App\Services\UtilityBills\Exceptions\ProviderMalformedResponse;
 use App\Services\UtilityBills\Exceptions\ProviderNotFound;
@@ -216,6 +217,7 @@ class KingFlexyUtilityProvider
         return match (true) {
             in_array($status, [401, 403], true) => new ProviderUnauthorized('Provider rejected credentials.', $status),
             $status === 404 => new ProviderNotFound('Not found on '.$endpoint.'.', $status),
+            $status === 409 => new ProviderDuplicateWindow('Provider duplicate-payment window on '.$endpoint.'.', $status),
             $status === 429 => new ProviderRateLimited('Provider rate limit hit on '.$endpoint.'.', $status),
             $status === 503 => new ProviderServiceDisabled('Provider reports the service/biller disabled.', $status),
             $status === 400 && $message !== null && preg_match('/insufficient|not enough|low balance|wallet/i', $message) === 1

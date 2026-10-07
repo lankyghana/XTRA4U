@@ -10,7 +10,12 @@ class UtilityBillEvent extends Model
 {
     public const UPDATED_AT = null;
 
-    protected $fillable = ['utility_bill_order_id', 'kind', 'from_status', 'to_status', 'http_status', 'detail', 'actor'];
+    /** A provider attempt was closed so a NEW attempt could start; `meta` holds the closed attempt. */
+    public const KIND_ATTEMPT_CLOSED = 'attempt_closed';
+
+    protected $fillable = ['utility_bill_order_id', 'kind', 'from_status', 'to_status', 'http_status', 'detail', 'meta', 'actor'];
+
+    protected $casts = ['meta' => 'array'];
 
     public function order(): BelongsTo
     {

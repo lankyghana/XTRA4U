@@ -5,10 +5,12 @@ namespace App\Services\UtilityBills;
 use App\Jobs\SubmitUtilityBillPayment;
 use App\Models\AdminNotification;
 use App\Models\Order;
+use App\Models\UtilityBillEvent;
 use App\Models\UtilityBillOrder;
 use App\Services\SmsService;
 use App\Services\UtilityBills\Data\PayResult;
 use App\Services\UtilityBills\Data\StatusResult;
+use App\Services\UtilityBills\Exceptions\ProviderDuplicateWindow;
 use App\Services\UtilityBills\Exceptions\ProviderInsufficientBalance;
 use App\Services\UtilityBills\Exceptions\ProviderMalformedResponse;
 use App\Services\UtilityBills\Exceptions\ProviderNotFound;
@@ -243,10 +245,17 @@ class UtilityBillFulfillmentService
         // created, or creates it once.
         $transient = $e->isAmbiguous()
             || $e instanceof ProviderRateLimited
+            || $e instanceof ProviderDuplicateWindow
             || $e instanceof ProviderMalformedResponse;
 
         if ($transient) {
-            $delay = $e instanceof ProviderRateLimited ? 30 : $this->submitBackoff($claim['id']);
+            // 409 = the provider's 30 s duplicate window (a new reference would not bypass it):
+            // nothing was charged, wait it out and retry with the SAME reference.
+            $delay = match (true) {
+                $e instanceof ProviderRateLimited => 30,
+                $e instanceof ProviderDuplicateWindow => 40,
+                default => $this->submitBackoff($claim['id']),
+            };
 
             $this->finishClaim($claim, [
                 'fulfillment_status' => FulfillmentStatus::QUEUED,
@@ -479,11 +488,25 @@ class UtilityBillFulfillmentService
      * @param  array{id:?int,email:?string}  $actor
      * @return array{ok:bool,message:string}
      */
-    public function adminRetry(int $id, array $actor, bool $newAttempt = false): array
+    public function adminRetry(int $id, array $actor, bool $newAttempt = false, ?string $reason = null): array
     {
         $dispatch = false;
 
-        $result = DB::transaction(function () use ($id, $actor, $newAttempt, &$dispatch) {
+        // A NEW provider reference is the one action that can cause a second bill payment, so it is
+        // gated BEFORE anything is locked: explicit reason, and a LIVE confirmation from the provider
+        // that the previous attempt is closed (refunded) and can never complete.
+        if ($newAttempt) {
+            $reason = trim((string) $reason);
+            if (mb_strlen($reason) < 5) {
+                return ['ok' => false, 'message' => 'A reason (at least 5 characters) is required to start a new provider attempt.'];
+            }
+
+            if (($refusal = $this->confirmAttemptClosedWithProvider($id)) !== null) {
+                return ['ok' => false, 'message' => $refusal];
+            }
+        }
+
+        $result = DB::transaction(function () use ($id, $actor, $newAttempt, $reason, &$dispatch) {
             $u = UtilityBillOrder::query()->whereKey($id)->lockForUpdate()->first();
             if (! $u) {
                 return ['ok' => false, 'message' => 'Order not found.'];
@@ -532,14 +555,37 @@ class UtilityBillFulfillmentService
                     return ['ok' => true, 'message' => 'Re-queued with the same provider reference.'];
 
                 case FulfillmentStatus::FAILED:
+                    // The provider docs list "failed" in the status flow but do not define it for utility
+                    // orders (only "refunded" is documented as the definitive failure that refunds the
+                    // wallet). Until KiNG FLEXY confirms it is terminal and unbilled, no new reference.
+                    return ['ok' => false, 'message' => 'The provider reported "failed", which its documentation does not define as final-and-refunded for utility bills. Confirm the outcome with KiNG FLEXY support before any further payment; a new provider attempt is not permitted from this state.'];
+
                 case FulfillmentStatus::PROVIDER_REFUNDED:
                     if (! $newAttempt) {
-                        return ['ok' => false, 'message' => 'The provider closed this attempt. A NEW provider attempt must be confirmed explicitly.'];
+                        return ['ok' => false, 'message' => 'The provider refunded this attempt. Retry cannot reuse it. If the customer still needs this bill, start a NEW provider attempt (new reference), which requires a reason and explicit confirmation.'];
+                    }
+                    if ($u->provider_status !== 'refunded' || $u->provider_order_reference === null) {
+                        return ['ok' => false, 'message' => 'The previous attempt is not confirmed as refunded by the provider.'];
                     }
                     $from = $u->fulfillment_status;
                     $oldRequest = $u->provider_request_reference;
                     $oldOrder = $u->provider_order_reference;
                     $attempt = $u->provider_attempt + 1;
+                    // Preserve the closed attempt as a structured, append-only record BEFORE the columns are reused.
+                    $this->event($u, UtilityBillEvent::KIND_ATTEMPT_CLOSED, $from, null, null,
+                        'attempt '.$u->provider_attempt.' closed (refunded); new attempt '.$attempt, $who, [
+                            'attempt' => $u->provider_attempt,
+                            'request_reference' => $oldRequest,
+                            'provider_order_reference' => $oldOrder,
+                            'provider_status' => $u->provider_status,
+                            'provider_status_reason' => $u->provider_status_reason,
+                            'submitted_at' => $u->submitted_at?->toIso8601String(),
+                            'closed_at' => now()->toIso8601String(),
+                            'submit_attempts' => $u->submit_attempts,
+                            'new_attempt' => $attempt,
+                            'started_by' => $who,
+                            'reason' => $reason,
+                        ]);
                     $u->forceFill([
                         'provider_attempt' => $attempt,
                         'provider_request_reference' => $this->requestReference($u, $attempt),
@@ -570,6 +616,39 @@ class UtilityBillFulfillmentService
         }
 
         return $result;
+    }
+
+    /**
+     * Ask the PROVIDER, now, whether the previous attempt is closed. Returns a refusal message, or null
+     * when it is authoritatively `refunded` (the documented definitive failure; the wallet is refunded).
+     * Timeouts, unknown statuses and anything else refuse: they are never grounds for a new reference.
+     */
+    private function confirmAttemptClosedWithProvider(int $id): ?string
+    {
+        $u = UtilityBillOrder::query()->find($id);
+
+        if (! $u) {
+            return 'Order not found.';
+        }
+
+        if ($u->fulfillment_status !== FulfillmentStatus::PROVIDER_REFUNDED || $u->provider_order_reference === null) {
+            return 'A new provider attempt is only possible after the provider has confirmed the previous attempt as refunded.';
+        }
+
+        try {
+            $live = $this->provider->status($u->provider_order_reference);
+        } catch (UtilityProviderException $e) {
+            return 'Could not confirm the previous attempt with the provider ('.$e->errorCode.'). Nothing was changed; try again shortly. A new reference is never created on an unknown result.';
+        }
+
+        if ($live->status !== 'refunded') {
+            // Record what the provider really says (e.g. it moved to completed), but never start N+1.
+            $this->applyProviderStatus($u->id, $live);
+
+            return 'The provider no longer reports this attempt as refunded (it says "'.($live->status ?? 'unknown').'"). No new attempt was started.';
+        }
+
+        return null;
     }
 
     // ------------------------------------------------------------------
@@ -664,7 +743,7 @@ class UtilityBillFulfillmentService
         }
     }
 
-    private function event(UtilityBillOrder $u, string $kind, ?string $from, ?string $to, ?int $http, ?string $detail, ?string $actor): void
+    private function event(UtilityBillOrder $u, string $kind, ?string $from, ?string $to, ?int $http, ?string $detail, ?string $actor, ?array $meta = null): void
     {
         $u->events()->create([
             'kind' => $kind,
@@ -672,6 +751,7 @@ class UtilityBillFulfillmentService
             'to_status' => $to,
             'http_status' => $http,
             'detail' => $detail !== null ? Str::limit($detail, 250, '') : null,
+            'meta' => $meta,
             'actor' => $actor,
         ]);
     }

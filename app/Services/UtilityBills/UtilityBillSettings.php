@@ -20,7 +20,14 @@ class UtilityBillSettings
     /** Off until an admin deliberately enables it. */
     public static function enabled(): bool
     {
-        return (string) Setting::get(self::KEY_ENABLED, '0') === '1';
+        // Fail closed: only an explicit stored '1' opens the service. A missing key, any other
+        // value, or an unreadable settings/cache store all mean "off" (never an error that could
+        // be mistaken for "on").
+        try {
+            return (string) Setting::get(self::KEY_ENABLED, '0') === '1';
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     public static function maintenanceMessage(): string

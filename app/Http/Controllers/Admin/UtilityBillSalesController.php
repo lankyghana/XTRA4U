@@ -83,7 +83,11 @@ class UtilityBillSalesController extends Controller
     {
         $order->load(['order', 'vendor:id,name,vendor_code', 'events']);
 
-        return view('admin.utility_bills.show', ['sale' => $order]);
+        return view('admin.utility_bills.show', [
+            'sale' => $order,
+            // Closed provider attempts (append-only), oldest first.
+            'closedAttempts' => $order->events->where('kind', \App\Models\UtilityBillEvent::KIND_ATTEMPT_CLOSED)->values(),
+        ]);
     }
 
     public function retry(UtilityBillOrder $order, UtilityBillFulfillmentService $fulfillment)
@@ -95,9 +99,12 @@ class UtilityBillSalesController extends Controller
 
     public function newAttempt(Request $request, UtilityBillOrder $order, UtilityBillFulfillmentService $fulfillment)
     {
-        $request->validate(['confirm' => ['accepted']]);
+        $data = $request->validate([
+            'confirm' => ['accepted'],
+            'reason' => ['required', 'string', 'min:5', 'max:255'],
+        ]);
 
-        $result = $fulfillment->adminRetry($order->id, $this->actor(), newAttempt: true);
+        $result = $fulfillment->adminRetry($order->id, $this->actor(), newAttempt: true, reason: $data['reason']);
 
         return back()->with($result['ok'] ? 'success' : 'error', $result['message']);
     }

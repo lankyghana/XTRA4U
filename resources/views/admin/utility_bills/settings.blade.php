@@ -55,7 +55,7 @@
 
             <div class="bg-white rounded-xl border border-gray-200 p-5">
                 <h2 class="text-base font-semibold text-gray-900 mb-1">Billers &amp; vendor commission</h2>
-                <p class="text-sm text-gray-500 mb-4">A biller is sold only when the provider reports it enabled <em>and</em> you enable it here. Commission is what a storefront vendor earns on a <strong>completed</strong> bill, calculated on the bill face value. It is frozen on each order at creation; changes affect new orders only. This is separate from any commission the provider pays XTRA4U.</p>
+                <p class="text-sm text-gray-500 mb-4">A biller is sold only when the provider reports it enabled <em>and</em> you enable it here. Commission is what a storefront vendor earns on a <strong>completed</strong> bill, calculated on the bill face value. It is frozen on each order at creation; changes affect new orders only. This is separate from any commission the provider pays XTRA4U, which is a variable share of KiNG FLEXY's own commission, paid only when a bill completes: <strong>it is not guaranteed profit</strong>, and you can configure vendor commission above it (nothing blocks that; it is your business decision).</p>
 
                 <div class="space-y-4">
                     @forelse ($rows as $row)
@@ -70,6 +70,17 @@
                             <label class="inline-flex items-center gap-2 text-sm text-gray-800 mb-3">
                                 <input type="checkbox" name="billers[{{ $k }}][is_enabled]" value="1" @checked(old("billers.$k.is_enabled", $row['is_enabled'])) class="rounded border-gray-300"> Enabled by XTRA4U
                             </label>
+                            @php $eco = $row['economics'] ?? ['n' => 0, 'warn' => false]; @endphp
+                            <div class="mb-3 rounded-md border px-3 py-2 text-xs {{ $eco['warn'] ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-gray-200 bg-gray-50 text-gray-600' }}">
+                                @if ($eco['n'] === 0)
+                                    Provider economics unknown: no completed {{ $row['label'] }} orders with a provider commission yet. Vendor commission is paid from XTRA4U's own funds and is not tied to what KiNG FLEXY pays XTRA4U.
+                                @else
+                                    Observed provider commission to XTRA4U: about <strong>{{ $eco['observed_pct'] }}%</strong> of bill value (avg GHS {{ $eco['observed_avg'] }} per order, {{ $eco['n'] }} completed {{ \Illuminate\Support\Str::plural('order', $eco['n']) }}). This is an observation, not a guarantee.
+                                    @if ($eco['warn'])
+                                        <strong class="block mt-1">Warning: the configured vendor commission is higher than this, so each sale could cost XTRA4U more than the provider pays it.</strong>
+                                    @endif
+                                @endif
+                            </div>
                             <div class="grid gap-3 sm:grid-cols-2">
                                 <label class="block text-sm font-medium text-gray-700">Vendor commission type
                                     <select name="billers[{{ $k }}][commission_type]" class="mt-1 w-full rounded-md border-gray-300 shadow-sm">
