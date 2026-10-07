@@ -393,6 +393,11 @@ Route::middleware(['vendor.approved'])
             ->name('ussd.subscription.status');
 
         // Vendor Quick Buy (dashboard shortcut)
+        // Utility Bill sales (read-only; the service and commission are admin-owned).
+        Route::get('utility-bills', [\App\Http\Controllers\Vendor\UtilityBillSalesController::class, 'index'])->name('utility-bills.index');
+        Route::get('utility-bills/{publicRef}', [\App\Http\Controllers\Vendor\UtilityBillSalesController::class, 'show'])
+            ->where('publicRef', '[A-Za-z0-9]{6,24}')->name('utility-bills.show');
+
         Route::get('quick-buy', [VendorQuickBuyController::class, 'show'])->name('quick-buy.show');
         Route::post('quick-buy', [VendorQuickBuyController::class, 'store'])->name('quick-buy.store');
 
@@ -513,6 +518,18 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
     Route::post('withdrawals/{withdrawal}/cancel', [AdminWithdrawalController::class, 'cancel'])->name('withdrawals.cancel');
 
     Route::get('reports', [\App\Http\Controllers\AdminReportsController::class, 'index'])->name('reports.index');
+
+    // Utility Bills (global platform service): configuration + sales/recovery.
+    Route::get('settings/utility-bills', [\App\Http\Controllers\Admin\UtilityBillSettingsController::class, 'index'])->name('utility-bills.settings');
+    Route::put('settings/utility-bills', [\App\Http\Controllers\Admin\UtilityBillSettingsController::class, 'update'])->name('utility-bills.settings.update');
+    Route::get('utility-bill-sales', [\App\Http\Controllers\Admin\UtilityBillSalesController::class, 'index'])->name('utility-bill-sales.index');
+    Route::get('utility-bill-sales/{order}', [\App\Http\Controllers\Admin\UtilityBillSalesController::class, 'show'])->whereNumber('order')->name('utility-bill-sales.show');
+    Route::post('utility-bill-sales/{order}/retry', [\App\Http\Controllers\Admin\UtilityBillSalesController::class, 'retry'])
+        ->whereNumber('order')->middleware('throttle:30,1,utility-admin-retry')->name('utility-bill-sales.retry');
+    Route::post('utility-bill-sales/{order}/new-attempt', [\App\Http\Controllers\Admin\UtilityBillSalesController::class, 'newAttempt'])
+        ->whereNumber('order')->middleware('throttle:10,1,utility-admin-new-attempt')->name('utility-bill-sales.new-attempt');
+    Route::post('utility-bill-sales/{order}/refresh', [\App\Http\Controllers\Admin\UtilityBillSalesController::class, 'refresh'])
+        ->whereNumber('order')->middleware('throttle:30,1,utility-admin-refresh')->name('utility-bill-sales.refresh');
 
     // High-volume recipient number audit log
     Route::get('recipient-numbers', [\App\Http\Controllers\AdminRecipientNumberController::class, 'index'])->name('recipient-numbers.index');

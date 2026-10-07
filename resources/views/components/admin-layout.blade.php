@@ -44,6 +44,8 @@
                     'cms-navigation' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" />',
                     'cms-settings' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />',
                     'support-replies' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />',
+                    'utility-bills' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />',
+                    'utility-bills-settings' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />',
                     'support' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8M8 14h5m-9 6l3-3h11a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v14z" />',
                     default => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />',
                 };
@@ -83,6 +85,8 @@
         ],
         'Services' => [
             ['key' => 'result-checkers', 'label' => 'Result Checkers', 'href' => route('admin.result-checkers.dashboard'), 'matches' => ['admin.result-checkers.*']],
+            ['key' => 'utility-bill-sales', 'label' => 'Utility Bill Sales', 'href' => route('admin.utility-bill-sales.index'), 'matches' => ['admin.utility-bill-sales.*']],
+            ['key' => 'utility-bills-settings', 'label' => 'Utility Bills Settings', 'href' => route('admin.utility-bills.settings'), 'matches' => ['admin.utility-bills.*']],
             ['key' => 'ussd-plans', 'label' => 'USSD Plans', 'href' => route('admin.ussd-plans.index'), 'matches' => ['admin.ussd-plans.*']],
             ['key' => 'ussd-events', 'label' => 'USSD Audit Log', 'href' => route('admin.ussd-events.index'), 'matches' => ['admin.ussd-events.*']],
         ],
