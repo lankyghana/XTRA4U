@@ -521,6 +521,8 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
 
     // Utility Bills (global platform service): configuration + sales/recovery.
     Route::get('settings/utility-bills', [\App\Http\Controllers\Admin\UtilityBillSettingsController::class, 'index'])->name('utility-bills.settings');
+    Route::put('settings/utility-bills/credentials', [\App\Http\Controllers\Admin\UtilityBillSettingsController::class, 'updateCredentials'])
+        ->middleware('throttle:10,1')->name('utility-bills.settings.credentials');
     Route::put('settings/utility-bills', [\App\Http\Controllers\Admin\UtilityBillSettingsController::class, 'update'])->name('utility-bills.settings.update');
     Route::get('utility-bill-sales', [\App\Http\Controllers\Admin\UtilityBillSalesController::class, 'index'])->name('utility-bill-sales.index');
     Route::get('utility-bill-sales/{order}', [\App\Http\Controllers\Admin\UtilityBillSalesController::class, 'show'])->whereNumber('order')->name('utility-bill-sales.show');

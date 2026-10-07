@@ -52,7 +52,7 @@ class KingFlexyUtilityProvider
 
     public function isConfigured(): bool
     {
-        $key = (string) config('services.kingflexy_utilities.api_key');
+        $key = UtilityBillCredentials::apiKey();
 
         // A normal data key (kf_live_...) is rejected by the provider on every
         // utility endpoint; refuse to use anything that is not a Commission key.
@@ -195,7 +195,7 @@ class KingFlexyUtilityProvider
     private function client(): PendingRequest
     {
         return Http::baseUrl(rtrim((string) config('services.kingflexy_utilities.base_url'), '/'))
-            ->withHeaders(['Authorization' => (string) config('services.kingflexy_utilities.api_key')])
+            ->withHeaders(['Authorization' => UtilityBillCredentials::apiKey()])
             ->acceptJson()
             ->asJson()
             ->connectTimeout((int) config('services.kingflexy_utilities.connect_timeout', 5))

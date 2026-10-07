@@ -434,7 +434,7 @@ The key must be a **Commission Services key** (`kf_cs_live_…`); a normal data 
 
 **Migrations (forward-only).** `2026_10_07_000001` makes `orders.vendor_id` nullable (metadata-only; existing rows and the foreign key are untouched) and its `down()` is intentionally a no-op; `2026_10_07_000002` creates the four tables above. Do **not** use `php artisan migrate:rollback` as production recovery: it rolls back every migration in the last batch, including unrelated ones. To disable the feature, switch the service off in the admin settings (or empty the API key); to recover a specific order use the admin recovery actions. Take a database backup before migrating, as `scripts/deploy.sh` already does.
 
-**Operational dependencies.** A queue worker (`SubmitUtilityBillPayment`), the scheduler (`utility-bills:sync`), a funded KiNG FLEXY **provider wallet**, and `KINGFLEXY_UTILITIES_API_KEY`. Without the key, the service is unavailable (fails safe). The Commission Services key may not be able to read the wallet balance; none of this relies on it.
+**Operational dependencies.** A queue worker (`SubmitUtilityBillPayment`), the scheduler (`utility-bills:sync`), a funded KiNG FLEXY **provider wallet**, and a provider key (set in Admin → Settings → Utility Bills, stored encrypted and write-only, or `KINGFLEXY_UTILITIES_API_KEY` in `.env`; the admin-saved key wins). Without the key, the service is unavailable (fails safe). The Commission Services key may not be able to read the wallet balance; none of this relies on it.
 
 ---
 
@@ -737,7 +737,7 @@ Set `CHECKOUT_COMING_SOON=false` in `.env` to enable `/checkout` if it is set to
 | Payment health (display) | `PAYMENT_HEALTH_*` thresholds |
 | SMS | `BULKCLIX_API_KEY`, `BULKCLIX_SENDER_ID`, `BULKCLIX_BASE_URL` |
 | Fulfillment | `GIGSHUB_BASE_URL`, `GIGSHUB_API_KEY`, `GIGSHUB_TIMEOUT`, plus XpresPortal / SKDataPlug / DatafyHub keys in `config/services.php`; `EXTERNAL_FULFILLMENT_AUTO_COMPLETE`, `EXTERNAL_FULFILLMENT_POLLING_ENABLED` |
-| Utility Bills | `KINGFLEXY_UTILITIES_API_KEY` (Commission Services key `kf_cs_live_…`; server-side only; empty = service unavailable), `KINGFLEXY_UTILITIES_BASE_URL` (default `https://api.kingflexygh.com/api/v2`), `KINGFLEXY_UTILITIES_CONNECT_TIMEOUT` (5), `KINGFLEXY_UTILITIES_TIMEOUT` (20); optional tunables in `config/utility_bills.php`: `UTILITY_BILLS_CATALOG_TTL`, `…_CATALOG_STALE_TTL`, `…_LOOKUP_CACHE_TTL`, `…_LOOKUP_TOKEN_TTL`, `…_LOOKUP_PER_MINUTE`, `…_PAY_PER_MINUTE`, `…_STATUS_PER_MINUTE`, `…_BILLERS_PER_MINUTE`, `…_CLAIM_STALE_SECONDS`, `…_MAX_SUBMIT_ATTEMPTS`, `…_ATTENTION_AFTER_MINUTES` |
+| Utility Bills | `KINGFLEXY_UTILITIES_API_KEY` (Commission Services key `kf_cs_live_…`; fallback when no key is saved in the admin UI; empty = service unavailable), `KINGFLEXY_UTILITIES_BASE_URL` (default `https://api.kingflexygh.com/api/v2`), `KINGFLEXY_UTILITIES_CONNECT_TIMEOUT` (5), `KINGFLEXY_UTILITIES_TIMEOUT` (20); optional tunables in `config/utility_bills.php`: `UTILITY_BILLS_CATALOG_TTL`, `…_CATALOG_STALE_TTL`, `…_LOOKUP_CACHE_TTL`, `…_LOOKUP_TOKEN_TTL`, `…_LOOKUP_PER_MINUTE`, `…_PAY_PER_MINUTE`, `…_STATUS_PER_MINUTE`, `…_BILLERS_PER_MINUTE`, `…_CLAIM_STALE_SECONDS`, `…_MAX_SUBMIT_ATTEMPTS`, `…_ATTENTION_AFTER_MINUTES` |
 | Support | `SUPPORT_REOPEN_DAYS`, `SUPPORT_DISK` |
 | CMS | `CMS_MEDIA_MAX_KB` |
 | Audit | `RECIPIENT_NUMBER_LOGGING_ENABLED`, `RECIPIENT_NUMBER_LOGGING_QUEUE` |

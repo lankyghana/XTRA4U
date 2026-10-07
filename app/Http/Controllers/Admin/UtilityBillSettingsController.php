@@ -17,8 +17,8 @@ use Illuminate\Support\Facades\Cache;
 
 /**
  * Admin-owned Utility Bills configuration: the global switch, per-biller
- * enablement and vendor commission. Provider credentials are never shown or
- * editable here (they live in server env/config only).
+ * enablement and vendor commission, plus the provider API key (write-only: stored encrypted,
+ * never displayed; the page shows only its source and last four characters).
  */
 class UtilityBillSettingsController extends Controller
 {
@@ -58,6 +58,7 @@ class UtilityBillSettingsController extends Controller
         unset($row);
 
         return view('admin.utility_bills.settings', [
+            'credentials' => \App\Services\UtilityBills\UtilityBillCredentials::describe(),
             'enabled' => UtilityBillSettings::enabled(),
             'message' => UtilityBillSettings::rawMaintenanceMessage(),
             'rows' => array_values($rows),
@@ -110,6 +111,32 @@ class UtilityBillSettingsController extends Controller
             'observed_avg' => number_format($avgMinor / 100, 2, '.', ''),
             'warn' => (float) $value > 0 && $warn,
         ];
+    }
+
+    public function updateCredentials(\Illuminate\Http\Request $request)
+    {
+        $user = \App\Support\AdminAccess::resolve();
+        $actor = ['id' => $user?->id, 'email' => $user?->email, 'ip' => $request->ip()];
+
+        if ($request->input('action') === 'clear') {
+            \App\Services\UtilityBills\UtilityBillCredentials::save(null, $actor);
+            Cache::forget('utility_bills.catalog');
+
+            return redirect()->route('admin.utility-bills.settings')
+                ->with('success', 'Saved key removed. The server .env key (if any) is used again.');
+        }
+
+        $data = $request->validate(['api_key' => ['required', 'string', 'max:255']]);
+        $key = trim($data['api_key']);
+
+        if (! \App\Services\UtilityBills\UtilityBillCredentials::isValidFormat($key)) {
+            return back()->withErrors(['api_key' => 'Enter a KiNG FLEXY Commission key (it starts with kf_cs_). Normal data keys do not work for utilities.']);
+        }
+
+        \App\Services\UtilityBills\UtilityBillCredentials::save($key, $actor);
+        Cache::forget('utility_bills.catalog');
+
+        return redirect()->route('admin.utility-bills.settings')->with('success', 'API key saved (encrypted).');
     }
 
     public function update(UpdateUtilityBillSettingsRequest $request, UtilityBillConfigService $config, KingFlexyUtilityProvider $provider)

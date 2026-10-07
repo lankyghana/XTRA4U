@@ -154,7 +154,7 @@ class UtilityBillVendorAndAdminTest extends UtilityBillTestCase
         $this->assertSame('1.2500', $audit->new_values['commission_value']);
         $this->assertSame(1, UtilityBillConfigAudit::count());   // unchanged rows are not audited
 
-        $this->get(route('admin.utility-bills.settings'))->assertOk()->assertSee('ECG Prepaid')->assertDontSee('kf_cs_');
+        $this->get(route('admin.utility-bills.settings'))->assertOk()->assertSee('ECG Prepaid')->assertDontSee('kf_cs_live_');
     }
 
     public function test_admin_validation_rejects_bad_commission_and_unknown_billers(): void

@@ -37,6 +37,37 @@
             @endif
         </div>
 
+        {{-- Provider API key: write-only. The key itself is never rendered. --}}
+        <div class="bg-white rounded-xl border border-gray-200 p-5">
+            <h2 class="text-base font-semibold text-gray-900 mb-1">Provider API key</h2>
+            <p class="text-sm text-gray-500 mb-3">
+                Current key:
+                \if ($credentials['source'] === 'none')
+                    <strong>not set</strong>
+                \else
+                    <strong>&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;{{ $credentials['last4'] }}</strong>
+                    ({{ $credentials['source'] === 'admin' ? 'saved here, encrypted' : 'from the server .env file' }})
+                \endif
+                . A key saved here overrides the .env key. It is never shown again after saving.
+            </p>
+            <form method="POST" action="{{ route('admin.utility-bills.settings.credentials') }}" class="flex flex-wrap items-end gap-3" autocomplete="off">
+                \csrf
+                \method('PUT')
+                <label class="flex-1 min-w-[16rem] text-sm font-medium text-gray-700">New Commission key (kf_cs_&hellip;)
+                    <input type="password" name="api_key" autocomplete="new-password" maxlength="255" class="mt-1 w-full rounded-md border-gray-300 shadow-sm" placeholder="Paste the key to replace it">
+                </label>
+                <button type="submit" class="inline-flex items-center px-4 py-2 bg-brand-violet text-white rounded-lg text-sm font-semibold hover:bg-brand-violet-deep">Save key</button>
+            </form>
+            \if ($credentials['source'] === 'admin')
+                <form method="POST" action="{{ route('admin.utility-bills.settings.credentials') }}" class="mt-3" onsubmit="return confirm('Remove the saved key?');">
+                    \csrf
+                    \method('PUT')
+                    <input type="hidden" name="action" value="clear">
+                    <button type="submit" class="text-sm text-red-700 underline">Remove saved key (use .env again)</button>
+                </form>
+            \endif
+        </div>
+
         <form method="POST" action="{{ route('admin.utility-bills.settings.update') }}" class="space-y-6">
             @csrf
             @method('PUT')
@@ -110,7 +141,7 @@
                     <li class="py-2">
                         <span class="text-gray-500">{{ $a->created_at?->format('d M Y H:i') }}</span> &middot;
                         <span class="font-medium">{{ $a->admin_email ?? 'admin #'.$a->admin_id }}</span> &middot;
-                        {{ $a->scope === 'global' ? 'Service' : $a->biller_key }}:
+                        {{ $a->scope === 'global' ? 'Service' : ($a->scope === 'credentials' ? 'API key' : $a->biller_key) }}:
                         <code class="text-xs">{{ json_encode($a->old_values) }}</code> &rarr; <code class="text-xs">{{ json_encode($a->new_values) }}</code>
                     </li>
                 @empty
