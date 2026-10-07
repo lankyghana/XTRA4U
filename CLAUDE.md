@@ -120,6 +120,9 @@ Not a vendor product. Admin-owned config/commission; customer pays XTRA4U; KiNG 
 - **Never call `POST /utilities/pay` unless the envelope order is paid AND `allowsFulfillment()`** (checked under a row lock in `UtilityBillFulfillmentService::claim`).
 - **One provider request reference per attempt, persisted before the call, reused on every retry.** Only an explicit admin "new attempt" after a provider-confirmed failed/refunded mints attempt N+1. `provider_request_reference` (ours) ≠ `provider_order_reference` (provider's; used for status).
 - **Vendor commission** is credited only by `UtilityBillCommissionService::settle` (row lock + wallet_ledgers row + unique ledger id), only on provider `completed`, from terms frozen at order creation. Provider commission fields are XTRA4U's income, never the vendor's.
+- **New provider reference (attempt N+1) only after a LIVE-confirmed provider `refunded`** (never `failed`, never on timeout/429/5xx/409/malformed/stale claim) with a reason + explicit admin confirmation; closed attempts are kept as `attempt_closed` events (meta).
+- **Admin auth is `App\Support\AdminAccess` (fail closed).** Never write `$user->role ?? 'admin'`; absent role is not admin.
+- Platform (vendor-less) orders must never be served by sequential-id pages or public phone/id lookups.
 - Vendor attribution = route-bound storefront vendor, frozen at creation; never read from the request body. Lookup results live server-side under a session+storefront-bound token.
 - Scheduling lives in `routes/console.php` (NOT `app/Console/Kernel.php`, which Laravel 12 does not use): `utility-bills:sync` every minute.
 - Tests: `tests/Feature/UtilityBills/*` (`UtilityBillTestCase` helpers). HTTP is always faked; never call the live API from tests.
