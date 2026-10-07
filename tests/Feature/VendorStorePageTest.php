@@ -30,6 +30,16 @@ class VendorStorePageTest extends TestCase
         $response->assertSee('Verified Vendor');
     }
 
+    public function test_category_selector_shows_utility_bills_instead_of_ecg(): void
+    {
+        $vendor = Vendor::factory()->create(['vendor_code' => 'UTILBILL01', 'is_approved' => true]);
+
+        $this->get(route('storefront.vendor', ['vendor' => $vendor->vendor_code]))
+            ->assertOk()
+            ->assertSee('Utility Bills')
+            ->assertDontSee('"label":"ECG"', false);
+    }
+
     public function test_unapproved_vendor_does_not_show_the_verified_badge(): void
     {
         $vendor = Vendor::factory()->create(['is_approved' => false]);

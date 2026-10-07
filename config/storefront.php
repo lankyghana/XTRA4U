@@ -21,6 +21,10 @@ return [
             'label' => 'ECG',
             'icon' => 'bolt',
             'description' => 'Pay electricity tokens and prepaid bills.',
+            // Customer-facing wording (homepage card, storefront category
+            // selector). `label`/`description` stay ECG for vendor tools.
+            'public_label' => 'Utility Bills',
+            'public_description' => 'Pay electricity, water, and other utility bills.',
         ],
         'shop' => [
             'label' => 'Shop Online',

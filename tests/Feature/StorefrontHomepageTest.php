@@ -43,14 +43,21 @@ class StorefrontHomepageTest extends TestCase
 
         config(['storefront.categories' => [
             'data' => ['label' => 'Data Bundles', 'icon' => 'signal', 'description' => 'Buy data.'],
-            'ecg' => ['label' => 'ECG', 'icon' => 'bolt', 'description' => 'Pay for power.'],
+            'ecg' => [
+                'label' => 'ECG', 'icon' => 'bolt', 'description' => 'Pay for power.',
+                'public_label' => 'Utility Bills',
+                'public_description' => 'Pay electricity, water, and other utility bills.',
+            ],
         ]]);
 
         $response = $this->get('/');
 
         $response->assertOk();
         $response->assertSee('Data Bundles');
-        $response->assertSee('Pay for power.');
+        // The public ECG card is presented as "Utility Bills" (display copy only).
+        $response->assertSee('Utility Bills');
+        $response->assertSee('Pay electricity, water, and other utility bills.');
+        $response->assertDontSee('Pay for power.');
         // A category that is not configured must not appear.
         $response->assertDontSee('AFA Registration');
     }
