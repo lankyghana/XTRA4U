@@ -181,16 +181,19 @@ class CheckoutController extends Controller
     {
         $order = Order::with(['service', 'vendor', 'ownerVendor', 'resellerVendor'])->findOrFail($orderId);
 
-        // Utility Bill payments have their own status/receipt page (opaque token URL).
-        if ($utility = $order->utilityBillOrder()->first()) {
-            return redirect($utility->statusUrl());
-        }
+        // Utility Bill payments have their own status/receipt page behind an opaque token.
+        // This URL is keyed by a sequential order id, so it must never reveal or redirect
+        // to that token (the gateway callback sends the customer there directly).
+        abort_if($order->utilityBillOrder()->exists(), 404);
 
         return view('checkout.success', compact('order'));
     }
 
     public function receipt(Order $order)
     {
+        // Same reason as success(): sequential id, platform orders are never served here.
+        abort_if($order->utilityBillOrder()->exists(), 404);
+
         $order->loadMissing(['service', 'vendor', 'ownerVendor', 'resellerVendor']);
 
         $pdf = Pdf::loadView('checkout.receipt', [

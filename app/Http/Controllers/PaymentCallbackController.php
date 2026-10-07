@@ -46,7 +46,7 @@ class PaymentCallbackController extends Controller
                 'order_id' => $order->id,
             ]);
 
-            return redirect()->route('checkout.success', ['order' => $order->id]);
+            return $this->successRedirect($order);
         }
 
         // Always verify against the gateway that actually created this order —
@@ -106,7 +106,20 @@ class PaymentCallbackController extends Controller
         // Complete order flows (wallet, notifications, transactions)
         $this->paymentService->completeOrder($order);
 
-        return redirect()->route('checkout.success', ['order' => $order->id]);
+        return $this->successRedirect($order);
+    }
+
+    /**
+     * Platform-owned Utility Bill payments go straight to their opaque-token status
+     * page (never via the sequential-id success page); everything else is unchanged.
+     */
+    private function successRedirect(Order $order)
+    {
+        $utility = $order->utilityBillOrder()->first();
+
+        return $utility
+            ? redirect($utility->statusUrl())
+            : redirect()->route('checkout.success', ['order' => $order->id]);
     }
 
     private function redirectBackToStoreOrCheckout(Order $order, string $message, bool $isError)

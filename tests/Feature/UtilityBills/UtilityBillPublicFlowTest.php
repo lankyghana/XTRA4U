@@ -406,6 +406,13 @@ class UtilityBillPublicFlowTest extends UtilityBillTestCase
         $this->fakeAll();
         $u = $this->placeOrder();
 
-        $this->get(route('checkout.success', ['order' => $u->order_id]))->assertRedirect($u->statusUrl());
+        // The sequential-id success page must NEVER reveal or redirect to the opaque token.
+        $this->get(route('checkout.success', ['order' => $u->order_id]))->assertNotFound();
+
+        // The gateway callback (keyed by the gateway reference) sends the customer to the token URL.
+        $ref = $u->order->payment_reference;
+        $this->fakeAll(['https://api.paystack.co/transaction/verify/*' => Http::response(['status' => true, 'data' => ['status' => 'success', 'amount' => 10000, 'currency' => 'GHS', 'reference' => $ref]])]);
+        $this->get('/payment/callback?reference='.$ref)->assertRedirect($u->statusUrl());
+        $this->assertSame('paid', $u->order->fresh()->payment_status);
     }
 }

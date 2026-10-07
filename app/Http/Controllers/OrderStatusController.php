@@ -29,9 +29,14 @@ class OrderStatusController extends Controller
         $limit = $request->input('limit', 20);
 
         // Find orders by recipient phone number
-        $orders = Order::where('recipient_phone_number', $phone)
-            ->orWhere('recipient_phone_number', $request->phone)
-            ->orWhere('recipient_phone_number', 'LIKE', '%' . substr($phone, -9))
+        // Platform-owned Utility Bill orders are never listed here (their status is behind an
+        // opaque token). The phone matching is grouped so the exclusion applies to every branch.
+        $orders = Order::whereDoesntHave('utilityBillOrder')
+            ->where(function ($q) use ($phone, $request) {
+                $q->where('recipient_phone_number', $phone)
+                    ->orWhere('recipient_phone_number', $request->phone)
+                    ->orWhere('recipient_phone_number', 'LIKE', '%' . substr($phone, -9));
+            })
             ->with(['vendor:id,name,vendor_code', 'service:id,name'])
             ->orderBy('created_at', 'desc')
             ->limit($limit)
@@ -79,6 +84,7 @@ class OrderStatusController extends Controller
         ]);
 
         $orders = Order::whereIn('id', $request->order_ids)
+            ->whereDoesntHave('utilityBillOrder')
             ->get(['id', 'status', 'updated_at']);
 
         return response()->json([
