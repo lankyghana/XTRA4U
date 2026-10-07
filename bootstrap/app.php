@@ -33,6 +33,13 @@ return Application::configure(basePath: dirname(__DIR__))
             prepend: \App\Http\Middleware\EnsureCmsAdmin::class,
         );
 
+        // Same rule for every admin route: authorize BEFORE implicit model binding, so a
+        // non-admin can never distinguish "no such order/vendor" (404) from "exists" (403/redirect).
+        $middleware->prependToPriorityList(
+            before: \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            prepend: \App\Http\Middleware\AdminOnly::class,
+        );
+
         $middleware->alias([
             'vendor.approved' => EnsureVendorApproved::class,
             'admin.only' => AdminOnly::class,

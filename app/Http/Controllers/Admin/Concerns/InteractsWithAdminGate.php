@@ -16,7 +16,7 @@ trait InteractsWithAdminGate
 {
     protected function adminUser(): mixed
     {
-        return Auth::guard('admin')->user() ?: Auth::user();
+        return \App\Support\AdminAccess::resolve();
     }
 
     /**

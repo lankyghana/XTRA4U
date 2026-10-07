@@ -70,7 +70,7 @@ class UtilityBillSettingsController extends Controller
     public function update(UpdateUtilityBillSettingsRequest $request, UtilityBillConfigService $config, KingFlexyUtilityProvider $provider)
     {
         $data = $request->validated();
-        $user = Auth::guard('admin')->user() ?: Auth::user();
+        $user = \App\Support\AdminAccess::resolve();
         $actor = ['id' => $user?->id, 'email' => $user?->email, 'ip' => $request->ip()];
 
         // Only billers the provider lists, or that are already configured, may be edited.

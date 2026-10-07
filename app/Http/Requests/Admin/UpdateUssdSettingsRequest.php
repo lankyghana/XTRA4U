@@ -15,9 +15,7 @@ class UpdateUssdSettingsRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        $user = Auth::guard('admin')->user() ?: Auth::user();
-
-        return $user !== null && ($user->role ?? 'admin') === 'admin';
+        return \App\Support\AdminAccess::check();
     }
 
     public function rules(): array

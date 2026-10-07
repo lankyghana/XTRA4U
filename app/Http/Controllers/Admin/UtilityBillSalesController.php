@@ -117,7 +117,7 @@ class UtilityBillSalesController extends Controller
     /** @return array{id:?int,email:?string} */
     private function actor(): array
     {
-        $user = Auth::guard('admin')->user() ?: Auth::user();
+        $user = \App\Support\AdminAccess::resolve();
 
         return ['id' => $user?->id, 'email' => $user?->email];
     }

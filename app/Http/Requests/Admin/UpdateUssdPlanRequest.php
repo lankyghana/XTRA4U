@@ -11,7 +11,7 @@ class UpdateUssdPlanRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        $user = Auth::guard('admin')->user() ?: Auth::user();
+        $user = \App\Support\AdminAccess::resolve();
 
         return Gate::forUser($user)->allows('update', $this->route('ussd_plan'));
     }

@@ -71,7 +71,7 @@ class UssdSettingsController extends Controller
             'description' => 'USSD settings updated.',
             'context' => ['keys' => array_keys($map)],
             'actor_type' => 'admin',
-            'actor_id' => (Auth::guard('admin')->user() ?: Auth::user())?->id,
+            'actor_id' => \App\Support\AdminAccess::resolve()?->id,
             'ip_address' => $request->ip(),
         ]);
 
