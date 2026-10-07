@@ -27,12 +27,24 @@
                 @php
                     $label = $categoryConfig[$category]['label'] ?? \Illuminate\Support\Str::title(str_replace(['-', '_'], ' ', $category));
                     $description = $categoryConfig[$category]['description'] ?? null;
+                    $utilityNote = null;
+
+                    // "ecg" is the legacy electricity PRODUCT category. Utility Bills (ECG, water, TV) is a
+                    // separate platform service with its own switch, so this toggle must not look like it.
+                    if ($category === 'ecg') {
+                        $label = 'ECG (legacy vendor products)';
+                        $description = 'Pauses sales of ECG products created by vendors. Does not affect Utility Bills.';
+                        $utilityNote = true;
+                    }
                 @endphp
                 <label class="flex items-center justify-between gap-4 p-5 cursor-pointer hover:bg-gray-50">
                     <div>
                         <p class="text-sm font-semibold text-gray-900">{{ $label }}</p>
                         @if ($description)
                             <p class="mt-0.5 text-xs text-gray-500">{{ $description }}</p>
+                        @endif
+                        @if ($utilityNote)
+                            <p class="mt-0.5 text-xs text-gray-500">To open or close Utility Bills, use <a href="{{ route('admin.utility-bills.settings') }}" class="text-brand-violet underline">Utility Bills Settings</a>.</p>
                         @endif
                     </div>
                     <div class="flex items-center gap-3 shrink-0">

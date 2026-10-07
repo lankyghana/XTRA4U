@@ -7,7 +7,6 @@ use App\Services\UtilityBills\Data\Biller;
 use App\Services\UtilityBills\Data\Catalog;
 use App\Services\UtilityBills\Exceptions\SaleNotAllowed;
 use App\Services\UtilityBills\Exceptions\UtilityProviderException;
-use App\Support\ServiceAvailability;
 use Illuminate\Support\Collection;
 
 /**
@@ -49,17 +48,15 @@ class UtilityBillAvailability
     /** True when the page should be offered at all (used for storefront/card presence). */
     public function serviceOpen(): bool
     {
-        // The pre-existing admin category switch for the electricity/utility
-        // category ("ecg") is honoured as an additional kill switch.
-        return UtilityBillSettings::enabled() && ! ServiceAvailability::isClosed('ecg');
+        // The ONE global switch is Admin > Utility Bills Settings. The legacy "ECG" category
+        // toggle (Service Availability) only governs old vendor-created ECG products.
+        return UtilityBillSettings::enabled();
     }
 
     /** Customer-facing reason the service is closed. */
     public function closedMessage(): string
     {
-        return ServiceAvailability::isClosed('ecg') && UtilityBillSettings::enabled()
-            ? ServiceAvailability::message()
-            : UtilityBillSettings::maintenanceMessage();
+        return UtilityBillSettings::maintenanceMessage();
     }
 
     /**

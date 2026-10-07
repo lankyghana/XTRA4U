@@ -388,7 +388,7 @@ A **global, platform-owned service** (not a vendor product): customers pay elect
 | Customer | Opens `/services/utility-bills` (direct) or `/store/{vendor_code}/utility-bills` (storefront), verifies the account, confirms, pays, tracks status at an opaque-token URL. |
 | XTRA4U | Owns payment integrity, order state, vendor attribution and commission accounting. |
 
-`/services/ecg` permanently redirects to `/services/utility-bills`. The pre-existing admin "ecg" category-closed switch is honoured as an extra kill switch.
+`/services/ecg` permanently redirects to `/services/utility-bills`. The legacy admin "ECG" category toggle (Service Availability, key `service_open.ecg`) now governs only old vendor-created ECG products and is labelled "ECG (legacy vendor products)"; it does **not** affect Utility Bills, whose single global switch is Admin > Utility Bills Settings.
 
 **Availability.** A biller takes new sales only when the **provider reports it enabled** AND the **admin enabled it** AND the **service is globally enabled**. An admin toggle can never enable a biller the provider has disabled. The service is **off until an admin enables it**, billers are off until enabled, and no commission is invented (default `percentage 0`). Disabling stops *new* sales only; paid orders keep fulfilling, syncing and recovering.
 

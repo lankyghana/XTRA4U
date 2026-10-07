@@ -11,7 +11,8 @@ use Tests\TestCase;
  * /services/utility-bills is now the global, provider-backed Utility Bills
  * service (see tests/Feature/UtilityBills for its behaviour). This file keeps
  * the URL-level guarantees that predate it: the canonical path, the permanent
- * redirect from the legacy /services/ecg URL, and the admin category switch.
+ * redirect from the legacy /services/ecg URL, and that the legacy "ecg" category toggle is NOT
+ * a second Utility Bills switch.
  *
  * The earlier vendor-product catalog behaviour of this page (assigned platform
  * vendor, vendor ECG products, product checkout) no longer applies: Utility
@@ -46,15 +47,30 @@ class EcgPlatformPageTest extends TestCase
             ->assertRedirect(route('services.utility-bills', ['reference' => 'ABC123']));
     }
 
-    public function test_admin_closing_the_ecg_category_closes_utility_bills(): void
+    public function test_the_legacy_ecg_category_toggle_does_not_control_utility_bills(): void
     {
+        $availability = app(\App\Services\UtilityBills\UtilityBillAvailability::class);
+
+        // Closing the legacy ECG product category leaves an enabled Utility Bills service open...
         \App\Services\UtilityBills\UtilityBillSettings::save(true, null);
         ServiceAvailability::setOpen('ecg', false);
         ServiceAvailability::setMessage('ECG payments are paused for maintenance.');
+        $this->assertTrue($availability->serviceOpen());
 
-        $this->get(route('services.utility-bills'))
-            ->assertStatus(503)
-            ->assertSee('ECG payments are paused for maintenance.');
+        // ...and Utility Bills' own switch is the only thing that closes it.
+        \App\Services\UtilityBills\UtilityBillSettings::save(false, 'Back at 6pm');
+        $this->assertFalse($availability->serviceOpen());
+        $this->get(route('services.utility-bills'))->assertStatus(503)->assertSee('Back at 6pm')->assertDontSee('ECG payments are paused');
+    }
+
+    public function test_service_availability_page_labels_the_ecg_toggle_as_legacy_products(): void
+    {
+        $this->actingAs(\App\Models\User::factory()->create(['role' => 'admin']));
+
+        $this->get(route('admin.settings.service-availability'))->assertOk()
+            ->assertSee('ECG (legacy vendor products)')
+            ->assertSee('Does not affect Utility Bills')
+            ->assertSee(route('admin.utility-bills.settings'), false);
     }
 
     public function test_vendor_storefront_still_loads(): void
