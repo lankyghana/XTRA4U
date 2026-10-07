@@ -23,7 +23,7 @@
                 <select id="category" name="category" required
                         class="mt-1 block w-full rounded-lg border-gray-200 shadow-sm focus:border-brand-violet focus:ring-brand-violet">
                     @foreach($categories as $categoryKey)
-                        <option value="{{ $categoryKey }}" {{ old('category', $service->category) === $categoryKey ? 'selected' : '' }}>{{ Str::title(str_replace(['-', '_'], ' ', $categoryKey)) }}</option>
+                        <option value="{{ $categoryKey }}" {{ old('category', $service->category) === $categoryKey ? 'selected' : '' }}>{{ \App\Support\SupersededCategories::is($categoryKey) ? 'ECG (legacy)' : Str::title(str_replace(['-', '_'], ' ', $categoryKey)) }}</option>
                     @endforeach
                 </select>
                 @error('category')

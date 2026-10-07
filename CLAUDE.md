@@ -91,7 +91,7 @@ Per-vendor configuration: each vendor can set their own XpresPortal/GigsHub/SKDa
 
 ### Dynamic Configuration
 - **Mail settings**: `DynamicMailServiceProvider` reads SMTP config from `settings` table at runtime.
-- **Product categories**: defined in `config/storefront.php` (data, ecg, shop, results, afa). `ecg` is a SUPERSEDED category (`App\Support\SupersededCategories`): ECG is a Utility Bills biller, not a platform service. It is hidden from Service Availability / Platform Service Vendors (and their save handlers), but kept for legacy products/orders and as the storefront slot for the Utility Bills card.
+- **Product categories**: defined in `config/storefront.php` (data, ecg, shop, results, afa). `ecg` is a SUPERSEDED category (`App\Support\SupersededCategories`): ECG is a Utility Bills biller, not a platform service. It is hidden from Service Availability / Platform Service Vendors (and their save handlers), cannot be chosen for NEW products, network services or reseller listings (existing legacy records still load/edit unchanged), and is kept for legacy products/orders and as the storefront slot for the Utility Bills card.
 - **Network maps**: `config/external_fulfillment.php` (DatafyHub, XpresPortal, GigsHub, SKDataPlug).
 
 ### Database
