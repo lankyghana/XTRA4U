@@ -199,6 +199,7 @@ class UtilityBillVendorAndAdminTest extends UtilityBillTestCase
     public function test_admin_sees_all_sales_and_filters_work(): void
     {
         $this->admin();
+        $this->openService(['dstv', 'gotv']);   // configured billers also feed the filter list
         $a = Vendor::factory()->create(['is_approved' => true, 'name' => 'Alpha Store']);
         $b = Vendor::factory()->create(['is_approved' => true, 'name' => 'Beta Store']);
         $sa = $this->sale($a);

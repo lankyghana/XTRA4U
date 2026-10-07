@@ -532,3 +532,19 @@ Schedule::call(function () {
         Log::error('Scheduled external fulfillment status sync failed', ['error' => $e->getMessage()]);
     }
 })->everyTenMinutes()->name('external-fulfillment:sync-status')->withoutOverlapping();
+
+// ---------------------------------------------------------------------------
+// Utility Bills (KiNG FLEXY) recovery + status sync
+// ---------------------------------------------------------------------------
+// Re-dispatches paid orders whose submit job was lost or whose worker died
+// (reusing the SAME persisted provider reference), re-queues transient
+// "attention" orders (provider wallet low / provider disabled) at most every
+// 15 minutes, and polls in-flight provider orders with backoff. Per-run limits
+// keep it inside the provider's rate limits (pay 6/min, status 30/min).
+Schedule::call(function () {
+    try {
+        app(\App\Services\UtilityBills\UtilityBillSweeper::class)->run();
+    } catch (\Throwable $e) {
+        Log::error('Scheduled utility bills sync failed', ['error' => $e->getMessage()]);
+    }
+})->everyMinute()->name('utility-bills:sync')->withoutOverlapping(5);

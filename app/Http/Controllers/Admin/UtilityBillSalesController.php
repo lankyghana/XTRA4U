@@ -72,7 +72,7 @@ class UtilityBillSalesController extends Controller
             'sales' => $query->paginate(30)->withQueryString(),
             'filters' => $filters,
             'vendors' => Vendor::query()->whereIn('id', UtilityBillOrder::query()->whereNotNull('vendor_id')->select('vendor_id'))->orderBy('name')->get(['id', 'name']),
-            'billers' => UtilityBillOrder::query()->select('biller_key', 'biller_label')->distinct()->orderBy('biller_label')->get()
+            'billers' => UtilityBillOrder::query()->select('biller_key', 'biller_label')->distinct()->orderBy('biller_label')->get()->toBase()
                 ->merge(UtilityBillerConfig::query()->get(['biller_key'])->map(fn ($c) => (object) ['biller_key' => $c->biller_key, 'biller_label' => $c->biller_key]))
                 ->unique('biller_key')->values(),
             'attentionCount' => UtilityBillOrder::query()->where('fulfillment_status', FulfillmentStatus::ATTENTION)->count(),

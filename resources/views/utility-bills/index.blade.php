@@ -92,7 +92,7 @@
                 </template>
 
                 <button type="submit" :disabled="busy" class="w-full font-semibold"
-                        style="background:var(--x4-violet);color:#fff;border-radius:12px;padding:14px;min-height:48px;" :style="busy ? 'opacity:.6' : ''">
+                        style="background:var(--x4-violet);color:#fff;border-radius:12px;padding:14px;min-height:48px;" :style="busy ? { opacity: 0.6 } : {}">
                     <span x-text="busy ? 'Verifying…' : 'Verify account'"></span>
                 </button>
             </form>
@@ -108,7 +108,7 @@
                         <div class="space-y-2" role="radiogroup" aria-label="Meters">
                             <template x-for="m in result.meters" :key="m.id">
                                 <label class="flex items-start gap-3 cursor-pointer" style="border:1px solid var(--x4-hairline);border-radius:12px;padding:12px 14px;"
-                                       :style="meterId === m.id ? 'border-color:var(--x4-violet);background:var(--x4-violet-soft)' : ''">
+                                       :style="meterId === m.id ? { borderColor: 'var(--x4-violet)', background: 'var(--x4-violet-soft)' } : {}">
                                     <input type="radio" name="meter" :value="m.id" x-model="meterId" class="mt-1">
                                     <span class="block">
                                         <span class="block font-semibold" style="color:var(--x4-ink);" x-text="m.name || 'Meter'"></span>
@@ -139,7 +139,7 @@
                 </label>
 
                 <button type="button" @click="step = 4" :disabled="!canContinue" class="w-full font-semibold mt-4"
-                        style="background:var(--x4-violet);color:#fff;border-radius:12px;padding:14px;min-height:48px;" :style="!canContinue ? 'opacity:.5' : ''">
+                        style="background:var(--x4-violet);color:#fff;border-radius:12px;padding:14px;min-height:48px;" :style="!canContinue ? { opacity: 0.5 } : {}">
                     Continue
                 </button>
             </div>
@@ -189,7 +189,7 @@
                 <p class="text-xs mb-3" style="color:var(--x4-ink-sec);">You pay the bill amount. Your gateway may add its own fee at checkout.</p>
 
                 <button type="submit" :disabled="busy" class="w-full font-semibold"
-                        style="background:var(--x4-violet);color:#fff;border-radius:12px;padding:14px;min-height:48px;" :style="busy ? 'opacity:.6' : ''">
+                        style="background:var(--x4-violet);color:#fff;border-radius:12px;padding:14px;min-height:48px;" :style="busy ? { opacity: 0.6 } : {}">
                     <span x-text="busy ? (waiting ? 'Waiting for payment…' : 'Please wait…') : 'Pay now'"></span>
                 </button>
                 <p class="text-sm mt-3 text-center" x-show="waiting" style="color:var(--x4-ink-sec);">Approve the Mobile Money prompt on your phone. Please don't close this page.</p>

@@ -8,7 +8,7 @@
     $retryable = $paid && in_array($sale->fulfillment_status, [FS::ATTENTION, FS::QUEUED, FS::SUBMITTING], true) && $sale->provider_order_reference === null;
     $pollable = in_array($sale->fulfillment_status, FS::POLLABLE, true);
 @endphp
-<x-admin-layout title="Utility Bill {{ $sale->public_ref }}" subtitle="{{ $sale->biller_label }} &middot; {{ $sale->vendor?->name ?? 'Direct sale' }}" active="utility-bill-sales">
+<x-admin-layout title="Utility Bill {{ $sale->public_ref }}" subtitle="{{ $sale->biller_label }} · {{ $sale->vendor?->name ?? 'Direct sale' }}" active="utility-bill-sales">
     <div class="space-y-6 max-w-4xl">
         @if (session('success'))<div class="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">{{ session('success') }}</div>@endif
         @if (session('error'))<div class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg">{{ session('error') }}</div>@endif
@@ -42,7 +42,7 @@
                     'Provider status' => $sale->provider_status ?? '—',
                     'Provider reason' => $sale->provider_status_reason ?? '—',
                     'Provider commission (to XTRA4U)' => $sale->provider_commission_earned !== null ? 'GHS '.number_format((float) $sale->provider_commission_earned, 2) : ($sale->provider_commission_share_percent !== null ? $sale->provider_commission_share_percent.'% share' : '—'),
-                    'Vendor commission terms (frozen)' => $sale->vendor_id ? ($sale->commission_type === 'fixed' ? 'GHS '.rtrim(rtrim((string) $sale->commission_value, '0'), '.') : rtrim(rtrim((string) $sale->commission_value, '0'), '.').'%').' of '.str_replace('_', ' ', $sale->commission_basis).' (GHS '.number_format((float) $sale->commission_basis_amount, 2).')' : 'n/a (direct sale)',
+                    'Vendor commission terms (frozen)' => $sale->vendor_id ? ($sale->commission_type === 'fixed' ? 'GHS '.number_format((float) $sale->commission_value, 2).' flat' : rtrim(rtrim((string) $sale->commission_value, '0'), '.').'% of '.str_replace('_', ' ', $sale->commission_basis).' (GHS '.number_format((float) $sale->commission_basis_amount, 2).')') : 'n/a (direct sale)',
                     'Vendor commission' => $sale->vendor_id ? 'GHS '.number_format((float) $sale->commission_amount, 2).' — '.$sale->commission_status.($sale->commission_credited_at ? ' '.$sale->commission_credited_at->format('d M Y H:i') : '') : '—',
                     'Wallet ledger id' => $sale->commission_wallet_ledger_id ?? '—',
                     'Last error' => $sale->last_error_code ? $sale->last_error_code.': '.$sale->last_error_message : '—',
