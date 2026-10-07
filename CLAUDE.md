@@ -114,6 +114,16 @@ Private support inbox: `Vendor\SupportController` (`/vendor/support`) and `Admin
 - **CSP**: only `vendor.support.new|show` and `admin.support.show` get `microphone=(self)` and `media-src 'self' blob:`; every other page keeps `microphone=()`.
 - Categories and quick replies are DB rows (seeded by migration, editable); quick replies are managed at `/admin/support/quick-replies`.
 
+### Utility Bills (KiNG FLEXY GH) — global platform service
+Not a vendor product. Admin-owned config/commission; customer pays XTRA4U; KiNG FLEXY pays the bill. See README "Utility Bills" for the full design. Key invariants:
+- **Order = `orders` row (vendor_id NULL) + `utility_bill_orders`.** Reuses gateway/integrity/webhook/reconciliation unchanged; `PaymentService::completeUtilityBillOrder` only marks paid and queues fulfillment. No `transactions` row, no vendor earning.
+- **Never call `POST /utilities/pay` unless the envelope order is paid AND `allowsFulfillment()`** (checked under a row lock in `UtilityBillFulfillmentService::claim`).
+- **One provider request reference per attempt, persisted before the call, reused on every retry.** Only an explicit admin "new attempt" after a provider-confirmed failed/refunded mints attempt N+1. `provider_request_reference` (ours) ≠ `provider_order_reference` (provider's; used for status).
+- **Vendor commission** is credited only by `UtilityBillCommissionService::settle` (row lock + wallet_ledgers row + unique ledger id), only on provider `completed`, from terms frozen at order creation. Provider commission fields are XTRA4U's income, never the vendor's.
+- Vendor attribution = route-bound storefront vendor, frozen at creation; never read from the request body. Lookup results live server-side under a session+storefront-bound token.
+- Scheduling lives in `routes/console.php` (NOT `app/Console/Kernel.php`, which Laravel 12 does not use): `utility-bills:sync` every minute.
+- Tests: `tests/Feature/UtilityBills/*` (`UtilityBillTestCase` helpers). HTTP is always faked; never call the live API from tests.
+
 ## Key Gotchas
 
 - **Result checker PINs are encrypted** — `result_checker_orders.delivered_pins` uses `Illuminate\Support\Facades\Crypt`.

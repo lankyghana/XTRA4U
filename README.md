@@ -17,6 +17,7 @@ XTRA4U is a multi-vendor digital-services marketplace built primarily for the Gh
 - [Fulfillment](#fulfillment)
 - [Result Checker](#result-checker)
 - [AFA registration](#afa-registration)
+- [Utility Bills](#utility-bills)
 - [USSD](#ussd)
 - [Vendor platform](#vendor-platform)
 - [Admin platform](#admin-platform)
@@ -374,6 +375,69 @@ A separate registration service (`AfaRegistration`, `AfaRegistrationController`,
 
 ---
 
+## Utility Bills
+
+A **global, platform-owned service** (not a vendor product): customers pay electricity, water and TV bills; **KiNG FLEXY GH** performs the bill payment. No `Product`/`ResellerProduct` rows exist for it and vendors configure nothing. Code: `app/Services/UtilityBills/*`, `UtilityBillController`, `Admin\UtilityBillSettingsController`, `Admin\UtilityBillSalesController`, `Vendor\UtilityBillSalesController`, `SubmitUtilityBillPayment`, command `utility-bills:sync`.
+
+**Roles**
+
+| Role | What they do |
+|---|---|
+| Admin | Owns everything: global on/off (+ maintenance message), per-biller enable, per-biller vendor commission (percentage or fixed GHS), all sales, recovery. Settings: `/admin/settings/utility-bills`; sales: `/admin/utility-bill-sales`. |
+| Vendor | Nothing to configure. Utility Bills appears on their storefront automatically; they see their own sales, statuses and commission at `/vendor/utility-bills` (read-only, masked accounts). |
+| Customer | Opens `/services/utility-bills` (direct) or `/store/{vendor_code}/utility-bills` (storefront), verifies the account, confirms, pays, tracks status at an opaque-token URL. |
+| XTRA4U | Owns payment integrity, order state, vendor attribution and commission accounting. |
+
+`/services/ecg` permanently redirects to `/services/utility-bills`. The pre-existing admin "ecg" category-closed switch is honoured as an extra kill switch.
+
+**Availability.** A biller takes new sales only when the **provider reports it enabled** AND the **admin enabled it** AND the **service is globally enabled**. An admin toggle can never enable a biller the provider has disabled. The service is **off until an admin enables it**, billers are off until enabled, and no commission is invented (default `percentage 0`). Disabling stops *new* sales only; paid orders keep fulfilling, syncing and recovering.
+
+**KiNG FLEXY integration** (`KingFlexyUtilityProvider`; Commission Services API **v2**, base `https://api.kingflexygh.com/api/v2`, `Authorization: <raw key>` with no `Bearer`):
+
+| Endpoint | Use | Provider limit |
+|---|---|---|
+| `GET /utilities/billers` | live biller catalog + global `min_amount`/`max_amount` (cached ~2 min) | 30/min |
+| `GET /utilities/lookup` | verify the account / list ECG meters (identical lookups cached ~2 min) | 10/min |
+| `POST /utilities/pay` | pay at face value; `reference` is an **idempotency key** | 6/min |
+| `GET /utilities/orders/{reference}` | status, by the **provider's** `UTIL-…` reference | 30/min |
+
+The key must be a **Commission Services key** (`kf_cs_live_…`); a normal data key is rejected by the provider with 403, and the code refuses to use any key not starting `kf_cs_`. It is read from server config only and never reaches Blade, JS, responses, logs or user-facing errors. Own per-endpoint budgets sit just under the provider limits; HTTP uses connect/request timeouts and **no automatic POST retries**. Provider min/max are global, not per biller; provider `commission_share_percent`/`commission_earned` is KiNG FLEXY → XTRA4U money, stored in `provider_commission_*` and **never** used as the vendor commission.
+
+**Customer flow**
+
+1. Biller list comes from the catalog (provider capabilities drive the form: phone vs account, account label, phone required).
+2. Lookup is **mandatory**. The verified result is stored server-side under an unguessable token bound to the **browser session and the storefront** it was made in. The order step reads the account, name and meters only from that snapshot; the browser sends the token, which meter it picked (an opaque id) and the amount. Account/meter/biller/vendor substitution is rejected.
+3. ECG looks up by phone and may return several meters. All are shown (masked number, name, outstanding); the customer must explicitly pick one (never auto-selects the first). Ghana Water collects account + phone; DSTV/GOtv/StarTimes use the account/smartcard only. A **negative** `amount_due` is shown as *account credit*, never as a debt. `amount_due` is informational: any amount within the provider's limits may be paid.
+4. Checkout creates the immutable order and starts payment through the normal gateway pipeline.
+
+**Order model.** Each sale is a normal `orders` row (carries the payment, frozen `expected_amount`, integrity proof) with **`vendor_id = NULL`**, plus a 1:1 `utility_bill_orders` row (frozen biller/account/name/phone, bill amount, attribution, commission terms, fulfillment state, both provider references). `orders.vendor_id` was made nullable for this. Consequences: gateway collection, `PaymentIntegrityGuard`, webhooks and reconciliation all work unchanged; vendor order lists, tier qualification and earnings never see these orders; no `transactions` row or vendor earning is created for them. `PaymentService::completeOrder` has one narrow branch (`completeUtilityBillOrder`) that marks the payment paid and queues fulfillment.
+
+**Customer fee.** None: the customer pays face value (`expected_amount = bill_amount`). A gateway fee overpayment is accepted by the integrity guard as usual.
+
+**Attribution.** Frozen at order creation from the route-bound storefront vendor (an approved vendor in the URL path); direct XTRA4U purchases have no vendor and earn no commission. Never re-derived from session/referrer/cookie/route at fulfillment. Reseller storefronts are the same `Vendor` storefront: the storefront that generated the sale receives the commission; there is no owner/reseller split and no base+markup pricing.
+
+**Payment before fulfillment.** The provider is contacted only after the envelope order is `paid` **and** carries a trusted integrity status (`PaymentIntegrity::allowsFulfillment`), re-checked under a row lock at claim time. Underpayment, failed/pending verification, mismatches and bare `payment_status = paid` writes never fulfil.
+
+**Fulfillment lifecycle** (`FulfillmentStatus`, separate from customer payment): `awaiting_payment → queued → submitting → provider_pending → provider_processing → completed`, with `failed`, `provider_refunded` (provider refunded *XTRA4U's provider wallet*, **not** a customer refund) and `attention` (recoverable: provider wallet empty, provider/biller disabled, key rejected). A paid order whose bill cannot be delivered stays **paid** and is surfaced to admin; nothing marks the customer payment failed or refunded. Provider statuses are mapped in one place (`ProviderStatusMapper`); unrecognised values change nothing; terminal states never regress (contradictions are logged and flagged).
+
+**Idempotency.** (1) CLAIM under a row lock: payment re-proven, one stable `provider_request_reference` (`XU-{public_ref}-A{attempt}`) generated and **persisted before the first call**, status `submitting`, claim token. (2) SUBMIT outside any lock. (3) RECORD with a conditional update keyed on the claim token. Timeouts, 5xx, malformed responses, 429s, queue retries, stale-claim recovery and admin/scheduler retries all reuse the **same** reference, so the provider replays the original order instead of charging twice. The two references are stored separately (`provider_request_reference` = ours, `provider_order_reference` = the provider's, used for status). A **new** reference (attempt N+1) is created only by an explicit admin "submit new attempt" after the provider *confirmed* `failed`/`refunded`.
+
+**Status sync.** `utility-bills:sync` runs every minute from the scheduler: re-dispatches queued/stale-claim orders, re-queues transient `attention` orders (≥15 min apart), and polls in-flight provider orders with backoff (20 s → 20 min; max 20 polls/run). The customer's browser polls only XTRA4U's local status endpoint. Orders not terminal after 2 h raise one admin alert (never auto-failed or auto-refunded).
+
+**Vendor commission.** Set per biller by admin; **frozen on each order** at creation (type, value, basis `bill_face_value`, basis amount, computed amount), computed in integer pesewas (percent to 4 decimals, half-up; fixed is capped at the bill). Technical bounds: ≤ 20 % or ≤ GHS 100. Earned **only** when the provider order is `completed`. `UtilityBillCommissionService::settle` is the only credit path: one DB transaction, row lock on the order and the vendor, exact decimal wallet update, a `wallet_ledgers` row (`source = utility_bill_commission`), the `credited` marker and a **UNIQUE** `commission_wallet_ledger_id`. Safe to call from any worker, poll, retry or admin action. The credit lands in `vendors.wallet_balance` (withdrawable like other earnings). Config changes are audited (`utility_bill_config_audits`: admin, biller, old → new, time).
+
+**Privacy.** Public URLs use a 40-char opaque token, never an account number. Public/vendor views show masked identifiers (`••••1234`); admin detail shows full values. Status pages send `no-store` and `noindex`. Provider-returned text is stripped of markup and escaped.
+
+**Admin recovery** (`/admin/utility-bill-sales/{id}`): *Retry submission* (same reference; only for `attention`/`queued`/stale claims with no provider order), *Refresh status*, *Submit new attempt* (confirmation required; only after a provider-closed attempt). Everything goes through the fulfillment service (row lock, terminal-state guard); completed orders cannot be retried.
+
+**Tables:** `utility_biller_configs`, `utility_bill_config_audits`, `utility_bill_orders`, `utility_bill_events` (append-only timeline; no secrets or raw payloads).
+
+**Migrations (forward-only).** `2026_10_07_000001` makes `orders.vendor_id` nullable (metadata-only; existing rows and the foreign key are untouched) and its `down()` is intentionally a no-op; `2026_10_07_000002` creates the four tables above. Do **not** use `php artisan migrate:rollback` as production recovery: it rolls back every migration in the last batch, including unrelated ones. To disable the feature, switch the service off in the admin settings (or empty the API key); to recover a specific order use the admin recovery actions. Take a database backup before migrating, as `scripts/deploy.sh` already does.
+
+**Operational dependencies.** A queue worker (`SubmitUtilityBillPayment`), the scheduler (`utility-bills:sync`), a funded KiNG FLEXY **provider wallet**, and `KINGFLEXY_UTILITIES_API_KEY`. Without the key, the service is unavailable (fails safe). The Commission Services key may not be able to read the wallet balance; none of this relies on it.
+
+---
+
 ## USSD
 
 Two related features, both configured under `/admin/settings/ussd`:
@@ -500,6 +564,7 @@ Order-placed SMS/email communications run inline after the settlement commit (`d
 |---|---|
 | External fulfillment submission | `ProcessExternalFulfillment` (3 tries, backoff 60/300/900 s, unique per order) |
 | Fulfillment status polling | `SyncExternalFulfillmentStatuses` |
+| Utility Bill provider payment | `SubmitUtilityBillPayment` (1 try; exactly-once comes from the DB claim + stable provider reference; the scheduler recovers lost jobs) |
 | Withdrawal payouts | `ProcessVendorWithdrawalPayout` |
 | Result Checker retry | `RetryResultCheckerOrder` |
 | Order SMS/email | `SendOrderPlacedCommunications` (run inline on completion), `SendUssdSubscriptionNotification`, queued mailables |
@@ -520,6 +585,7 @@ Registered in `routes/console.php` (verified with `php artisan schedule:list`):
 | `withdrawals:cancel-stale` | every minute | Fail and refund withdrawals with no payout reference after 5 min. |
 | `queue-manual-run-bridge` | every minute | Runs `queue:work --stop-when-empty` when an admin requested it (no shell from HTTP). |
 | `external-fulfillment:sync-status` | every 10 min, no overlap | Poll GigsHub/SKDataPlug for delivery status. |
+| `utility-bills:sync` | every minute, no overlap | Utility Bills: re-dispatch lost/stale submissions, re-queue transient attention orders, poll provider status with backoff. |
 | `vendor-tiers:evaluate` | daily 02:00 | Mark vendors eligible for tier promotion. |
 | `ussd:expire-subscriptions` | hourly | Expire past-due USSD subscriptions. |
 | `ussd:notify-expiring` | daily 08:00 | Warn vendors 3 days before expiry. |
@@ -671,6 +737,7 @@ Set `CHECKOUT_COMING_SOON=false` in `.env` to enable `/checkout` if it is set to
 | Payment health (display) | `PAYMENT_HEALTH_*` thresholds |
 | SMS | `BULKCLIX_API_KEY`, `BULKCLIX_SENDER_ID`, `BULKCLIX_BASE_URL` |
 | Fulfillment | `GIGSHUB_BASE_URL`, `GIGSHUB_API_KEY`, `GIGSHUB_TIMEOUT`, plus XpresPortal / SKDataPlug / DatafyHub keys in `config/services.php`; `EXTERNAL_FULFILLMENT_AUTO_COMPLETE`, `EXTERNAL_FULFILLMENT_POLLING_ENABLED` |
+| Utility Bills | `KINGFLEXY_UTILITIES_API_KEY` (Commission Services key `kf_cs_live_…`; server-side only; empty = service unavailable), `KINGFLEXY_UTILITIES_BASE_URL` (default `https://api.kingflexygh.com/api/v2`), `KINGFLEXY_UTILITIES_CONNECT_TIMEOUT` (5), `KINGFLEXY_UTILITIES_TIMEOUT` (20); optional tunables in `config/utility_bills.php`: `UTILITY_BILLS_CATALOG_TTL`, `…_CATALOG_STALE_TTL`, `…_LOOKUP_CACHE_TTL`, `…_LOOKUP_TOKEN_TTL`, `…_LOOKUP_PER_MINUTE`, `…_PAY_PER_MINUTE`, `…_STATUS_PER_MINUTE`, `…_BILLERS_PER_MINUTE`, `…_CLAIM_STALE_SECONDS`, `…_MAX_SUBMIT_ATTEMPTS`, `…_ATTENTION_AFTER_MINUTES` |
 | Support | `SUPPORT_REOPEN_DAYS`, `SUPPORT_DISK` |
 | CMS | `CMS_MEDIA_MAX_KB` |
 | Audit | `RECIPIENT_NUMBER_LOGGING_ENABLED`, `RECIPIENT_NUMBER_LOGGING_QUEUE` |
@@ -755,6 +822,7 @@ Run from the application directory (`core/` in production). `--execute` flags ma
 | Command | Purpose |
 |---|---|
 | `php artisan schedule:list` | Show registered schedules. |
+| `php artisan utility-bills:sync [--submit-limit=5] [--poll-limit=20]` | Run one Utility Bills recovery + status-sync pass (the same work the scheduler does every minute). Idempotent; safe to run by hand. |
 | `php artisan payments:audit-uniqueness [--details]` | Report duplicate payment references / gateway transaction ids. Changes nothing. |
 | `php artisan withdrawals:retry-stuck --dry-run`, `withdrawals:cancel-stale --dry-run` | Preview. |
 | `php artisan fulfillment:close-paid-legacy --before=YYYY-MM-DD` | Dry run (default). |
