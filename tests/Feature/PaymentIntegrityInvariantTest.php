@@ -198,7 +198,7 @@ class PaymentIntegrityInvariantTest extends TestCase
         $this->assertSame('89.00', (string) $fresh->expected_amount, 'the frozen expectation must be untouched');
     }
 
-    public function test_overpayment_is_also_refused_rather_than_silently_accepted(): void
+    public function test_any_overpayment_is_accepted_as_gateway_fees_and_tax(): void
     {
         $this->paystackConfig();
         $vendor = Vendor::factory()->create();
@@ -209,9 +209,40 @@ class PaymentIntegrityInvariantTest extends TestCase
 
         $result = $this->guard()->guard($order, $this->verificationFor($order), 'paystack');
 
+        $this->assertTrue($result->passed);
+        $this->assertSame('150.00', (string) $order->fresh()->gateway_confirmed_amount);
+        $this->assertSame('89.00', (string) $order->fresh()->expected_amount);
+    }
+
+    public function test_fee_sized_overpayment_is_accepted(): void
+    {
+        $this->paystackConfig();
+        $vendor = Vendor::factory()->create();
+        $product = $this->product($vendor, 50.00);
+        $order = $this->orderFor($product, 'REF-FEE');
+
+        $this->fakePaystackVerify(51.00);
+
+        $result = $this->guard()->guard($order, $this->verificationFor($order), 'paystack');
+
+        $this->assertTrue($result->passed);
+        $this->assertSame(1.0, $result->context['gateway_fee_overpayment']);
+        $this->assertSame('51.00', (string) $order->fresh()->gateway_confirmed_amount);
+    }
+
+    public function test_underpayment_is_never_tolerated_as_a_fee(): void
+    {
+        $this->paystackConfig();
+        $vendor = Vendor::factory()->create();
+        $product = $this->product($vendor, 50.00);
+        $order = $this->orderFor($product, 'REF-UNDER-FEE');
+
+        $this->fakePaystackVerify(49.00);
+
+        $result = $this->guard()->guard($order, $this->verificationFor($order), 'paystack');
+
         $this->assertFalse($result->passed);
-        $this->assertSame('amount_overpaid', $result->reason);
-        $this->assertSame('unpaid', $order->fresh()->payment_status);
+        $this->assertSame('amount_underpaid', $result->reason);
     }
 
     public function test_correct_amount_in_the_wrong_currency_is_refused(): void

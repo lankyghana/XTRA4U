@@ -149,15 +149,23 @@ class PaymentIntegrityGuard
             );
         }
 
-        // (5) EXACT amount equality, in integer minor units.
-        if (! Money::equals($confirmedAmount, $expectedAmount)) {
-            $reason = Money::isLessThan($confirmedAmount, $expectedAmount)
-                ? PaymentIntegrityResult::REASON_AMOUNT_UNDERPAID
-                : PaymentIntegrityResult::REASON_AMOUNT_OVERPAID;
+        // (5) Amount, in integer minor units. Underpayment is never accepted
+        // (it can be fraud). Any overpayment is accepted: it is the gateway's
+        // fee/tax added on top of the order amount, borne by the customer. The
+        // order still settles at its frozen expected amount; the real figure
+        // is kept in gateway_confirmed_amount.
+        $passContext = [];
 
-            return PaymentIntegrityResult::mismatch($reason, $fields + ['context' => [
-                'difference' => Money::difference($confirmedAmount, $expectedAmount),
-            ]]);
+        if (! Money::equals($confirmedAmount, $expectedAmount)) {
+            $difference = Money::difference($confirmedAmount, $expectedAmount);
+
+            if (Money::isGreaterThan($confirmedAmount, $expectedAmount)) {
+                $passContext = ['gateway_fee_overpayment' => $difference];
+            } else {
+                return PaymentIntegrityResult::mismatch(PaymentIntegrityResult::REASON_AMOUNT_UNDERPAID, $fields + ['context' => [
+                    'difference' => $difference,
+                ]]);
+            }
         }
 
         // (6) Currency, when the provider reports one.
@@ -204,7 +212,7 @@ class PaymentIntegrityGuard
             $expectedCurrency,
             $confirmedCurrency,
             $transactionId,
-            [],
+            $passContext,
             $aspects,
             $order->hasPricingSnapshot() ? 'snapshot' : 'corroborated',
         );
