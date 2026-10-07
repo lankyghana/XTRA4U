@@ -208,6 +208,12 @@
                         return;
                     }
                     
+                    // Utility Bills is a global platform service with its own verified flow.
+                    if (svc.is_utility_bills && svc.utility_url) {
+                        window.location.href = svc.utility_url;
+                        return;
+                    }
+
                     // If this is a result checker service, proceed normally but mark it
                     this.selectedService = svc;
                     this.selectedPackage = null;
@@ -224,6 +230,11 @@
                     // If this is an AFA package, redirect to AFA registration page
                     if (pkg.is_afa && pkg.afa_url) {
                         window.location.href = pkg.afa_url;
+                        return;
+                    }
+
+                    if (pkg.is_utility_bills && pkg.utility_url) {
+                        window.location.href = pkg.utility_url;
                         return;
                     }
                     

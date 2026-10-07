@@ -166,6 +166,34 @@ class StorefrontController extends Controller
             $services->push($afaService);
         }
 
+        // Utility Bills is a global platform service: it appears on every approved
+        // storefront automatically (no per-vendor product rows) whenever it is open
+        // for sale, and links to this storefront's own Utility Bills page so sales
+        // are attributed to this vendor.
+        if ($vendor->is_approved && app(\App\Services\UtilityBills\UtilityBillAvailability::class)->sellable()->isNotEmpty()) {
+            $utilityUrl = route('storefront.utility-bills', ['vendor' => $vendor->vendor_code]);
+
+            $services->push([
+                'key' => 'utility_bills_service',
+                'name' => 'Utility Bills',
+                'category' => 'ecg',
+                'logo' => null,
+                'is_utility_bills' => true,
+                'utility_url' => $utilityUrl,
+                'packages' => [[
+                    'id' => 'utility_bills_package',
+                    'name' => 'Pay electricity, water and TV bills',
+                    'price' => 0,
+                    'size' => null,
+                    'validity' => null,
+                    'tag' => null,
+                    'notes' => 'Pay electricity, water and TV bills.',
+                    'is_utility_bills' => true,
+                    'utility_url' => $utilityUrl,
+                ]],
+            ]);
+        }
+
         $categories = $this->buildGlobalCategoryList($services, $categoryConfig, $defaultCategory);
 
         // Ownership check for the "Vendor Dashboard" storefront button:
@@ -308,8 +336,8 @@ class StorefrontController extends Controller
             ->map(fn ($group) => $group->sum(fn ($service) => count($service['packages'])));
 
         $globalCategories = $categoryMeta->map(function ($meta, $categoryKey) use ($serviceCounts) {
-            $label = $meta['label'] ?? Str::title(str_replace(['-', '_'], ' ', $categoryKey));
-            $description = $meta['description'] ?? 'Explore services in the '.Str::lower($label).' category.';
+            $label = $meta['public_label'] ?? $meta['label'] ?? Str::title(str_replace(['-', '_'], ' ', $categoryKey));
+            $description = $meta['public_description'] ?? $meta['description'] ?? 'Explore services in the '.Str::lower($label).' category.';
 
             return [
                 'id' => $categoryKey,

@@ -156,13 +156,35 @@ Route::get('/Marketplace', fn () => redirect()->route('checkout.show'));
 
 Route::get('/store/{vendor:vendor_code}', [StorefrontController::class, 'showVendorStore'])->name('storefront.vendor');
 
+// Utility Bills (global platform service). The storefront vendor is the vendor in
+// the URL path; direct XTRA4U purchases have none. No vendor id is ever read from a request body.
+Route::get('/store/{vendor:vendor_code}/utility-bills', [\App\Http\Controllers\UtilityBillController::class, 'store'])->name('storefront.utility-bills');
+Route::post('/store/{vendor:vendor_code}/utility-bills/lookup', [\App\Http\Controllers\UtilityBillController::class, 'lookupStore'])
+    ->middleware('throttle:20,1,utility-lookup')->name('storefront.utility-bills.lookup');
+Route::post('/store/{vendor:vendor_code}/utility-bills/checkout', [\App\Http\Controllers\UtilityBillController::class, 'checkoutStore'])
+    ->middleware('throttle:20,1,utility-checkout')->name('storefront.utility-bills.checkout');
+Route::post('/utility-bills/lookup', [\App\Http\Controllers\UtilityBillController::class, 'lookupDirect'])
+    ->middleware('throttle:20,1,utility-lookup')->name('utility-bills.lookup');
+Route::post('/utility-bills/checkout', [\App\Http\Controllers\UtilityBillController::class, 'checkoutDirect'])
+    ->middleware('throttle:20,1,utility-checkout')->name('utility-bills.checkout');
+Route::post('/utility-bills/payment/verify', [\App\Http\Controllers\UtilityBillController::class, 'verify'])
+    ->middleware('throttle:60,1,utility-verify')->name('utility-bills.verify');
+Route::get('/utility-bills/status/{token}', [\App\Http\Controllers\UtilityBillController::class, 'status'])
+    ->middleware('throttle:60,1,utility-status')->name('utility-bills.status');
+Route::get('/utility-bills/status/{token}/poll', [\App\Http\Controllers\UtilityBillController::class, 'poll'])
+    ->middleware('throttle:60,1,utility-poll')->name('utility-bills.poll');
+
 // Official XTRA4U service pages (homepage entry points). Each shows exactly
 // one category, sourced from the vendor an admin has assigned to it — see
 // App\Support\PlatformServiceVendor. Distinct from /store/{vendor_code},
 // which is unaffected and still shows a vendor's full catalog.
 Route::prefix('services')->name('services.')->group(function () {
     Route::get('data-bundles', [\App\Http\Controllers\PlatformServiceController::class, 'dataBundles'])->name('data-bundles');
-    Route::get('ecg', [\App\Http\Controllers\PlatformServiceController::class, 'ecg'])->name('ecg');
+    // Utility Bills is a global platform service (KiNG FLEXY), not a vendor product catalog.
+    Route::get('utility-bills', [\App\Http\Controllers\UtilityBillController::class, 'direct'])->name('utility-bills');
+    // Legacy URL (bookmarks, shared links, search results): permanent redirect,
+    // preserving any query string such as payment callbacks.
+    Route::get('ecg', fn () => redirect()->route('services.utility-bills', request()->query(), 301))->name('ecg');
     Route::get('shop', [\App\Http\Controllers\PlatformServiceController::class, 'shop'])->name('shop');
     Route::get('result-checkers', [\App\Http\Controllers\PlatformServiceController::class, 'resultCheckers'])->name('result-checkers');
     Route::get('afa-registration', [\App\Http\Controllers\PlatformServiceController::class, 'afaRegistration'])->name('afa-registration');

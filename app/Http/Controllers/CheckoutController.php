@@ -181,6 +181,11 @@ class CheckoutController extends Controller
     {
         $order = Order::with(['service', 'vendor', 'ownerVendor', 'resellerVendor'])->findOrFail($orderId);
 
+        // Utility Bill payments have their own status/receipt page (opaque token URL).
+        if ($utility = $order->utilityBillOrder()->first()) {
+            return redirect($utility->statusUrl());
+        }
+
         return view('checkout.success', compact('order'));
     }
 

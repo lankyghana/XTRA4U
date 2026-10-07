@@ -123,10 +123,8 @@ class ShopPlatformPageTest extends TestCase
             ->assertDontSee('ECG Prepaid Token')
             ->assertDontSee('Netflix Gift Card');
 
-        $this->get(route('services.ecg'))
-            ->assertSee('ECG Prepaid Token')
-            ->assertDontSee('MTN 1GB Bundle')
-            ->assertDontSee('Netflix Gift Card');
+        // The ECG/Utility Bills page is now a global provider-backed service
+        // (see tests/Feature/UtilityBills), no longer a vendor product catalog.
 
         $this->get(route('services.shop'))
             ->assertSee('Netflix Gift Card')

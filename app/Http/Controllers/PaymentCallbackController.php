@@ -111,6 +111,10 @@ class PaymentCallbackController extends Controller
 
     private function redirectBackToStoreOrCheckout(Order $order, string $message, bool $isError)
     {
+        if ($utility = $order->utilityBillOrder()->first()) {
+            return redirect($utility->statusUrl());
+        }
+
         try {
             $order->loadMissing('vendor');
         } catch (\Throwable $e) {

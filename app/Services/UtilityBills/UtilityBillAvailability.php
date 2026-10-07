@@ -7,6 +7,7 @@ use App\Services\UtilityBills\Data\Biller;
 use App\Services\UtilityBills\Data\Catalog;
 use App\Services\UtilityBills\Exceptions\SaleNotAllowed;
 use App\Services\UtilityBills\Exceptions\UtilityProviderException;
+use App\Support\ServiceAvailability;
 use Illuminate\Support\Collection;
 
 /**
@@ -28,7 +29,7 @@ class UtilityBillAvailability
      */
     public function sellable(): Collection
     {
-        if (! UtilityBillSettings::enabled() || ! $this->provider->isConfigured()) {
+        if (! $this->serviceOpen() || ! $this->provider->isConfigured()) {
             return collect();
         }
 
@@ -48,7 +49,17 @@ class UtilityBillAvailability
     /** True when the page should be offered at all (used for storefront/card presence). */
     public function serviceOpen(): bool
     {
-        return UtilityBillSettings::enabled();
+        // The pre-existing admin category switch for the electricity/utility
+        // category ("ecg") is honoured as an additional kill switch.
+        return UtilityBillSettings::enabled() && ! ServiceAvailability::isClosed('ecg');
+    }
+
+    /** Customer-facing reason the service is closed. */
+    public function closedMessage(): string
+    {
+        return ServiceAvailability::isClosed('ecg') && UtilityBillSettings::enabled()
+            ? ServiceAvailability::message()
+            : UtilityBillSettings::maintenanceMessage();
     }
 
     /**
@@ -60,8 +71,8 @@ class UtilityBillAvailability
      */
     public function assertSellable(string $billerKey): array
     {
-        if (! UtilityBillSettings::enabled()) {
-            throw new SaleNotAllowed(UtilityBillSettings::maintenanceMessage(), 'service_disabled');
+        if (! $this->serviceOpen()) {
+            throw new SaleNotAllowed($this->closedMessage(), 'service_disabled');
         }
 
         if (! $this->provider->isConfigured()) {
