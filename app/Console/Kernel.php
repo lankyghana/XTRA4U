@@ -51,6 +51,12 @@ class Kernel extends ConsoleKernel
                     WalletTopup::whereIn('id', $ids)->update(['status' => 'expired']);
                 });
         })->hourly()->name('wallet:cleanup-topups');
+
+        // Utility Bills: recover queued/stuck submissions and poll provider statuses.
+        // ->call() (not ->command()) because proc_open is disabled on shared hosting.
+        $schedule->call(function () {
+            app(\App\Services\UtilityBills\UtilityBillSweeper::class)->run();
+        })->everyMinute()->withoutOverlapping(5)->name('utility-bills:sync');
     }
 
     /**

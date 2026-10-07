@@ -163,6 +163,12 @@ class PaymentService
                 return false;
             }
 
+            // Platform-owned Utility Bill payment: no vendor earnings, no goods
+            // event; the bill is fulfilled by the provider after commit.
+            if ($locked->isUtilityBill()) {
+                return $this->completeUtilityBillOrder($locked, $postCommit);
+            }
+
             if ($locked->is_reseller_order && $locked->reseller_product_id) {
                 return $this->completeResellerOrder($locked, $postCommit);
             }
@@ -290,6 +296,32 @@ class PaymentService
             'markup' => $reconciledMarkup,
             'source' => 'reconciled_to_order_total',
         ];
+    }
+
+    /**
+     * Complete a Utility Bill payment (already proven by the integrity guard
+     * via maySettle()). Marks the CUSTOMER PAYMENT paid and queues provider
+     * fulfillment; creates no transaction, vendor earning or wallet credit.
+     * Vendor commission is a separate event, earned only when the provider
+     * reports the bill completed (UtilityBillCommissionService).
+     */
+    protected function completeUtilityBillOrder(Order $order, array &$postCommit = []): bool
+    {
+        $order->update([
+            'status' => 'Processing',
+            'payment_status' => 'paid',
+            'payment_completed_at' => now(),
+        ]);
+
+        $utility = $order->utilityBillOrder()->first();
+
+        if ($utility && app(\App\Services\UtilityBills\UtilityBillFulfillmentService::class)->markPaid($utility->id)) {
+            $postCommit[] = ['type' => 'utility_bill_fulfillment', 'utility_bill_order_id' => $utility->id];
+        }
+
+        Log::info('Utility bill payment completed', ['order_id' => $order->id, 'utility_bill_order_id' => $utility?->id]);
+
+        return true;
     }
 
     /**
@@ -934,6 +966,13 @@ class PaymentService
                 continue;
             }
 
+            if ($type === 'utility_bill_fulfillment') {
+                app(\App\Services\UtilityBills\UtilityBillFulfillmentService::class)
+                    ->dispatchSubmit((int) $action['utility_bill_order_id']);
+
+                continue;
+            }
+
             if ($type === 'event') {
                 $orderId = (int) ($action['order_id'] ?? 0);
                 if ($orderId > 0) {
@@ -1066,6 +1105,11 @@ class PaymentService
 
     private function ensurePendingTransactions(Order $order): void
     {
+        // Platform-owned Utility Bill payments have no vendor; transactions are vendor-centric.
+        if ($order->isUtilityBill()) {
+            return;
+        }
+
         // If pending/completed transactions already exist, don't create duplicates.
         $existingCount = Transaction::where('order_id', $order->id)->count();
         if ($existingCount > 0) {
