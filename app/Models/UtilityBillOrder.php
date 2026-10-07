@@ -61,6 +61,24 @@ class UtilityBillOrder extends Model
         return $this->hasMany(UtilityBillEvent::class)->orderBy('id');
     }
 
+    /** Sales whose customer payment is proven (excludes abandoned/unpaid checkouts). */
+    public function scopePaidSales($query)
+    {
+        return $query->whereHas('order', fn ($o) => $o
+            ->whereIn('payment_status', ['paid', 'completed'])
+            ->whereIn('payment_integrity_status', \App\Support\PaymentIntegrity::SETTLEMENT_ALLOWED));
+    }
+
+    /** Vendor-facing status: sales value and earnings stay unambiguous. */
+    public function vendorStatusLabel(): string
+    {
+        return match (true) {
+            $this->fulfillment_status === FulfillmentStatus::COMPLETED => 'Completed',
+            in_array($this->fulfillment_status, [FulfillmentStatus::FAILED, FulfillmentStatus::PROVIDER_REFUNDED], true) => 'Failed',
+            default => 'Processing',
+        };
+    }
+
     public static function newPublicRef(): string
     {
         return 'UB'.strtoupper(Str::random(10));
