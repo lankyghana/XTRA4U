@@ -13,6 +13,7 @@ use App\Services\Payments\CheckoutIntentGuard;
 use App\Services\Payments\OrderPricingSnapshot;
 use App\Services\Payments\PaymentIntegrityGuard;
 use App\Services\PaymentService;
+use App\Support\PaymentFailureTransition;
 use App\Support\PaymentVerificationState;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -499,13 +500,24 @@ class CheckoutController extends Controller
         $state = PaymentVerificationState::from($verification);
 
         if ($state === PaymentVerificationState::FAILED) {
-            $order->update([
-                'payment_status' => 'failed',
-                'status' => 'Failed',
-            ]);
-            \App\Models\Transaction::where('order_id', $order->id)
-                ->whereNotIn('payment_status', ['completed', 'successful'])
-                ->update(['payment_status' => 'failed']);
+            // Conditional: a webhook may have settled the order while we asked the gateway.
+            $outcome = PaymentFailureTransition::apply($order->id);
+
+            if ($outcome === PaymentFailureTransition::PAID) {
+                return response()->json([
+                    'success' => true,
+                    'status' => 'success',
+                    'message' => 'Payment completed.',
+                    'order_id' => $order->id,
+                    'redirect' => route('checkout.success', ['order' => $order->id]),
+                ]);
+            }
+
+            if ($outcome === PaymentFailureTransition::FAILED) {
+                \App\Models\Transaction::where('order_id', $order->id)
+                    ->whereNotIn('payment_status', ['completed', 'successful'])
+                    ->update(['payment_status' => 'failed']);
+            }
 
             return response()->json([
                 'success' => true,

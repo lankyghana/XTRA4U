@@ -16,6 +16,7 @@ use App\Services\UtilityBills\KingFlexyUtilityProvider;
 use App\Services\UtilityBills\UtilityBillAvailability;
 use App\Services\UtilityBills\UtilityBillCheckoutService;
 use App\Services\UtilityBills\UtilityBillLookupService;
+use App\Support\PaymentFailureTransition;
 use App\Support\PaymentVerificationState;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -278,17 +279,21 @@ class UtilityBillController extends Controller
         $state = PaymentVerificationState::from($verification);
 
         if ($state === PaymentVerificationState::FAILED) {
-            // Conditional: a webhook or reconciliation may have settled this order while we asked
-            // the gateway. A paid order is never flipped to failed (it would never be fulfilled).
-            $marked = Order::query()->whereKey($order->id)
-                ->whereNotIn('payment_status', ['paid', 'completed'])
-                ->update(['payment_status' => 'failed', 'status' => 'Failed']);
+            // Atomic and conditional: a webhook or reconciliation may have settled this order while
+            // we asked the gateway. A settled order (or one holding trusted proof) is never flipped
+            // to failed; the customer is told the order's real, persisted state instead.
+            $outcome = PaymentFailureTransition::apply($order->id);
 
-            if ($marked === 0 && in_array(Order::query()->whereKey($order->id)->value('payment_status'), ['paid', 'completed'], true)) {
+            if ($outcome === PaymentFailureTransition::PAID) {
                 return response()->json(['success' => true, 'status' => 'success', 'redirect' => $utility->statusUrl()]);
             }
 
-            return response()->json(['success' => true, 'status' => 'failed', 'message' => 'Payment failed.']);
+            if ($outcome === PaymentFailureTransition::KEPT && Order::query()->whereKey($order->id)->value('payment_status') !== 'failed') {
+                // Trusted proof is held and completion is in flight: not a failure.
+                return response()->json(['success' => true, 'status' => 'pending', 'message' => 'Confirming your payment. Please wait.']);
+            }
+
+            return response()->json(['success' => true, 'status' => 'failed', 'message' => 'Payment could not be confirmed.']);
         }
 
         if ($state !== PaymentVerificationState::SUCCESS) {
@@ -346,26 +351,28 @@ class UtilityBillController extends Controller
         return UtilityBillOrder::query()->with('order')->where('access_token', $token)->firstOrFail();
     }
 
-    /** Customer-safe, privacy-masked view model. Never says "successful" before the provider completed. */
+    /**
+     * Customer-safe, privacy-masked view model, derived from the persisted state on every request
+     * (never from what a browser verify call last answered). "Payment received" follows the
+     * trusted payment proof; "completed" only follows the provider's confirmation.
+     */
     private function present(UtilityBillOrder $u): array
     {
-        $paymentStatus = $u->order->payment_status;
-        $paid = in_array($paymentStatus, ['paid', 'completed'], true) && $u->order->allowsSettlement();
+        $paid = $u->paymentReceived();
 
         if (! $paid) {
-            $stage = $paymentStatus === 'failed' ? 'payment_failed' : 'awaiting_payment';
-            $headline = $stage === 'payment_failed' ? 'Payment was not successful' : 'Waiting for your payment';
-            $detail = $stage === 'payment_failed'
-                ? 'No bill payment was made. You can start again.'
-                : 'We are confirming your payment. This page updates automatically.';
+            $failed = $u->order->payment_status === 'failed';
+            [$stage, $headline, $detail, $label] = $failed
+                ? ['payment_failed', 'Payment could not be confirmed', 'No bill payment was made. You can start again.', 'Payment not confirmed']
+                : ['awaiting_payment', 'Waiting for your payment', 'We are confirming your payment. This page updates automatically.', 'Awaiting payment'];
         } elseif ($u->fulfillment_status === FulfillmentStatus::COMPLETED) {
-            [$stage, $headline, $detail] = ['completed', 'Utility payment successful', 'Your bill payment has been completed.'];
+            [$stage, $headline, $detail, $label] = ['completed', 'Utility bill payment completed', 'Your bill payment has been completed.', 'Completed'];
         } elseif (in_array($u->fulfillment_status, [FulfillmentStatus::FAILED, FulfillmentStatus::PROVIDER_REFUNDED], true)) {
-            [$stage, $headline, $detail] = ['needs_support', 'We could not complete your bill payment', 'Your payment is safe. Our team has been alerted and will resolve it. Please keep your reference.'];
+            [$stage, $headline, $detail, $label] = ['needs_support', 'Payment received', 'We could not complete your bill payment yet. Your payment is safe; our team has been alerted and will resolve it. Please keep your reference.', 'Under review'];
         } elseif ($u->fulfillment_status === FulfillmentStatus::ATTENTION) {
-            [$stage, $headline, $detail] = ['delayed', 'Payment received. Your bill payment is taking longer than usual', 'Our team is looking into it. Please keep your reference.'];
+            [$stage, $headline, $detail, $label] = ['delayed', 'Payment received', 'Your utility bill is taking longer than expected. We are reviewing it. Please keep your reference.', 'Under review'];
         } else {
-            [$stage, $headline, $detail] = ['processing', 'Payment received', 'Your utility payment is being processed.'];
+            [$stage, $headline, $detail, $label] = ['processing', 'Payment received', 'Your utility bill is being processed.', 'Processing'];
         }
 
         return [
@@ -373,7 +380,7 @@ class UtilityBillController extends Controller
             'terminal' => in_array($stage, ['completed', 'needs_support', 'payment_failed'], true),
             'headline' => $headline,
             'detail' => $detail,
-            'status_label' => $stage === 'completed' ? 'Completed' : ($paid ? FulfillmentStatus::label($u->fulfillment_status) : ucfirst(str_replace('_', ' ', $stage))),
+            'status_label' => $label,
             'reference' => $u->public_ref,
             'biller' => $u->biller_label,
             'account_masked' => $u->maskedAccount(),

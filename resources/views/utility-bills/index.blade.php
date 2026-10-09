@@ -508,7 +508,7 @@
                     if (s === 'success' && r.data.redirect) { window.location.href = r.data.redirect; return; }
                     if (s === 'failed') {
                         if (window.XtraCheckoutIntent) window.XtraCheckoutIntent.clear(['ub', this.storeKey, this.token, this.meterId, this.amount].join(':'));
-                        this.busy = false; this.waiting = false; this.error = r.data.message || 'Payment failed. Please try again.'; return;
+                        this.busy = false; this.waiting = false; this.error = r.data.message || 'Payment could not be confirmed. Please try again.'; return;
                     }
                     if (n >= 60) { if (statusUrl) window.location.href = statusUrl; return; }
                     setTimeout(tick, 3000);

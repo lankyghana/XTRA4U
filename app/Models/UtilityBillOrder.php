@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\UtilityBills\FulfillmentStatus;
+use App\Support\PaymentIntegrity;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -69,7 +70,7 @@ class UtilityBillOrder extends Model
     {
         return $query->whereHas('order', fn ($o) => $o
             ->whereIn('payment_status', ['paid', 'completed'])
-            ->whereIn('payment_integrity_status', \App\Support\PaymentIntegrity::SETTLEMENT_ALLOWED));
+            ->whereIn('payment_integrity_status', PaymentIntegrity::SETTLEMENT_ALLOWED));
     }
 
     /** Vendor-facing status: sales value and earnings stay unambiguous. */
@@ -100,6 +101,25 @@ class UtilityBillOrder extends Model
         return $order !== null
             && in_array($order->payment_status, ['paid', 'completed'], true)
             && $order->allowsSettlement();
+    }
+
+    /**
+     * Customer-facing "payment received": the envelope order holds trusted payment proof AND
+     * settlement happened (paid status, completion time, or fulfillment already moved past
+     * awaiting_payment, which only PaymentService does after proof). Read from persisted state,
+     * so a late or contradictory browser verification can never make a received payment look failed.
+     */
+    public function paymentReceived(): bool
+    {
+        $order = $this->relationLoaded('order') ? $this->order : $this->order()->first();
+
+        if ($order === null || ! $order->allowsSettlement()) {
+            return false;
+        }
+
+        return in_array($order->payment_status, ['paid', 'completed'], true)
+            || $order->payment_completed_at !== null
+            || $this->fulfillment_status !== FulfillmentStatus::AWAITING_PAYMENT;
     }
 
     public function isCompleted(): bool

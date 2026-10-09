@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Order;
 use App\Services\Payments\PaymentIntegrityGuard;
 use App\Services\PaymentService;
+use App\Support\PaymentFailureTransition;
 use App\Support\PaymentVerificationState;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -58,13 +59,18 @@ class PaymentCallbackController extends Controller
         $state = PaymentVerificationState::from($verification);
 
         if ($state === PaymentVerificationState::FAILED) {
-            $order->update([
-                'payment_status' => 'failed',
-                'status' => 'Failed',
-            ]);
-            \App\Models\Transaction::where('order_id', $order->id)
-                ->whereNotIn('payment_status', ['completed', 'successful'])
-                ->update(['payment_status' => 'failed']);
+            // Conditional: the webhook may have settled the order while we asked the gateway.
+            $outcome = PaymentFailureTransition::apply($order->id);
+
+            if ($outcome === PaymentFailureTransition::PAID) {
+                return $this->successRedirect($order->fresh());
+            }
+
+            if ($outcome === PaymentFailureTransition::FAILED) {
+                \App\Models\Transaction::where('order_id', $order->id)
+                    ->whereNotIn('payment_status', ['completed', 'successful'])
+                    ->update(['payment_status' => 'failed']);
+            }
 
             return $this->redirectBackToStoreOrCheckout($order, 'Payment failed.', true);
         }

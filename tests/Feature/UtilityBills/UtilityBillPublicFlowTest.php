@@ -357,7 +357,7 @@ class UtilityBillPublicFlowTest extends UtilityBillTestCase
         $this->assertNotEmpty($ref);
 
         // Status page before payment: no "successful".
-        $this->get($u->statusUrl())->assertOk()->assertDontSee('Utility payment successful')->assertSee('Waiting for your payment')
+        $this->get($u->statusUrl())->assertOk()->assertDontSee('Utility bill payment completed')->assertSee('Waiting for your payment')
             ->assertDontSee('3701234567')->assertSee('4567');
 
         $this->fakeAll([
@@ -373,7 +373,7 @@ class UtilityBillPublicFlowTest extends UtilityBillTestCase
             && $q['account'] === '3701234567' && $q['phone'] === '0551617309' && (float) $q['amount'] === 100.0);
 
         // Paid but provider not done: still not "successful".
-        $this->get($u->statusUrl())->assertOk()->assertSee('Payment received')->assertDontSee('Utility payment successful');
+        $this->get($u->statusUrl())->assertOk()->assertSee('Payment received')->assertDontSee('Utility bill payment completed');
 
         // Verifying again must not pay the provider twice.
         $this->postJson(route('utility-bills.verify'), ['reference' => $ref])->assertOk();
@@ -383,7 +383,7 @@ class UtilityBillPublicFlowTest extends UtilityBillTestCase
         $this->fake([self::BASE.'/utilities/orders/*' => Http::response($this->statusBody('completed', 'UTIL-ECG-111', 1.3))]);
         app(UtilityBillFulfillmentService::class)->syncStatus($u->id);
 
-        $this->get($u->statusUrl())->assertOk()->assertSee('Utility payment successful');
+        $this->get($u->statusUrl())->assertOk()->assertSee('Utility bill payment completed');
         $this->assertSame('credited', $u->fresh()->commission_status);
         $this->getJson(route('utility-bills.poll', $u->access_token))->assertJson(['stage' => 'completed', 'terminal' => true]);
     }
