@@ -16,6 +16,17 @@ return [
     'display_timeout' => (int) env('UTILITY_BILLS_DISPLAY_TIMEOUT', 2),
     'catalog_failure_ttl' => (int) env('UTILITY_BILLS_CATALOG_FAILURE_TTL', 60),
 
+    // Refresh is single-flight (one provider call per expiry across all
+    // processes). A page with a recent copy never waits for it; a page with no
+    // copy at all waits at most this many seconds for the refresh in progress.
+    'catalog_refresh_wait' => (int) env('UTILITY_BILLS_CATALOG_REFRESH_WAIT', 3),
+
+    // A failed full-timeout refresh during a lookup/checkout is not retried by
+    // other lookups/checkouts for this many seconds (they fail closed at once
+    // instead of each waiting on the provider in turn). Display probes, which
+    // use the short display timeout, never trigger this.
+    'catalog_sale_failure_ttl' => (int) env('UTILITY_BILLS_CATALOG_SALE_FAILURE_TTL', 15),
+
     // Customer-facing lookup limits. The provider budget below is shared by
     // every customer on every store, so no single visitor may take most of it.
     // Per IP is looser than per session because many mobile customers share a

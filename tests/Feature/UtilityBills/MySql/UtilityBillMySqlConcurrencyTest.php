@@ -10,6 +10,8 @@ use App\Services\PaymentService;
 use App\Services\UtilityBills\FulfillmentStatus;
 use App\Services\UtilityBills\ProviderRateBudget;
 use App\Support\PaymentFailureTransition;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -201,6 +203,57 @@ class UtilityBillMySqlConcurrencyTest extends TestCase
         $this->assertSame(12, (int) $incidents[0]->affected_orders);
         $this->assertSame(12, DB::table('utility_bill_incident_orders')->count());
         $this->assertSame(1, DB::table('admin_notifications')->where('type', 'utility_bill_incident')->count(), 'exactly one alert');
+    }
+
+    // ------------------------------------------------------------------
+    // Catalog cache stampede (single-flight across processes)
+    // ------------------------------------------------------------------
+
+    private function billersBody(): array
+    {
+        return ['success' => true, 'data' => ['min_amount' => 1, 'max_amount' => 1000, 'currency' => 'GHS', 'billers' => [
+            ['key' => 'dstv', 'label' => 'DSTV', 'enabled' => true, 'account_label' => 'Smartcard number', 'requires_phone' => false, 'lookup_by' => 'account'],
+        ]]];
+    }
+
+    /** @return array{calls:int, results:Collection} */
+    private function stampede(array $kinds, bool $fail = false, int $delayMs = 1500): array
+    {
+        Cache::store('database')->put('test.billers_calls', 0, 600);   // increment() never creates a key
+        $startAt = microtime(true) + 3;
+        $workers = array_map(fn ($kind) => $this->spawn('catalog', ['kind' => $kind, 'start_at' => $startAt, 'delay_ms' => $delayMs,
+            'fail' => $fail, 'body' => $this->billersBody()]), $kinds);
+        $results = collect($workers)->map(fn ($p) => $this->finish($p));
+
+        return ['calls' => (int) Cache::store('database')->get('test.billers_calls', 0), 'results' => $results];
+    }
+
+    public function test_an_expired_catalog_with_a_recent_copy_is_refreshed_once_and_no_page_waits(): void
+    {
+        // The fresh copy expired; the last good copy is still within catalog_stale_ttl.
+        Cache::store('database')->put('utility_bills.catalog.stale', ['billers' => [], 'min_amount' => '1.00', 'max_amount' => '1000.00', 'currency' => 'GHS', 'fetched_at' => time() - 300], 600);
+        $run = $this->stampede(array_fill(0, 8, 'display'));
+
+        $this->assertSame(1, $run['calls'], 'one provider call for eight simultaneous renders');
+        $this->assertSame(1, $run['results']->where('result', 'fresh')->count(), 'the refresher got the new copy');
+        $this->assertSame(7, $run['results']->where('result', 'stale')->count(), 'the others were served the recent copy');
+        $this->assertLessThan(1.0, $run['results']->where('result', 'stale')->max('seconds'), 'and did not wait for the provider');
+    }
+
+    public function test_with_no_copy_simultaneous_renders_wait_for_one_refresh(): void
+    {
+        $run = $this->stampede(array_fill(0, 6, 'display'), delayMs: 1000);
+
+        $this->assertSame(1, $run['calls']);
+        $this->assertSame(6, $run['results']->where('result', 'fresh')->count(), 'everyone got the one refreshed copy');
+    }
+
+    public function test_simultaneous_checkouts_during_an_outage_make_one_provider_call_and_all_fail_closed(): void
+    {
+        $run = $this->stampede(array_fill(0, 6, 'sale'), fail: true, delayMs: 1000);
+
+        $this->assertSame(1, $run['calls'], 'no serial herd of retries');
+        $this->assertTrue($run['results']->every(fn ($r) => str_starts_with($r['result'], 'refused:')), json_encode($run['results']));
     }
 
     // ------------------------------------------------------------------

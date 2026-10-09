@@ -13,11 +13,14 @@
 use App\Models\Order;
 use App\Services\Payments\PaymentIntegrityGuard;
 use App\Services\PaymentService;
+use App\Services\UtilityBills\KingFlexyUtilityProvider;
 use App\Services\UtilityBills\ProviderRateBudget;
 use App\Services\UtilityBills\UtilityBillFulfillmentService;
 use App\Services\UtilityBills\UtilityBillIncidents;
 use App\Support\PaymentFailureTransition;
 use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 
@@ -98,6 +101,35 @@ switch ($mode) {
             app(UtilityBillIncidents::class)->record($args['category'], (int) $id, 'timed out');
         }
         $out['done'] = count($args['ids']);
+        break;
+
+        // A storefront render (display) or a checkout (sale) reading the catalog when it has expired.
+        // Every provider call is counted in the SHARED cache, so the test sees all processes' calls.
+    case 'catalog':
+        config(['cache.default' => 'database']);
+        Http::fake(['*/utilities/billers' => function () use ($args) {
+            Cache::increment('test.billers_calls');
+            usleep((int) $args['delay_ms'] * 1000);
+            if ($args['fail']) {
+                throw new ConnectionException('timed out');
+            }
+
+            return Http::response($args['body']);
+        }]);
+        time_sleep_until((float) $args['start_at']);
+        $started = microtime(true);
+        try {
+            if ($args['kind'] === 'display') {
+                [$catalog, $stale] = app(KingFlexyUtilityProvider::class)->catalogForDisplay();
+                $out['result'] = $catalog ? ($stale ? 'stale' : 'fresh') : 'none';
+            } else {
+                app(KingFlexyUtilityProvider::class)->catalog();
+                $out['result'] = 'fresh';
+            }
+        } catch (Throwable $e) {
+            $out['result'] = 'refused:'.class_basename($e);
+        }
+        $out['seconds'] = round(microtime(true) - $started, 2);
         break;
 
     default:

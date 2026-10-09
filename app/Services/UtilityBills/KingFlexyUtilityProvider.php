@@ -52,6 +52,9 @@ class KingFlexyUtilityProvider
 
     private const CATALOG_FAILED_KEY = 'utility_bills.catalog.failed';
 
+    /** Set only by a failed full-timeout (sale-path) refresh; a slow display probe never sets it. */
+    private const CATALOG_SALE_FAILED_KEY = 'utility_bills.catalog.sale_failed';
+
     private const CATALOG_LOCK_KEY = 'utility_bills.catalog.refresh';
 
     /** Display only: why the last catalogForDisplay() call fell back ('rejected' | 'unavailable'), else null. */
@@ -67,13 +70,14 @@ class KingFlexyUtilityProvider
     }
 
     /**
-     * Fresh-or-recently-fetched catalog. Throws when the provider cannot be
-     * reached — callers deciding whether a SALE may proceed must not fall back
-     * to an old copy (see catalogForDisplay()).
+     * Fresh catalog (at most `catalog_ttl` seconds old), for deciding whether a SALE may
+     * proceed. Never falls back to an older copy: when no fresh copy can be had (provider
+     * down, a refresh failed moments ago, or another refresh outlasted our wait) it throws,
+     * so new sales fail closed. See catalogForDisplay() for the display-only fallback.
      */
     public function catalog(?int $timeout = null): Catalog
     {
-        return $this->cachedCatalog() ?? $this->refreshCatalog($timeout, display: false);
+        return $this->cachedCatalog() ?? $this->refreshCatalog($timeout, display: false)[0];
     }
 
     private function cachedCatalog(): ?Catalog
@@ -83,56 +87,101 @@ class KingFlexyUtilityProvider
         return is_array($cached) ? Catalog::fromArray($cached) : null;
     }
 
+    private function staleCopy(): ?Catalog
+    {
+        $stale = Cache::get(self::CATALOG_STALE_KEY);
+
+        return is_array($stale) ? Catalog::fromArray($stale) : null;
+    }
+
     /**
-     * One provider request per expiry, however many pages render at that moment: the
-     * first caller refreshes under a lock, the others wait briefly for its result
-     * instead of each calling the provider (which would also use up the billers budget
-     * and trip the failure flag). A display caller that finds the refresh just failed
-     * does not try again; the failure flag already covers it.
+     * Single-flight refresh: at most one process calls the provider per expiry, under a shared
+     * cache lock (the database store in production, so it holds across every web and worker
+     * process). Everyone else:
+     *  - display callers with a recent (stale) copy get it IMMEDIATELY, never queueing behind
+     *    the provider (stale-while-revalidate);
+     *  - other callers wait briefly for the refresher's result, then fail rather than retry;
+     *  - nobody calls the provider again while a recent failure is remembered
+     *    (`catalog_failure_ttl`), so an outage cannot turn waiting requests into a serial herd.
+     *
+     * @return array{0: Catalog, 1: bool} [catalog, isStale]; isStale is only ever true for $display
      */
-    private function refreshCatalog(?int $timeout, bool $display): Catalog
+    private function refreshCatalog(?int $timeout, bool $display): array
     {
         $wait = max(1, $timeout ?? (int) config('services.kingflexy_utilities.timeout', 20)) + 1;
+        $lock = Cache::lock(self::CATALOG_LOCK_KEY, $wait + 5);
+
+        if (! $lock->get()) {
+            if ($display && ($stale = $this->staleCopy()) !== null) {
+                return [$stale, true];
+            }
+
+            try {
+                $lock->block($display ? max(1, min($wait, (int) config('utility_bills.catalog_refresh_wait', 3))) : $wait);
+            } catch (LockTimeoutException) {
+                // The refresh in progress outlasted our wait. Not a provider failure; just no answer for us.
+                if ($catalog = $this->cachedCatalog()) {
+                    return [$catalog, false];
+                }
+                throw new ProviderUnreachable('Catalog refresh still in progress.');
+            }
+        }
 
         try {
-            return Cache::lock(self::CATALOG_LOCK_KEY, $wait + 5)->block($wait, function () use ($timeout, $display) {
-                if ($catalog = $this->cachedCatalog()) {
-                    return $catalog;                                   // refreshed while we waited
-                }
-                if ($display && is_string(Cache::get(self::CATALOG_FAILED_KEY))) {
-                    throw new ProviderUnreachable('Catalog refresh failed moments ago.');
-                }
+            if ($catalog = $this->cachedCatalog()) {
+                return [$catalog, false];                       // refreshed while we waited
+            }
+            // Don't retry a refresh that just failed. A display probe (short timeout) only stops
+            // other display probes; it never blocks the authoritative sale check, which uses the
+            // full timeout and is only held back by a recent failure of its own kind.
+            if (is_string($reason = Cache::get($display ? self::CATALOG_FAILED_KEY : self::CATALOG_SALE_FAILED_KEY))) {
+                throw $reason === 'rejected'
+                    ? new ProviderUnauthorized('Catalog refresh was rejected moments ago.')
+                    : new ProviderUnreachable('Catalog refresh failed moments ago.');
+            }
 
-                return $this->fetchCatalog($timeout);
-            });
-        } catch (LockTimeoutException) {
-            // The refresh in progress outlasted our wait: the provider is slow, so treat it as unreachable.
-            return $this->cachedCatalog() ?? throw new ProviderUnreachable('Catalog refresh still in progress.');
+            return [$this->fetchCatalog($timeout, $display), false];
+        } finally {
+            $lock->release();
         }
     }
 
-    private function fetchCatalog(?int $timeout): Catalog
+    private function fetchCatalog(?int $timeout, bool $display): Catalog
     {
-        $response = $this->send('billers', 'get', '/utilities/billers', timeout: $timeout);
-        $catalog = $this->parseCatalog($response);
+        try {
+            $response = $this->send('billers', 'get', '/utilities/billers', timeout: $timeout);
+            $catalog = $this->parseCatalog($response);
+        } catch (UtilityProviderException $e) {
+            // Remember the failure so no other request retries it straight away. Our own billers
+            // budget being full only holds things back until a slot frees.
+            $local = $e instanceof ProviderRateLimited && $e->local;
+            $reason = $e instanceof ProviderUnauthorized ? 'rejected' : 'unavailable';
+            Cache::put(self::CATALOG_FAILED_KEY, $reason, $local ? max(1, $e->retryAfter) : max(1, (int) config('utility_bills.catalog_failure_ttl', 60)));
+            if (! $display) {
+                Cache::put(self::CATALOG_SALE_FAILED_KEY, $reason, $local ? max(1, $e->retryAfter) : max(1, (int) config('utility_bills.catalog_sale_failure_ttl', 15)));
+            }
+
+            throw $e;
+        }
 
         $ttl = max(1, (int) config('utility_bills.catalog_ttl'));
         Cache::put(self::CATALOG_KEY, $catalog->toArray(), $ttl);
         Cache::put(self::CATALOG_STALE_KEY, $catalog->toArray(), max($ttl, (int) config('utility_bills.catalog_stale_ttl')));
         Cache::forever('utility_bills.catalog.last_success_at', time());
         Cache::forget(self::CATALOG_FAILED_KEY);
+        Cache::forget(self::CATALOG_SALE_FAILED_KEY);
 
         return $catalog;
     }
 
     /**
-     * Same as catalog(), but when the provider is down shows the last good copy
-     * (up to catalog_stale_ttl old) so pages can still render. Never used to
-     * authorise a sale.
+     * For DISPLAY only (which billers a page shows): the fresh catalog, or, when it cannot be
+     * had right now, the last good copy up to `catalog_stale_ttl` old, so pages still render.
+     * Never used to authorise a sale: lookup and checkout re-check with catalog().
      *
-     * Runs while EVERY vendor storefront renders, so it must never make pages
-     * wait on the provider: it uses a short timeout, and a failure is remembered
-     * for `catalog_failure_ttl` seconds, during which no request is made at all.
+     * Runs while EVERY vendor storefront renders, so it never makes a page wait on the
+     * provider when a recent copy exists: a short timeout, no waiting behind another
+     * process's refresh, and no requests at all while a recent failure is remembered.
      *
      * @return array{0: ?Catalog, 1: bool} [catalog, isStale]
      */
@@ -140,20 +189,21 @@ class KingFlexyUtilityProvider
     {
         $this->lastCatalogFailure = null;
 
-        $recentFailure = Cache::get(self::CATALOG_FAILED_KEY);
-        if (is_string($recentFailure) && ! is_array(Cache::get(self::CATALOG_KEY))) {
+        if ($fresh = $this->cachedCatalog()) {
+            return [$fresh, false];
+        }
+
+        if (is_string($recentFailure = Cache::get(self::CATALOG_FAILED_KEY))) {
             $this->lastCatalogFailure = $recentFailure;
 
             return $this->staleCatalog();
         }
 
         try {
-            return [$this->cachedCatalog() ?? $this->refreshCatalog((int) config('utility_bills.display_timeout', 2), display: true), false];
+            return $this->refreshCatalog((int) config('utility_bills.display_timeout', 2), display: true);
         } catch (UtilityProviderException $e) {
-            // Keep the reason a concurrent refresh already recorded (e.g. 'rejected').
             $recorded = Cache::get(self::CATALOG_FAILED_KEY);
             $this->lastCatalogFailure = is_string($recorded) ? $recorded : ($e instanceof ProviderUnauthorized ? 'rejected' : 'unavailable');
-            Cache::put(self::CATALOG_FAILED_KEY, $this->lastCatalogFailure, max(1, (int) config('utility_bills.catalog_failure_ttl', 60)));
 
             return $this->staleCatalog();
         }
@@ -162,9 +212,9 @@ class KingFlexyUtilityProvider
     /** @return array{0: ?Catalog, 1: bool} */
     private function staleCatalog(): array
     {
-        $stale = Cache::get(self::CATALOG_STALE_KEY);
+        $stale = $this->staleCopy();
 
-        return is_array($stale) ? [Catalog::fromArray($stale), true] : [null, false];
+        return $stale ? [$stale, true] : [null, false];
     }
 
     /** Drop the cached catalog AND any remembered failure, so the next read asks the provider. */
@@ -172,6 +222,7 @@ class KingFlexyUtilityProvider
     {
         Cache::forget(self::CATALOG_KEY);
         Cache::forget(self::CATALOG_FAILED_KEY);
+        Cache::forget(self::CATALOG_SALE_FAILED_KEY);
     }
 
     /** Seconds until the local pay budget has room again; 0 when a pay call may be sent now. */
