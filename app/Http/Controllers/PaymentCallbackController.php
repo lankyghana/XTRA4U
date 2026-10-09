@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Order;
 use App\Services\Payments\PaymentIntegrityGuard;
 use App\Services\PaymentService;
+use App\Support\PaymentFailureTransition;
 use App\Support\PaymentVerificationState;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -46,7 +47,7 @@ class PaymentCallbackController extends Controller
                 'order_id' => $order->id,
             ]);
 
-            return redirect()->route('checkout.success', ['order' => $order->id]);
+            return $this->successRedirect($order);
         }
 
         // Always verify against the gateway that actually created this order —
@@ -58,13 +59,18 @@ class PaymentCallbackController extends Controller
         $state = PaymentVerificationState::from($verification);
 
         if ($state === PaymentVerificationState::FAILED) {
-            $order->update([
-                'payment_status' => 'failed',
-                'status' => 'Failed',
-            ]);
-            \App\Models\Transaction::where('order_id', $order->id)
-                ->whereNotIn('payment_status', ['completed', 'successful'])
-                ->update(['payment_status' => 'failed']);
+            // Conditional: the webhook may have settled the order while we asked the gateway.
+            $outcome = PaymentFailureTransition::apply($order->id);
+
+            if ($outcome === PaymentFailureTransition::PAID) {
+                return $this->successRedirect($order->fresh());
+            }
+
+            if ($outcome === PaymentFailureTransition::FAILED) {
+                \App\Models\Transaction::where('order_id', $order->id)
+                    ->whereNotIn('payment_status', ['completed', 'successful'])
+                    ->update(['payment_status' => 'failed']);
+            }
 
             return $this->redirectBackToStoreOrCheckout($order, 'Payment failed.', true);
         }
@@ -106,11 +112,28 @@ class PaymentCallbackController extends Controller
         // Complete order flows (wallet, notifications, transactions)
         $this->paymentService->completeOrder($order);
 
-        return redirect()->route('checkout.success', ['order' => $order->id]);
+        return $this->successRedirect($order);
+    }
+
+    /**
+     * Platform-owned Utility Bill payments go straight to their opaque-token status
+     * page (never via the sequential-id success page); everything else is unchanged.
+     */
+    private function successRedirect(Order $order)
+    {
+        $utility = $order->utilityBillOrder()->first();
+
+        return $utility
+            ? redirect($utility->statusUrl())
+            : redirect()->route('checkout.success', ['order' => $order->id]);
     }
 
     private function redirectBackToStoreOrCheckout(Order $order, string $message, bool $isError)
     {
+        if ($utility = $order->utilityBillOrder()->first()) {
+            return redirect($utility->statusUrl());
+        }
+
         try {
             $order->loadMissing('vendor');
         } catch (\Throwable $e) {

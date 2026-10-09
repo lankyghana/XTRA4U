@@ -19,11 +19,13 @@ class HomepageServiceCardLinksTest extends TestCase
             ->assertSee(route('services.data-bundles'));
     }
 
-    public function test_homepage_ecg_card_links_to_the_platform_page(): void
+    public function test_homepage_utility_bills_card_links_to_the_utility_bills_page(): void
     {
         $this->get(route('storefront.index'))
             ->assertOk()
-            ->assertSee(route('services.ecg'));
+            ->assertSee('Utility Bills')
+            ->assertSee(route('services.utility-bills'))
+            ->assertDontSee('/services/ecg');
     }
 
     public function test_homepage_shop_card_links_to_the_platform_page(): void

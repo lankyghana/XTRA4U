@@ -9,14 +9,15 @@ use App\Models\UssdPlan;
  *
  * The actor is not always an App\Models\User: admins may authenticate on the
  * dedicated `admin` guard (App\Models\Admin), which carries no `role` column.
- * The null-coalesce mirrors App\Http\Middleware\AdminOnly exactly, so the two
- * never disagree about who counts as an admin.
+ * Both this policy and App\Http\Middleware\AdminOnly delegate to
+ * App\Support\AdminAccess, so they never disagree about who counts as an admin.
  */
 class UssdPlanPolicy
 {
     private function isAdmin(mixed $user): bool
     {
-        return $user !== null && ($user->role ?? 'admin') === 'admin';
+        // Fail closed: see App\Support\AdminAccess (no role is NOT admin).
+        return $user instanceof \Illuminate\Contracts\Auth\Authenticatable && \App\Support\AdminAccess::isAdmin($user);
     }
 
     public function viewAny(mixed $user): bool

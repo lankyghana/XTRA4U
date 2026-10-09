@@ -37,7 +37,8 @@ class PlatformServiceVendor
      */
     public static function categories(): array
     {
-        return array_keys(config('storefront.categories', []));
+        // Superseded categories (e.g. "ecg", now a Utility Bills biller) have no vendor assignment.
+        return SupersededCategories::without(array_keys(config('storefront.categories', [])));
     }
 
     public static function key(string $category): string

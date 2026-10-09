@@ -50,8 +50,7 @@ class Kernel extends ConsoleKernel
                     $ids = $rows->pluck('id')->all();
                     WalletTopup::whereIn('id', $ids)->update(['status' => 'expired']);
                 });
-        })->hourly()->name('wallet:cleanup-topups');
-    }
+        })->hourly()->name('wallet:cleanup-topups');    }
 
     /**
      * Register the commands for the application.

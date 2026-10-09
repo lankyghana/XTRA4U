@@ -11,6 +11,7 @@ use App\Services\AfaPaymentService;
 use App\Services\MoolrePaymentService;
 use App\Services\Payments\PaymentIntegrityGuard;
 use App\Services\PaymentService;
+use App\Support\PaymentFailureTransition;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -172,10 +173,12 @@ class MoolreWebhookController extends Controller
 
         if ($status === 'failed') {
             if ($order) {
-                $order->update([
-                    'payment_status' => 'failed',
-                    'status' => 'Failed',
-                ]);
+                // Conditional: another path may have settled the order while we verified.
+                $outcome = PaymentFailureTransition::apply($order->id);
+
+                if ($outcome !== PaymentFailureTransition::FAILED) {
+                    return response()->json(['success' => true, 'message' => 'Order already settled or failed; not changed']);
+                }
 
                 Transaction::where('order_id', $order->id)
                     ->whereNotIn('payment_status', ['completed', 'successful'])

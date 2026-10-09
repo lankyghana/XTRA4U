@@ -13,6 +13,7 @@ use App\Services\Payments\CheckoutIntentGuard;
 use App\Services\Payments\OrderPricingSnapshot;
 use App\Services\Payments\PaymentIntegrityGuard;
 use App\Services\PaymentService;
+use App\Support\PaymentFailureTransition;
 use App\Support\PaymentVerificationState;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -181,11 +182,19 @@ class CheckoutController extends Controller
     {
         $order = Order::with(['service', 'vendor', 'ownerVendor', 'resellerVendor'])->findOrFail($orderId);
 
+        // Utility Bill payments have their own status/receipt page behind an opaque token.
+        // This URL is keyed by a sequential order id, so it must never reveal or redirect
+        // to that token (the gateway callback sends the customer there directly).
+        abort_if($order->utilityBillOrder()->exists(), 404);
+
         return view('checkout.success', compact('order'));
     }
 
     public function receipt(Order $order)
     {
+        // Same reason as success(): sequential id, platform orders are never served here.
+        abort_if($order->utilityBillOrder()->exists(), 404);
+
         $order->loadMissing(['service', 'vendor', 'ownerVendor', 'resellerVendor']);
 
         $pdf = Pdf::loadView('checkout.receipt', [
@@ -491,13 +500,24 @@ class CheckoutController extends Controller
         $state = PaymentVerificationState::from($verification);
 
         if ($state === PaymentVerificationState::FAILED) {
-            $order->update([
-                'payment_status' => 'failed',
-                'status' => 'Failed',
-            ]);
-            \App\Models\Transaction::where('order_id', $order->id)
-                ->whereNotIn('payment_status', ['completed', 'successful'])
-                ->update(['payment_status' => 'failed']);
+            // Conditional: a webhook may have settled the order while we asked the gateway.
+            $outcome = PaymentFailureTransition::apply($order->id);
+
+            if ($outcome === PaymentFailureTransition::PAID) {
+                return response()->json([
+                    'success' => true,
+                    'status' => 'success',
+                    'message' => 'Payment completed.',
+                    'order_id' => $order->id,
+                    'redirect' => route('checkout.success', ['order' => $order->id]),
+                ]);
+            }
+
+            if ($outcome === PaymentFailureTransition::FAILED) {
+                \App\Models\Transaction::where('order_id', $order->id)
+                    ->whereNotIn('payment_status', ['completed', 'successful'])
+                    ->update(['payment_status' => 'failed']);
+            }
 
             return response()->json([
                 'success' => true,

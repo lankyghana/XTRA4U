@@ -53,7 +53,7 @@
      */
     $categoryRoutes = [
         'data' => 'services.data-bundles',
-        'ecg' => 'services.ecg',
+        'ecg' => 'services.utility-bills',
         'shop' => 'services.shop',
         'results' => 'result-checkers.entry',
         'afa' => 'services.afa-registration',
@@ -65,8 +65,8 @@
         $href = isset($categoryRoutes[$key]) ? route($categoryRoutes[$key]) : $shopUrl;
 
         return [
-            'name' => $category['label'] ?? Str::headline($key),
-            'description' => $category['description'] ?? null,
+            'name' => $category['public_label'] ?? $category['label'] ?? Str::headline($key),
+            'description' => $category['public_description'] ?? $category['description'] ?? null,
             'icon' => $iconMap[$category['icon'] ?? ''] ?? 'wifi',
             'badge' => $badgeMap[$key] ?? null,
             'href' => $href,

@@ -71,7 +71,8 @@ class AdminNetworkServiceController extends Controller
 
     public function edit(NetworkService $network_service)
     {
-        $categories = $this->categoryOptions();
+        // An existing legacy record keeps its (retired) category in the select, so it never changes silently.
+        $categories = $this->categoryOptions($network_service->category);
 
         return view('admin.network_services.edit', [
             'service' => $network_service,
@@ -83,7 +84,7 @@ class AdminNetworkServiceController extends Controller
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:100'],
-            'category' => ['required', 'string', Rule::in($this->categoryOptions())],
+            'category' => ['required', 'string', Rule::in($this->categoryOptions($network_service->category))],
             'service_type' => ['sometimes', 'string', Rule::in(['general', 'results_checker'])],
             'slug' => ['nullable', 'string', 'max:100', Rule::unique('network_services', 'slug')->ignore($network_service->id)],
             'base_price' => ['nullable', 'numeric', 'min:0'],
@@ -142,10 +143,20 @@ class AdminNetworkServiceController extends Controller
         return redirect()->route('admin.network-services.index')->with('success', 'Network / service removed.');
     }
 
-    protected function categoryOptions(): array
+    /**
+     * Categories a network/service may be created in or moved to. Retired categories (ecg: now a
+     * Utility Bills biller, see SupersededCategories) are excluded, so no NEW legacy ECG service can
+     * be created. $currentCategory lets an EXISTING legacy record keep its category on edit.
+     */
+    protected function categoryOptions(?string $currentCategory = null): array
     {
         $categoryConfig = config('storefront.categories', []);
+        $keys = \App\Support\SupersededCategories::without(array_keys($categoryConfig ?: ['data' => []]));
 
-        return array_keys($categoryConfig ?: ['data' => []]);
+        if ($currentCategory !== null && \App\Support\SupersededCategories::is($currentCategory)) {
+            $keys[] = $currentCategory;
+        }
+
+        return $keys ?: ['data'];
     }
 }

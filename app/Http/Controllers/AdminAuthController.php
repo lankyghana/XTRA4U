@@ -29,10 +29,9 @@ class AdminAuthController extends Controller
 
         $request->session()->regenerate();
 
-        // Optional defense in depth: ensure the admin guard user is flagged as admin if the
-        // column exists. Missing/empty role defaults to admin.
-        $user = Auth::guard('admin')->user();
-        if (($user->role ?? 'admin') !== 'admin') {
+        // Defense in depth, fail closed: the session must resolve to an administrator
+        // (an Admin on the admin guard). A missing role is never treated as admin.
+        if (! \App\Support\AdminAccess::check()) {
             Auth::guard('admin')->logout();
             $request->session()->invalidate();
             $request->session()->regenerateToken();

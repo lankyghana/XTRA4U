@@ -156,13 +156,35 @@ Route::get('/Marketplace', fn () => redirect()->route('checkout.show'));
 
 Route::get('/store/{vendor:vendor_code}', [StorefrontController::class, 'showVendorStore'])->name('storefront.vendor');
 
+// Utility Bills (global platform service). The storefront vendor is the vendor in
+// the URL path; direct XTRA4U purchases have none. No vendor id is ever read from a request body.
+Route::get('/store/{vendor:vendor_code}/utility-bills', [\App\Http\Controllers\UtilityBillController::class, 'store'])->name('storefront.utility-bills');
+Route::post('/store/{vendor:vendor_code}/utility-bills/lookup', [\App\Http\Controllers\UtilityBillController::class, 'lookupStore'])
+    ->middleware('throttle:utility-lookup')->name('storefront.utility-bills.lookup');
+Route::post('/store/{vendor:vendor_code}/utility-bills/checkout', [\App\Http\Controllers\UtilityBillController::class, 'checkoutStore'])
+    ->middleware('throttle:20,1,utility-checkout')->name('storefront.utility-bills.checkout');
+Route::post('/utility-bills/lookup', [\App\Http\Controllers\UtilityBillController::class, 'lookupDirect'])
+    ->middleware('throttle:utility-lookup')->name('utility-bills.lookup');
+Route::post('/utility-bills/checkout', [\App\Http\Controllers\UtilityBillController::class, 'checkoutDirect'])
+    ->middleware('throttle:20,1,utility-checkout')->name('utility-bills.checkout');
+Route::post('/utility-bills/payment/verify', [\App\Http\Controllers\UtilityBillController::class, 'verify'])
+    ->middleware('throttle:60,1,utility-verify')->name('utility-bills.verify');
+Route::get('/utility-bills/status/{token}', [\App\Http\Controllers\UtilityBillController::class, 'status'])
+    ->middleware('throttle:60,1,utility-status')->name('utility-bills.status');
+Route::get('/utility-bills/status/{token}/poll', [\App\Http\Controllers\UtilityBillController::class, 'poll'])
+    ->middleware('throttle:60,1,utility-poll')->name('utility-bills.poll');
+
 // Official XTRA4U service pages (homepage entry points). Each shows exactly
 // one category, sourced from the vendor an admin has assigned to it — see
 // App\Support\PlatformServiceVendor. Distinct from /store/{vendor_code},
 // which is unaffected and still shows a vendor's full catalog.
 Route::prefix('services')->name('services.')->group(function () {
     Route::get('data-bundles', [\App\Http\Controllers\PlatformServiceController::class, 'dataBundles'])->name('data-bundles');
-    Route::get('ecg', [\App\Http\Controllers\PlatformServiceController::class, 'ecg'])->name('ecg');
+    // Utility Bills is a global platform service (KiNG FLEXY), not a vendor product catalog.
+    Route::get('utility-bills', [\App\Http\Controllers\UtilityBillController::class, 'direct'])->name('utility-bills');
+    // Legacy URL (bookmarks, shared links, search results): permanent redirect,
+    // preserving any query string such as payment callbacks.
+    Route::get('ecg', fn () => redirect()->route('services.utility-bills', request()->query(), 301))->name('ecg');
     Route::get('shop', [\App\Http\Controllers\PlatformServiceController::class, 'shop'])->name('shop');
     Route::get('result-checkers', [\App\Http\Controllers\PlatformServiceController::class, 'resultCheckers'])->name('result-checkers');
     Route::get('afa-registration', [\App\Http\Controllers\PlatformServiceController::class, 'afaRegistration'])->name('afa-registration');
@@ -371,6 +393,11 @@ Route::middleware(['vendor.approved'])
             ->name('ussd.subscription.status');
 
         // Vendor Quick Buy (dashboard shortcut)
+        // Utility Bill sales (read-only; the service and commission are admin-owned).
+        Route::get('utility-bills', [\App\Http\Controllers\Vendor\UtilityBillSalesController::class, 'index'])->name('utility-bills.index');
+        Route::get('utility-bills/{publicRef}', [\App\Http\Controllers\Vendor\UtilityBillSalesController::class, 'show'])
+            ->where('publicRef', '[A-Za-z0-9]{6,24}')->name('utility-bills.show');
+
         Route::get('quick-buy', [VendorQuickBuyController::class, 'show'])->name('quick-buy.show');
         Route::post('quick-buy', [VendorQuickBuyController::class, 'store'])->name('quick-buy.store');
 
@@ -491,6 +518,29 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
     Route::post('withdrawals/{withdrawal}/cancel', [AdminWithdrawalController::class, 'cancel'])->name('withdrawals.cancel');
 
     Route::get('reports', [\App\Http\Controllers\AdminReportsController::class, 'index'])->name('reports.index');
+
+    // Utility Bills (global platform service): configuration + sales/recovery.
+    Route::get('settings/utility-bills', [\App\Http\Controllers\Admin\UtilityBillSettingsController::class, 'index'])->name('utility-bills.settings');
+    Route::put('settings/utility-bills/credentials', [\App\Http\Controllers\Admin\UtilityBillSettingsController::class, 'updateCredentials'])
+        ->middleware('throttle:10,1')->name('utility-bills.settings.credentials');
+    Route::post('settings/utility-bills/image', [\App\Http\Controllers\Admin\UtilityBillSettingsController::class, 'updateImage'])
+        ->middleware('throttle:10,1')->name('utility-bills.settings.image');
+    Route::post('settings/utility-bills/resume-wallet', [\App\Http\Controllers\Admin\UtilityBillSettingsController::class, 'resumeAfterWallet'])
+        ->middleware('throttle:10,1')->name('utility-bills.settings.resume-wallet');
+    Route::put('settings/utility-bills', [\App\Http\Controllers\Admin\UtilityBillSettingsController::class, 'update'])->name('utility-bills.settings.update');
+    Route::get('utility-bill-sales', [\App\Http\Controllers\Admin\UtilityBillSalesController::class, 'index'])->name('utility-bill-sales.index');
+    Route::get('utility-bill-sales/{order}', [\App\Http\Controllers\Admin\UtilityBillSalesController::class, 'show'])->whereNumber('order')->name('utility-bill-sales.show');
+    Route::post('utility-bill-sales/{order}/retry', [\App\Http\Controllers\Admin\UtilityBillSalesController::class, 'retry'])
+        ->whereNumber('order')->middleware('throttle:30,1,utility-admin-retry')->name('utility-bill-sales.retry');
+    Route::post('utility-bill-sales/{order}/new-attempt', [\App\Http\Controllers\Admin\UtilityBillSalesController::class, 'newAttempt'])
+        ->whereNumber('order')->middleware('throttle:10,1,utility-admin-new-attempt')->name('utility-bill-sales.new-attempt');
+    Route::post('utility-bill-sales/{order}/refresh', [\App\Http\Controllers\Admin\UtilityBillSalesController::class, 'refresh'])
+        ->whereNumber('order')->middleware('throttle:30,1,utility-admin-refresh')->name('utility-bill-sales.refresh');
+    Route::get('utility-bill-incidents', [\App\Http\Controllers\Admin\UtilityBillIncidentsController::class, 'index'])->name('utility-bill-incidents.index');
+    Route::get('utility-bill-incidents/{incident}', [\App\Http\Controllers\Admin\UtilityBillIncidentsController::class, 'show'])
+        ->whereNumber('incident')->name('utility-bill-incidents.show');
+    Route::post('utility-bill-sales/{order}/resume-polling', [\App\Http\Controllers\Admin\UtilityBillSalesController::class, 'resumePolling'])
+        ->whereNumber('order')->middleware('throttle:10,1,utility-admin-resume-polling')->name('utility-bill-sales.resume-polling');
 
     // High-volume recipient number audit log
     Route::get('recipient-numbers', [\App\Http\Controllers\AdminRecipientNumberController::class, 'index'])->name('recipient-numbers.index');

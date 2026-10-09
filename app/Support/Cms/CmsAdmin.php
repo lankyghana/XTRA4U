@@ -24,17 +24,8 @@ final class CmsAdmin
 
     public static function resolve(): Admin|User|null
     {
-        $admin = Auth::guard(self::GUARD_ADMIN)->user();
-        if ($admin instanceof Admin) {
-            return $admin;
-        }
-
-        $user = Auth::guard(self::GUARD_WEB)->user();
-        if ($user instanceof User && $user->role === 'admin') {
-            return $user;
-        }
-
-        return null;
+        // One rule for the whole application: see App\Support\AdminAccess.
+        return \App\Support\AdminAccess::resolve();
     }
 
     public static function check(): bool

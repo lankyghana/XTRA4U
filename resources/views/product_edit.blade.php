@@ -105,7 +105,10 @@
                                 @php($selectedCategory = old('category', $metadata['category'] ?? 'data'))
                                 <select name="category" id="category" class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-brand-violet focus:ring-brand-violet">
                                     <option value="data" {{ $selectedCategory === 'data' ? 'selected' : '' }}>Data Bundles</option>
-                                    <option value="ecg" {{ $selectedCategory === 'ecg' ? 'selected' : '' }}>ECG</option>
+                                    @if ($selectedCategory === 'ecg')
+                                        {{-- Legacy products only: ECG is now a Utility Bills biller, not a vendor product category. --}}
+                                        <option value="ecg" selected>ECG (legacy product)</option>
+                                    @endif
                                     <option value="shop" {{ $selectedCategory === 'shop' ? 'selected' : '' }}>Shop Online</option>
                                     <option value="results" {{ $selectedCategory === 'results' ? 'selected' : '' }}>Results Checkers</option>
                                 </select>

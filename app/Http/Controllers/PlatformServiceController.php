@@ -30,11 +30,6 @@ class PlatformServiceController extends Controller
         return $this->showCategory('data', 'Data Bundles', 'platform-services.data-bundles');
     }
 
-    public function ecg()
-    {
-        return $this->showCategory('ecg', 'ECG', 'platform-services.ecg');
-    }
-
     public function shop()
     {
         return $this->showCategory('shop', 'Shop Online', 'platform-services.shop');

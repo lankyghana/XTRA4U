@@ -959,6 +959,8 @@ class VendorDashboardController extends Controller
         $allProducts = $ownedProducts
             ->merge($parentResellProducts)
             ->unique('id')
+            // Legacy ECG products are no longer offered for NEW resale (Utility Bills replaces them).
+            ->reject(fn ($p) => \App\Support\SupersededCategories::is(\App\Support\ServiceAvailability::categoryForProduct($p)))
             ->values();
 
         $perPage = 12;
@@ -1014,6 +1016,11 @@ class VendorDashboardController extends Controller
         ]);
 
         $product = Product::findOrFail($request->product_id);
+
+        // Existing reseller listings keep working; no NEW listing of a retired (legacy ECG) category.
+        if (\App\Support\SupersededCategories::is(\App\Support\ServiceAvailability::categoryForProduct($product))) {
+            return back()->with('error', 'This legacy ECG product can no longer be added for resale. Utility Bills is available on every storefront automatically.');
+        }
 
         if (! $vendor->affiliate_vendor_id) {
             return back()->with('error', 'You must have an affiliate parent to resell products.');

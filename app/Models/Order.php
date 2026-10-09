@@ -148,6 +148,20 @@ class Order extends Model
         return $this->belongsTo(Product::class, 'vendor_service_id')->withTrashed();
     }
 
+    /**
+     * Present only for platform-owned Utility Bill sales, whose payment this
+     * order carries (vendor_id is NULL; attribution lives on the utility order).
+     */
+    public function utilityBillOrder(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(UtilityBillOrder::class);
+    }
+
+    public function isUtilityBill(): bool
+    {
+        return $this->utilityBillOrder()->exists();
+    }
+
     public function resellerProduct(): BelongsTo
     {
         return $this->belongsTo(ResellerProduct::class);

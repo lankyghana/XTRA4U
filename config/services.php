@@ -119,4 +119,14 @@ return [
         'base_url'      => env('HUBTEL_BASE_URL', 'https://api.hubtel.com'),
     ],
 
+    'kingflexy_utilities' => [
+        // KiNG FLEXY GH Utility Bills (Commission Services API).
+        // The key MUST be a Commission Services key (kf_cs_live_...); a normal
+        // data key is rejected with 403 on every utility endpoint. Server-side only.
+        'base_url' => env('KINGFLEXY_UTILITIES_BASE_URL', 'https://api.kingflexygh.com/api/v2'),
+        'api_key' => env('KINGFLEXY_UTILITIES_API_KEY'),
+        'connect_timeout' => (int) env('KINGFLEXY_UTILITIES_CONNECT_TIMEOUT', 5),
+        'timeout' => (int) env('KINGFLEXY_UTILITIES_TIMEOUT', 20),
+    ],
+
 ];

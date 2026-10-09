@@ -196,7 +196,9 @@ class SupportAuthorizationTest extends SupportTestCase
         $this->actingAs($this->adminModel(), 'admin');
         $this->get(route('admin.support.index'))->assertOk()->assertSee('hello team');
 
-        $this->actingAs($this->adminUser());
+        // Name the guard: the actingAs above made `admin` the default guard, and a User on the
+        // admin guard is (correctly) refused by the fail-closed admin check.
+        $this->actingAs($this->adminUser(), 'web');
         $this->get(route('admin.support.show', $conversation->id))->assertOk();
     }
 }

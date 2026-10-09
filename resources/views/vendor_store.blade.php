@@ -71,54 +71,11 @@
     {{-- ============================================================
          Vendor hero banner
          ============================================================ --}}
-    <section class="relative overflow-hidden" style="background: #fff;">
-        <div class="x4-hero-wash absolute inset-0" aria-hidden="true" style="pointer-events: none;"></div>
-
-        <div class="relative max-w-6xl mx-auto px-5 py-10 sm:py-14 text-center">
-            <x-storefront.reveal from="up" class="max-w-2xl mx-auto">
-                <x-storefront.eyebrow>Vendor Storefront</x-storefront.eyebrow>
-
-                <h1 class="x4-display-xl mt-4 mb-3" style="color: var(--x4-ink-strong);">
-                    Shop with <span style="color: var(--x4-violet);">{{ $vendor->name }}</span>
-                </h1>
-
-                <p class="x4-body-lg mb-5" style="color: var(--x4-ink-body);">
-                    Explore network bundles, electricity tokens, online vouchers, and more
-                    delivered instantly and paid for with Mobile Money.
-                </p>
-
-                <div class="flex flex-wrap items-center justify-center gap-2.5">
-                    <span
-                        class="inline-flex items-center gap-2"
-                        style="background-color: var(--x4-violet-soft); border-radius: var(--x4-r-pill); padding: 6px 14px;"
-                    >
-                        <span class="x4-micro-cap" style="color: var(--x4-violet);">Vendor Code</span>
-                        <span class="x4-caption x4-tnum" style="color: var(--x4-violet); font-weight: 500;">{{ $vendor->vendor_code ?? 'N/A' }}</span>
-                    </span>
-
-                    @if ($vendor->is_approved)
-                        <span
-                            class="inline-flex items-center gap-1.5"
-                            style="background-color: #dcfce7; color: #166534; border-radius: var(--x4-r-pill); padding: 6px 14px;"
-                        >
-                            <x-storefront.icon name="shield" class="w-3.5 h-3.5" />
-                            <span class="x4-caption" style="font-weight: 500;">Verified Vendor</span>
-                        </span>
-                    @endif
-
-                    @if ($vendor->phone_number)
-                        <span
-                            class="inline-flex items-center gap-1.5"
-                            style="background-color: var(--x4-canvas-soft); border: 1px solid var(--x4-hairline); border-radius: var(--x4-r-pill); padding: 6px 14px;"
-                        >
-                            <x-storefront.icon name="phone" class="w-3.5 h-3.5" style="color: var(--x4-ink-mute);" />
-                            <span class="x4-caption" style="color: var(--x4-ink-sec);">{{ $vendor->phone_number }}</span>
-                        </span>
-                    @endif
-                </div>
-            </x-storefront.reveal>
-        </div>
-    </section>
+    <x-storefront.vendor-hero :vendor="$vendor">
+        <x-slot:title>Shop with <span style="color: var(--x4-violet);">{{ $vendor->name }}</span></x-slot:title>
+        Explore network bundles, electricity tokens, online vouchers, and more
+        delivered instantly and paid for with Mobile Money.
+    </x-storefront.vendor-hero>
 
     <div class="max-w-6xl mx-auto px-5" style="padding-top: 32px; padding-bottom: 72px;">
 
@@ -630,28 +587,7 @@
     {{-- ============================================================
          WhatsApp contact
          ============================================================ --}}
-    @if ($vendor->phone_number)
-        <section style="background-color: var(--x4-canvas-soft); border-top: 1px solid var(--x4-hairline); padding: 56px 0;">
-            <x-storefront.reveal class="max-w-6xl mx-auto px-5">
-                <div class="text-center" style="background-color: var(--x4-canvas); border: 1px solid var(--x4-hairline); border-radius: var(--x4-r-xl); box-shadow: var(--x4-shadow-1); padding: 40px 24px;">
-                    <h2 class="x4-display-md mb-3" style="color: var(--x4-ink);">Need Help?</h2>
-                    <p class="x4-body-lg mb-6" style="color: var(--x4-ink-sec);">
-                        Contact {{ $vendor->name }} if your order takes longer than 2 hours.
-                    </p>
-                    <a
-                        href="https://wa.me/{{ preg_replace('/[^0-9]/', '', $vendor->phone_number) }}"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="x4-btn"
-                        style="background-color: #22c55e; color: #fff; border: 1px solid #22c55e; padding: 13px 26px;"
-                    >
-                        <x-storefront.icon name="whatsapp" class="w-4 h-4" />
-                        Contact vendor: {{ $vendor->phone_number }}
-                    </a>
-                </div>
-            </x-storefront.reveal>
-        </section>
-    @endif
+    <x-storefront.vendor-help :vendor="$vendor" />
 </div>
 @endsection
 
