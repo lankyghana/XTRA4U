@@ -5,14 +5,17 @@ namespace Tests\Feature\UtilityBills;
 use App\Models\User;
 use App\Models\UtilityBillConfigAudit;
 use App\Models\UtilityBillerConfig;
+use App\Services\UtilityBills\FulfillmentStatus;
+use App\Services\UtilityBills\UtilityBillCredentials;
 use App\Services\UtilityBills\UtilityBillSettings;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Testing\TestResponse;
 
 /** Rendering/regression tests for the redesigned admin Utility Bills settings page. UI only; HTTP is always faked. */
 class UtilityBillSettingsPageTest extends UtilityBillTestCase
 {
-    private function page(): \Illuminate\Testing\TestResponse
+    private function page(): TestResponse
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));
 
@@ -25,10 +28,10 @@ class UtilityBillSettingsPageTest extends UtilityBillTestCase
         $states = [
             'env key' => fn () => null,
             'admin key' => function () {
-                \App\Services\UtilityBills\UtilityBillCredentials::save('kf_cs_live_adminsavedkey9876', ['id' => null, 'email' => 'a@x.com', 'ip' => null]);
+                UtilityBillCredentials::save('kf_cs_live_adminsavedkey9876', ['id' => null, 'email' => 'a@x.com', 'ip' => null]);
             },
             'no key' => function () {
-                \App\Services\UtilityBills\UtilityBillCredentials::save(null, ['id' => null, 'email' => 'a@x.com', 'ip' => null]);
+                UtilityBillCredentials::save(null, ['id' => null, 'email' => 'a@x.com', 'ip' => null]);
                 config(['services.kingflexy_utilities.api_key' => '']);
             },
         ];
@@ -98,7 +101,7 @@ class UtilityBillSettingsPageTest extends UtilityBillTestCase
             ->assertDontSee('Remove override')->assertDontSee('kf_cs_live_testkey123');
 
         $key = 'kf_cs_live_adminsavedkey9876';
-        \App\Services\UtilityBills\UtilityBillCredentials::save($key, ['id' => null, 'email' => 'a@x.com', 'ip' => null]);
+        UtilityBillCredentials::save($key, ['id' => null, 'email' => 'a@x.com', 'ip' => null]);
         $this->page()->assertSee('Configured in Admin')->assertSee('Remove override and use environment key')
             ->assertSee('9876')->assertDontSee($key, false);
     }
@@ -156,12 +159,12 @@ class UtilityBillSettingsPageTest extends UtilityBillTestCase
 
     public function test_commission_warning_is_contextual_and_not_blocking(): void
     {
-        $this->fake([self::BASE.'/utilities/billers' => Http::response($this->billersBody())]);
+        $this->fake([self::BASE.'/utilities/billers' => Http::response($this->billersBody()), self::BASE.'/utilities/pay' => Http::response($this->payBody())]);
         UtilityBillerConfig::create(['biller_key' => 'dstv', 'is_enabled' => true, 'commission_type' => 'percentage', 'commission_value' => '1']);
         $this->page()->assertDontSee('may exceed recent provider commission');
 
         $u = $this->makeOrder(['paid' => true, 'amount' => '100.00', 'biller' => 'dstv']);
-        $u->forceFill(['fulfillment_status' => \App\Services\UtilityBills\FulfillmentStatus::COMPLETED, 'provider_commission_earned' => '0.40'])->save();
+        $u->forceFill(['fulfillment_status' => FulfillmentStatus::COMPLETED, 'provider_commission_earned' => '0.40'])->save();
 
         $this->fake([self::BASE.'/utilities/billers' => Http::response($this->billersBody())]);
         $this->page()->assertSee('Vendor commission may exceed recent provider commission')->assertSee('0.40%');

@@ -3,13 +3,15 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\UtilityBillOrder;
 use App\Models\UtilityBillerConfig;
+use App\Models\UtilityBillEvent;
+use App\Models\UtilityBillOrder;
 use App\Models\Vendor;
 use App\Services\UtilityBills\FulfillmentStatus;
 use App\Services\UtilityBills\UtilityBillFulfillmentService;
+use App\Services\UtilityBills\UtilityBillPipeline;
+use App\Support\AdminAccess;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 
 /**
  * Admin view of every Utility Bill transaction, with recovery actions.
@@ -76,6 +78,7 @@ class UtilityBillSalesController extends Controller
                 ->merge(UtilityBillerConfig::query()->get(['biller_key'])->map(fn ($c) => (object) ['biller_key' => $c->biller_key, 'biller_label' => $c->biller_key]))
                 ->unique('biller_key')->values(),
             'attentionCount' => UtilityBillOrder::query()->where('fulfillment_status', FulfillmentStatus::ATTENTION)->count(),
+            'pipeline' => app(UtilityBillPipeline::class)->snapshot(),
         ]);
     }
 
@@ -86,7 +89,7 @@ class UtilityBillSalesController extends Controller
         return view('admin.utility_bills.show', [
             'sale' => $order,
             // Closed provider attempts (append-only), oldest first.
-            'closedAttempts' => $order->events->where('kind', \App\Models\UtilityBillEvent::KIND_ATTEMPT_CLOSED)->values(),
+            'closedAttempts' => $order->events->where('kind', UtilityBillEvent::KIND_ATTEMPT_CLOSED)->values(),
         ]);
     }
 
@@ -124,7 +127,7 @@ class UtilityBillSalesController extends Controller
     /** @return array{id:?int,email:?string} */
     private function actor(): array
     {
-        $user = \App\Support\AdminAccess::resolve();
+        $user = AdminAccess::resolve();
 
         return ['id' => $user?->id, 'email' => $user?->email];
     }

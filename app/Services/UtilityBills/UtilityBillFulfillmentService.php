@@ -125,6 +125,31 @@ class UtilityBillFulfillmentService
     }
 
     /**
+     * submit() for a queue worker: when the shared pay budget is full but a slot frees within
+     * `pay_inline_wait_seconds`, wait for it once instead of leaving the order for the next sweep
+     * (which, with a per-minute cron worker, would cost a whole minute of provider capacity).
+     * Never waits inside a web request.
+     */
+    public function submitFromWorker(int $utilityBillOrderId, bool $yieldToBacklog): string
+    {
+        $result = $this->submit($utilityBillOrderId, yieldToBacklog: $yieldToBacklog);
+        $maxWait = (int) config('utility_bills.pay_inline_wait_seconds', 15);
+
+        if ($result !== 'deferred' || $maxWait < 1 || ! app()->runningInConsole()) {
+            return $result;
+        }
+
+        $wait = $this->provider->payBudgetAvailableIn();
+        if ($wait < 1 || $wait > $maxWait) {
+            return $result;
+        }
+
+        sleep($wait);
+
+        return $this->submit($utilityBillOrderId, yieldToBacklog: $yieldToBacklog);
+    }
+
+    /**
      * @return array{id:int,token:string,reference:string,biller:string,account:string,amount:string,phone:?string}|string
      */
     private function claim(int $id, bool $force, bool $yieldToBacklog = false): array|string
@@ -293,7 +318,9 @@ class UtilityBillFulfillmentService
             // nothing was charged, wait it out and retry with the SAME reference.
             // Jitter spreads a burst of retries so they do not all collide again.
             $delay = match (true) {
-                $e instanceof ProviderRateLimited && $e->local => $this->jitter($e->retryAfter, 20),
+                // Our own budget refused it (nothing was sent): stay due, keeping its place in the
+                // oldest-first line, and let the sweeper resubmit it when capacity frees.
+                $e instanceof ProviderRateLimited && $e->local => 0,
                 $e instanceof ProviderRateLimited => $this->jitter(30, 30),
                 $e instanceof ProviderDuplicateWindow => $this->jitter(40, 15),
                 default => $this->jitter($this->submitBackoff($claim['id']), 15),

@@ -13,6 +13,8 @@
 use App\Models\Order;
 use App\Services\Payments\PaymentIntegrityGuard;
 use App\Services\PaymentService;
+use App\Services\UtilityBills\ProviderRateBudget;
+use App\Services\UtilityBills\UtilityBillFulfillmentService;
 use App\Support\PaymentFailureTransition;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\DB;
@@ -61,6 +63,31 @@ switch ($mode) {
             $out['outcomes'][] = [microtime(true), PaymentFailureTransition::apply((int) $args['order_id'])];
             usleep(random_int(2000, 15000));
         }
+        break;
+
+        // Many processes competing for one endpoint budget, all starting at the same instant.
+    case 'budget':
+        config(['cache.default' => 'database']);
+        time_sleep_until((float) $args['start_at']);
+        $out['granted'] = 0;
+        for ($i = 0; $i < (int) $args['attempts']; $i++) {
+            if (app(ProviderRateBudget::class)->acquire($args['endpoint']) === 0) {
+                $out['granted']++;
+            }
+        }
+        break;
+
+        // A queue worker submitting paid orders (overlapping with other workers).
+    case 'submit':
+        config(['cache.default' => 'database', 'utility_bills.rate.pay_per_minute' => (int) $args['pay_per_minute']]);
+        Http::fake(['*/utilities/pay' => fn ($request) => Http::response(['success' => true, 'data' => [
+            'reference' => 'UTIL-'.$request['reference'], 'order_id' => 'uuid', 'status' => 'pending']])]);
+        time_sleep_until((float) $args['start_at']);
+        $out['results'] = [];
+        foreach ($args['ids'] as $id) {
+            $out['results'][$id] = app(UtilityBillFulfillmentService::class)->submit((int) $id);
+        }
+        $out['pay_calls'] = Http::recorded()->count();
         break;
 
     default:

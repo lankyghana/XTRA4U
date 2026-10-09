@@ -2,12 +2,17 @@
 
 namespace Tests\Feature\UtilityBills;
 
+use App\Models\PaymentGatewayConfig;
+use App\Models\UtilityBillerConfig;
 use App\Models\UtilityBillOrder;
 use App\Models\Vendor;
 use App\Models\WalletLedger;
 use App\Services\UtilityBills\FulfillmentStatus;
+use App\Services\UtilityBills\ProviderRateBudget;
 use App\Services\UtilityBills\UtilityBillCommissionService;
 use App\Services\UtilityBills\UtilityBillFulfillmentService;
+use App\Services\UtilityBills\UtilityBillSettings;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -36,7 +41,7 @@ class UtilityBillBillersAndConcurrencyTest extends UtilityBillTestCase
         ];
 
         foreach ($cases as [$biller, $input, $provider, $expectedQuery]) {
-            \Illuminate\Support\Facades\RateLimiter::clear('utility-bills:provider:lookup');
+            app(ProviderRateBudget::class)->clear('lookup');
             $this->fake([
                 self::BASE.'/utilities/billers' => Http::response($this->billersBody()),
                 self::BASE.'/utilities/lookup*' => Http::response($this->lookupBody($provider)),
@@ -98,10 +103,10 @@ class UtilityBillBillersAndConcurrencyTest extends UtilityBillTestCase
             self::BASE.'/utilities/lookup*' => Http::response($this->lookupBody(['account_name' => 'A B', 'account_number' => '7041234567'])),
             'https://api.paystack.co/*' => Http::response(['status' => true, 'data' => ['authorization_url' => 'https://x.test']]),
         ]);
-        \App\Models\PaymentGatewayConfig::create([
-            'gateway_name' => \App\Models\PaymentGatewayConfig::GATEWAY_PAYSTACK, 'gateway_type' => \App\Models\PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION,
+        PaymentGatewayConfig::create([
+            'gateway_name' => PaymentGatewayConfig::GATEWAY_PAYSTACK, 'gateway_type' => PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION,
             'supports_collection' => true, 'supports_generic' => true, 'supports_payout' => true, 'supports_sms' => false,
-            'is_active' => true, 'is_default' => true, 'environment' => \App\Models\PaymentGatewayConfig::ENV_SANDBOX,
+            'is_active' => true, 'is_default' => true, 'environment' => PaymentGatewayConfig::ENV_SANDBOX,
             'config_data' => ['public_key' => 'pk', 'secret_key' => 'sk', 'payment_url' => 'https://api.paystack.co'], 'supported_features' => [],
         ]);
 
@@ -123,7 +128,7 @@ class UtilityBillBillersAndConcurrencyTest extends UtilityBillTestCase
             ['data' => ['account_name' => 'X Y']],
             ['success' => true, 'data' => 'nope'],
         ] as $payload) {
-            \Illuminate\Support\Facades\RateLimiter::clear('utility-bills:provider:lookup');
+            app(ProviderRateBudget::class)->clear('lookup');
             $this->fake([
                 self::BASE.'/utilities/billers' => Http::response($this->billersBody()),
                 self::BASE.'/utilities/lookup*' => Http::response($payload),
@@ -159,7 +164,7 @@ class UtilityBillBillersAndConcurrencyTest extends UtilityBillTestCase
 
         $one->forceFill(['commission_wallet_ledger_id' => 77])->save();
 
-        $this->expectException(\Illuminate\Database\QueryException::class);
+        $this->expectException(QueryException::class);
         $two->forceFill(['commission_wallet_ledger_id' => 77])->save();
     }
 
@@ -171,8 +176,8 @@ class UtilityBillBillersAndConcurrencyTest extends UtilityBillTestCase
         $this->assertSame(FulfillmentStatus::ATTENTION, $u->fulfillment_status);
 
         // Admin switches the whole service and the biller off.
-        \App\Services\UtilityBills\UtilityBillSettings::save(false, null);
-        \App\Models\UtilityBillerConfig::query()->update(['is_enabled' => false]);
+        UtilityBillSettings::save(false, null);
+        UtilityBillerConfig::query()->update(['is_enabled' => false]);
 
         // The already-paid order still recovers and completes, and the vendor is paid.
         $this->fake([self::BASE.'/utilities/pay' => Http::response($this->payBody('UTIL-DSTV-LATE'))]);

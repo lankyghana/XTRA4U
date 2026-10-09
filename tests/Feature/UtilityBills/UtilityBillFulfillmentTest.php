@@ -3,10 +3,12 @@
 namespace Tests\Feature\UtilityBills;
 
 use App\Models\Order;
-use App\Models\UtilityBillOrder;
-use App\Models\Vendor;
+use App\Models\Transaction;
+use App\Models\UtilityBillerConfig;
+use App\Models\VendorNotification;
 use App\Models\WalletLedger;
 use App\Services\PaymentService;
+use App\Services\UtilityBills\Data\StatusResult;
 use App\Services\UtilityBills\FulfillmentStatus;
 use App\Services\UtilityBills\UtilityBillCommissionService;
 use App\Services\UtilityBills\UtilityBillFulfillmentService;
@@ -60,7 +62,7 @@ class UtilityBillFulfillmentTest extends UtilityBillTestCase
         $order = Order::find($u->order_id);
         $this->assertSame('paid', $order->payment_status);
         $this->assertNull($order->vendor_id);
-        $this->assertSame(0, \App\Models\Transaction::count());
+        $this->assertSame(0, Transaction::count());
     }
 
     public function test_completing_payment_twice_does_not_fulfil_twice(): void
@@ -102,7 +104,8 @@ class UtilityBillFulfillmentTest extends UtilityBillTestCase
 
     public function test_a_claimed_order_cannot_be_submitted_by_a_second_worker(): void
     {
-        $u = $this->makeOrder(['paid' => true]); // submitted already (default: no fake -> connection fails -> queued)
+        $this->fake([self::BASE.'/utilities/pay' => fn () => throw new ConnectionException('x')]);
+        $u = $this->makeOrder(['paid' => true]); // provider unreachable -> stays queued
         $this->fake([self::BASE.'/utilities/pay' => Http::response($this->payBody())]);
         $u->refresh()->forceFill(['fulfillment_status' => FulfillmentStatus::SUBMITTING, 'claim_token' => 'x', 'claimed_at' => now()])->save();
 
@@ -244,7 +247,7 @@ class UtilityBillFulfillmentTest extends UtilityBillTestCase
         $vendor = $u->vendor;
 
         // Admin later changes the rate: the old order must not care.
-        \App\Models\UtilityBillerConfig::create(['biller_key' => 'dstv', 'is_enabled' => true, 'commission_type' => 'percentage', 'commission_value' => '5']);
+        UtilityBillerConfig::create(['biller_key' => 'dstv', 'is_enabled' => true, 'commission_type' => 'percentage', 'commission_value' => '5']);
 
         $this->fake([self::BASE.'/utilities/orders/*' => Http::response($this->statusBody('completed', commission: 1.3))]);
         $this->svc()->syncStatus($u->id);
@@ -265,7 +268,7 @@ class UtilityBillFulfillmentTest extends UtilityBillTestCase
         $ledger = WalletLedger::first();
         $this->assertSame($ledger->id, $u->commission_wallet_ledger_id);
         $this->assertSame('1.00', number_format($ledger->amount, 2));
-        $this->assertSame(1, \App\Models\VendorNotification::where('type', 'utility_bill_commission')->count());
+        $this->assertSame(1, VendorNotification::where('type', 'utility_bill_commission')->count());
         $this->assertSame('Completed', Order::find($u->order_id)->status);
     }
 
@@ -304,7 +307,7 @@ class UtilityBillFulfillmentTest extends UtilityBillTestCase
         $this->fake([self::BASE.'/utilities/orders/*' => Http::response($this->statusBody('completed'))]);
         $this->svc()->syncStatus($u->id);
 
-        $this->svc()->applyProviderStatus($u->id, new \App\Services\UtilityBills\Data\StatusResult('UTIL-DSTV-aaa111', 'refunded', 'paid', null, null, null, null));
+        $this->svc()->applyProviderStatus($u->id, new StatusResult('UTIL-DSTV-aaa111', 'refunded', 'paid', null, null, null, null));
 
         $this->assertSame(FulfillmentStatus::COMPLETED, $u->refresh()->fulfillment_status);
         $this->assertDatabaseHas('utility_bill_events', ['utility_bill_order_id' => $u->id, 'kind' => 'status_contradiction']);
@@ -315,7 +318,7 @@ class UtilityBillFulfillmentTest extends UtilityBillTestCase
         $this->fake([self::BASE.'/utilities/pay' => Http::response($this->payBody())]);
         $u = $this->makeOrder(['paid' => true]);
 
-        $this->svc()->applyProviderStatus($u->id, new \App\Services\UtilityBills\Data\StatusResult('UTIL-OTHER-999', 'completed', 'paid', null, null, null, null));
+        $this->svc()->applyProviderStatus($u->id, new StatusResult('UTIL-OTHER-999', 'completed', 'paid', null, null, null, null));
 
         $this->assertSame(FulfillmentStatus::PROVIDER_PENDING, $u->refresh()->fulfillment_status);
     }

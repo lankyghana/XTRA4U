@@ -6,7 +6,9 @@ use App\Models\Order;
 use App\Models\UtilityBillerConfig;
 use App\Models\UtilityBillOrder;
 use App\Models\Vendor;
+use App\Services\PaymentService;
 use App\Services\UtilityBills\FulfillmentStatus;
+use App\Services\UtilityBills\ProviderRateBudget;
 use App\Services\UtilityBills\UtilityBillSettings;
 use App\Services\UtilityBills\VendorCommission;
 use App\Support\PaymentIntegrity;
@@ -14,7 +16,6 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\RateLimiter;
 use Tests\TestCase;
 
 abstract class UtilityBillTestCase extends TestCase
@@ -35,10 +36,23 @@ abstract class UtilityBillTestCase extends TestCase
             // limiter is covered on its own in UtilityBillScalabilityTest.
             'utility_bills.lookup_limit.per_session_per_minute' => 1000,
             'utility_bills.lookup_limit.per_ip_per_minute' => 1000,
+            // A worker never sleeps for the pay budget in tests (covered on its own).
+            'utility_bills.pay_inline_wait_seconds' => 0,
         ]);
+        // Nothing may ever reach KiNG FLEXY or a gateway from a test: an unstubbed URL fails loudly.
+        Http::preventStrayRequests();
         Cache::flush();
-        foreach (['billers', 'lookup', 'pay', 'status'] as $e) {
-            RateLimiter::clear('utility-bills:provider:'.$e);
+        foreach (ProviderRateBudget::ENDPOINTS as $e) {
+            app(ProviderRateBudget::class)->clear($e);
+        }
+    }
+
+    /** Take every slot of an endpoint's shared budget, as other orders/processes would. */
+    protected function useUpBudget(string $endpoint): void
+    {
+        $budget = app(ProviderRateBudget::class);
+        while ($budget->acquire($endpoint) === 0) {
+            // keep taking slots until the budget refuses
         }
     }
 
@@ -46,6 +60,7 @@ abstract class UtilityBillTestCase extends TestCase
     protected function fake(array $stubs): void
     {
         Http::swap(new Factory);
+        Http::preventStrayRequests();
         Http::fake($stubs);
     }
 
@@ -129,7 +144,7 @@ abstract class UtilityBillTestCase extends TestCase
 
         if ($o['paid'] ?? false) {
             $this->prove($order);
-            app(\App\Services\PaymentService::class)->completeOrder($order->fresh());
+            app(PaymentService::class)->completeOrder($order->fresh());
         }
 
         return $u->fresh();

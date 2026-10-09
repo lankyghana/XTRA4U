@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\UtilityBills;
 
+use App\Services\UtilityBills\Data\LookupResult;
 use App\Services\UtilityBills\Exceptions\NotConfigured;
 use App\Services\UtilityBills\Exceptions\ProviderInsufficientBalance;
 use App\Services\UtilityBills\Exceptions\ProviderMalformedResponse;
@@ -11,11 +12,13 @@ use App\Services\UtilityBills\Exceptions\ProviderServiceDisabled;
 use App\Services\UtilityBills\Exceptions\ProviderUnauthorized;
 use App\Services\UtilityBills\Exceptions\ProviderUnreachable;
 use App\Services\UtilityBills\KingFlexyUtilityProvider;
+use App\Services\UtilityBills\ProviderRateBudget;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
 class KingFlexyProviderTest extends TestCase
@@ -28,13 +31,13 @@ class KingFlexyProviderTest extends TestCase
         config(['services.kingflexy_utilities.api_key' => 'kf_cs_live_testkey123']);
         config(['services.kingflexy_utilities.base_url' => self::BASE]);
         Cache::flush();
-        RateLimiter::clear('utility-bills:provider:lookup');
+        app(ProviderRateBudget::class)->clear('lookup');
     }
 
     /** Http::fake() stubs accumulate (first match wins); start clean when re-faking. */
     private function refake(array $stubs): void
     {
-        Http::swap(new \Illuminate\Http\Client\Factory);
+        Http::swap(new Factory);
         Http::fake($stubs);
     }
 
@@ -126,13 +129,13 @@ class KingFlexyProviderTest extends TestCase
 
         $this->assertSame('KWAME MENSAH', $result->accountName);
         $this->assertSame('DStv Compact', $result->bouquet);
-        $this->assertNull(\App\Services\UtilityBills\Data\LookupResult::owing($result->amountDue));
-        $this->assertSame('20.00', \App\Services\UtilityBills\Data\LookupResult::credit($result->amountDue));
+        $this->assertNull(LookupResult::owing($result->amountDue));
+        $this->assertSame('20.00', LookupResult::credit($result->amountDue));
     }
 
     public function test_v2_nested_error_message_is_logged(): void
     {
-        \Illuminate\Support\Facades\Log::spy();
+        Log::spy();
         $this->refake([self::BASE.'/utilities/lookup*' => Http::response(['success' => false, 'error' => ['code' => 404, 'message' => 'Invalid Smart Card Number Unable to verify details']], 404)]);
 
         try {
@@ -141,13 +144,13 @@ class KingFlexyProviderTest extends TestCase
         } catch (ProviderNotFound) {
         }
 
-        \Illuminate\Support\Facades\Log::shouldHaveReceived('warning')->withArgs(fn ($msg, $ctx) => $msg === 'utility_bills.provider.error'
+        Log::shouldHaveReceived('warning')->withArgs(fn ($msg, $ctx) => $msg === 'utility_bills.provider.error'
             && $ctx['provider_message'] === 'Invalid Smart Card Number Unable to verify details')->once();
     }
 
     public function test_rejected_2xx_lookup_is_logged_by_shape_without_values(): void
     {
-        \Illuminate\Support\Facades\Log::spy();
+        Log::spy();
         $this->refake([self::BASE.'/utilities/lookup*' => Http::response(['success' => true, 'data' => ['account_name' => null, 'meters' => [
             ['name' => 'KWAME MENSAH', 'meterNumber' => '0123 456/789', 'outstanding' => 1],
         ]]])]);
@@ -158,7 +161,7 @@ class KingFlexyProviderTest extends TestCase
         } catch (ProviderMalformedResponse) {
         }
 
-        \Illuminate\Support\Facades\Log::shouldHaveReceived('warning')->withArgs(function ($msg, $ctx) {
+        Log::shouldHaveReceived('warning')->withArgs(function ($msg, $ctx) {
             $flat = json_encode($ctx);
 
             return $msg === 'utility_bills.provider.malformed'
@@ -204,7 +207,7 @@ class KingFlexyProviderTest extends TestCase
             $this->addToAssertionCount(1);
         }
 
-        RateLimiter::clear('utility-bills:provider:lookup');
+        app(ProviderRateBudget::class)->clear('lookup');
         $this->refake([self::BASE.'/utilities/lookup*' => Http::response(['success' => true, 'data' => ['meters' => [['name' => 'x', 'meterNumber' => '12/34']]]])]);
         try {
             $provider->lookup('ecg', '0551617309', '0551617309');
@@ -213,7 +216,7 @@ class KingFlexyProviderTest extends TestCase
             $this->addToAssertionCount(1);
         }
 
-        RateLimiter::clear('utility-bills:provider:lookup');
+        app(ProviderRateBudget::class)->clear('lookup');
         $this->refake([self::BASE.'/utilities/lookup*' => Http::response('<html>bad gateway</html>', 200)]);
         try {
             $provider->lookup('dstv', '7041234567');
@@ -222,7 +225,7 @@ class KingFlexyProviderTest extends TestCase
             $this->addToAssertionCount(1);
         }
 
-        RateLimiter::clear('utility-bills:provider:lookup');
+        app(ProviderRateBudget::class)->clear('lookup');
         $this->refake([self::BASE.'/utilities/lookup*' => fn () => throw new ConnectionException('timeout')]);
         $this->expectException(ProviderUnreachable::class);
         $provider->lookup('dstv', '7041234567');
@@ -263,7 +266,7 @@ class KingFlexyProviderTest extends TestCase
         ];
 
         foreach ($cases as [$status, $body, $class]) {
-            RateLimiter::clear('utility-bills:provider:pay');
+            app(ProviderRateBudget::class)->clear('pay');
             $this->refake([self::BASE.'/utilities/pay' => Http::response($body, $status)]);
             try {
                 $provider->pay('dstv', '7041234567', '65.00', 'XU-UB-REF1');

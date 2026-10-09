@@ -6,6 +6,32 @@
         @if (session('success'))<div class="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">{{ session('success') }}</div>@endif
         @if (session('error'))<div class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg">{{ session('error') }}</div>@endif
 
+        @php $p = $pipeline; @endphp
+        <section aria-labelledby="ub-pipeline" class="space-y-3">
+            <div class="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 id="ub-pipeline" class="text-sm font-semibold text-gray-900">Provider pipeline</h2>
+                <p class="text-xs text-gray-500">
+                    Pay capacity {{ $p['pay_per_minute'] }}/min (&asymp;{{ number_format($p['pay_per_hour']) }}/hour), the configured KiNG FLEXY budget @if ($p['provider_documented_pay_per_minute'])(provider documents {{ $p['provider_documented_pay_per_minute'] }}/min per key)@endif. Used this minute: {{ $p['pay_used_this_minute'] }}/{{ $p['pay_per_minute'] }}.
+                </p>
+            </div>
+            <div class="grid gap-3 grid-cols-2 lg:grid-cols-4">
+                <x-admin.stat label="Awaiting submission" :value="number_format($p['awaiting_submission'])"
+                    :hint="$p['awaiting_submission'] ? 'Oldest paid '.$p['oldest_waiting_minutes'].' min ago'.($p['retry_scheduled'] ? ' · '.$p['retry_scheduled'].' retry scheduled' : '') : 'None waiting'"
+                    :tone="$p['accumulating'] ? 'warning' : 'neutral'" :href="route('admin.utility-bill-sales.index', ['fulfillment' => 'queued'])" />
+                <x-admin.stat label="Submitting now" :value="number_format($p['submitting'])" :href="route('admin.utility-bill-sales.index', ['fulfillment' => 'submitting'])" />
+                <x-admin.stat label="With provider" :value="number_format($p['with_provider'])" hint="Pending or processing at KiNG FLEXY" tone="brand" :href="route('admin.utility-bill-sales.index', ['fulfillment' => 'provider_pending'])" />
+                <x-admin.stat label="Needs attention" :value="number_format($p['attention'])" :tone="$p['attention'] ? 'danger' : 'neutral'" :href="route('admin.utility-bill-sales.index', ['fulfillment' => 'attention'])" />
+            </div>
+            @if ($p['state'] === 'capacity_backlog')
+                <p class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <strong>Provider capacity backlog.</strong> {{ number_format($p['awaiting_submission']) }} paid {{ \Illuminate\Support\Str::plural('bill', $p['awaiting_submission']) }} are queued faster than KiNG FLEXY's pay limit accepts them
+                    (paid in the last hour: {{ $p['paid_last_hour'] }}, submitted: {{ $p['submitted_last_hour'] }}). At {{ $p['pay_per_minute'] }}/min the queue clears in about {{ $p['drain_minutes'] }} min, oldest first. This is a capacity limit, not an outage; the provider limit can only be raised by KiNG FLEXY.
+                </p>
+            @elseif ($p['state'] === 'flowing')
+                <p class="text-xs text-gray-500">Queue is draining normally: about {{ $p['drain_minutes'] }} min at the current pay capacity, oldest first.</p>
+            @endif
+        </section>
+
         @if ($attentionCount)
             <a href="{{ route('admin.utility-bill-sales.index', ['fulfillment' => 'attention']) }}" class="block bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-lg text-sm">
                 <strong>{{ $attentionCount }}</strong> paid {{ \Illuminate\Support\Str::plural('bill', $attentionCount) }} need attention (e.g. provider wallet low). The customers have paid.

@@ -27,7 +27,6 @@ use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\RateLimiter;
 use InvalidArgumentException;
 
 /**
@@ -178,11 +177,7 @@ class KingFlexyUtilityProvider
     /** Seconds until the local pay budget has room again; 0 when a pay call may be sent now. */
     public function payBudgetAvailableIn(): int
     {
-        $key = 'utility-bills:provider:pay';
-
-        return RateLimiter::tooManyAttempts($key, (int) config('utility_bills.rate.pay_per_minute', 5))
-            ? max(1, RateLimiter::availableIn($key))
-            : 0;
+        return app(ProviderRateBudget::class)->availableIn('pay');
     }
 
     public function lookup(string $biller, string $account, ?string $phone = null): LookupResult
@@ -287,15 +282,12 @@ class KingFlexyUtilityProvider
             throw new NotConfigured('Commission Services API key is not configured.');
         }
 
-        $limitKey = 'utility-bills:provider:'.$endpoint;
-        $perMinute = (int) config('utility_bills.rate.'.$endpoint.'_per_minute', 5);
-
-        // Count and compare in ONE atomic increment: a separate check followed by a hit lets two
-        // concurrent workers both pass and overshoot the provider's limit.
-        if (RateLimiter::hit($limitKey, 60) > $perMinute) {
-            Log::warning('utility_bills.provider.local_rate_limited', ['endpoint' => $endpoint] + $logContext);
+        // One shared, atomic, sliding-window budget per endpoint for every caller (customers,
+        // workers, sweeper, admin): a slot is taken before anything is sent.
+        if (($wait = app(ProviderRateBudget::class)->acquire($endpoint)) > 0) {
+            Log::warning('utility_bills.provider.local_rate_limited', ['endpoint' => $endpoint, 'retry_after' => $wait] + $logContext);
             // Nothing was sent: callers may retry without counting an attempt.
-            throw ProviderRateLimited::local(RateLimiter::availableIn($limitKey));
+            throw ProviderRateLimited::local($wait);
         }
 
         try {

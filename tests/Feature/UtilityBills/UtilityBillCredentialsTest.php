@@ -21,6 +21,7 @@ class UtilityBillCredentialsTest extends UtilityBillTestCase
 
     public function test_admin_can_save_key_encrypted_and_it_is_never_rendered_or_audited(): void
     {
+        $this->fake([self::BASE.'/utilities/billers' => Http::response($this->billersBody())]);
         $this->admin();
 
         $this->put(route('admin.utility-bills.settings.credentials'), ['api_key' => self::KEY])

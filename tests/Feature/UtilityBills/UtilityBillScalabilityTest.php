@@ -13,6 +13,7 @@ use App\Services\UtilityBills\Exceptions\ProviderRateLimited;
 use App\Services\UtilityBills\Exceptions\SaleNotAllowed;
 use App\Services\UtilityBills\FulfillmentStatus;
 use App\Services\UtilityBills\KingFlexyUtilityProvider;
+use App\Services\UtilityBills\ProviderRateBudget;
 use App\Services\UtilityBills\UtilityBillAvailability;
 use App\Services\UtilityBills\UtilityBillFulfillmentService;
 use App\Services\UtilityBills\UtilityBillSettings;
@@ -22,7 +23,6 @@ use Illuminate\Http\Client\Factory;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
-use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 
 /** Behaviour under load and provider trouble: storefront latency, shared budgets, wallet incidents, scheduler. */
@@ -127,7 +127,7 @@ class UtilityBillScalabilityTest extends UtilityBillTestCase
     {
         $this->fake([self::BASE.'/utilities/pay' => Http::response($this->payBody())]);
         config(['utility_bills.rate.pay_per_minute' => 1]);
-        RateLimiter::hit('utility-bills:provider:pay', 3600);   // budget already used by other orders
+        $this->useUpBudget('pay');   // budget already used by other orders
 
         $u = $this->makeOrder(['paid' => true]);
         $svc = app(UtilityBillFulfillmentService::class);
@@ -144,7 +144,7 @@ class UtilityBillScalabilityTest extends UtilityBillTestCase
         $this->assertCount(0, Http::recorded());
 
         // Budget frees up: the order goes through on its first counted attempt.
-        RateLimiter::clear('utility-bills:provider:pay');
+        app(ProviderRateBudget::class)->clear('pay');
         UtilityBillOrder::whereKey($u->id)->update(['next_submit_at' => now()->subSecond()]);
         $this->assertSame('submitted', $svc->submit($u->id));
         $this->assertSame(1, (int) $u->fresh()->submit_attempts);
@@ -188,7 +188,7 @@ class UtilityBillScalabilityTest extends UtilityBillTestCase
 
         Queue::fake();
         config(['utility_bills.rate.pay_per_minute' => 1]);
-        RateLimiter::hit('utility-bills:provider:pay', 3600);
+        $this->useUpBudget('pay');
         UtilityBillOrder::whereKey($u->id)->update(['next_submit_at' => now()->subSecond()]);
 
         $this->assertSame('deferred', app(UtilityBillFulfillmentService::class)->submit($u->id));
@@ -236,7 +236,7 @@ class UtilityBillScalabilityTest extends UtilityBillTestCase
         UtilityBillOrder::whereKey($older->id)->update(['next_submit_at' => now()->subMinute()]);
 
         $this->fake([self::BASE.'/utilities/pay' => Http::response($this->payBody('UTIL-DSTV-new1'))]);
-        RateLimiter::clear('utility-bills:provider:pay');
+        app(ProviderRateBudget::class)->clear('pay');
         $newer = $this->makeOrder(['paid' => true]);                  // immediate dispatch yields
 
         $this->assertSame(FulfillmentStatus::QUEUED, $newer->fresh()->fulfillment_status);
@@ -275,7 +275,7 @@ class UtilityBillScalabilityTest extends UtilityBillTestCase
             $u = $this->makeOrder(['paid' => true]);
 
             for ($i = 0; $i < 10; $i++) {
-                RateLimiter::clear('utility-bills:provider:pay');
+                app(ProviderRateBudget::class)->clear('pay');
                 UtilityBillOrder::whereKey($u->id)->update(['next_submit_at' => now()->subSecond()]);
                 $this->assertSame('requeued', app(UtilityBillFulfillmentService::class)->submit($u->id));
             }
@@ -309,7 +309,7 @@ class UtilityBillScalabilityTest extends UtilityBillTestCase
         $delays = [];
 
         for ($i = 0; $i < 6; $i++) {
-            RateLimiter::clear('utility-bills:provider:pay');
+            app(ProviderRateBudget::class)->clear('pay');
             $u = $this->makeOrder(['paid' => true]);
             $delays[] = now()->diffInSeconds($u->fresh()->next_submit_at, true);
         }
@@ -337,7 +337,7 @@ class UtilityBillScalabilityTest extends UtilityBillTestCase
 
         // Automatic retries keep failing while the wallet is empty.
         for ($i = 0; $i < 10; $i++) {
-            RateLimiter::clear('utility-bills:provider:pay');
+            app(ProviderRateBudget::class)->clear('pay');
             UtilityBillOrder::whereKey($a->id)->update(['fulfillment_status' => FulfillmentStatus::QUEUED, 'next_submit_at' => now()->subSecond()]);
             $svc->submit($a->id);
         }
@@ -380,7 +380,7 @@ class UtilityBillScalabilityTest extends UtilityBillTestCase
 
         // A later incident alerts again (one per incident).
         $before = $this->walletAlerts();
-        RateLimiter::clear('utility-bills:provider:pay');
+        app(ProviderRateBudget::class)->clear('pay');
         $this->makeOrder(['paid' => true]);
         $this->assertSame($before + 1, $this->walletAlerts());
     }
@@ -394,7 +394,7 @@ class UtilityBillScalabilityTest extends UtilityBillTestCase
 
         // Wallet topped up; the next submission succeeds.
         $this->fake([self::BASE.'/utilities/pay' => Http::response($this->payBody('UTIL-DSTV-ok1'))]);
-        RateLimiter::clear('utility-bills:provider:pay');
+        app(ProviderRateBudget::class)->clear('pay');
         UtilityBillOrder::whereKey($waiting->id)->update(['fulfillment_status' => FulfillmentStatus::QUEUED, 'next_submit_at' => now()->subSecond()]);
         $this->assertSame('submitted', app(UtilityBillFulfillmentService::class)->submit($waiting->id));
 
@@ -408,7 +408,7 @@ class UtilityBillScalabilityTest extends UtilityBillTestCase
         $svc = app(UtilityBillFulfillmentService::class);
 
         for ($i = 0; $i < 4; $i++) {
-            RateLimiter::clear('utility-bills:provider:pay');
+            app(ProviderRateBudget::class)->clear('pay');
             UtilityBillOrder::whereKey($u->id)->update(['fulfillment_status' => FulfillmentStatus::QUEUED, 'next_submit_at' => now()->subSecond()]);
             $svc->submit($u->id);
         }

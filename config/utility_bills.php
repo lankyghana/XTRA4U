@@ -35,13 +35,29 @@ return [
 
     // Our own budgets, set a notch BELOW the provider's published per-minute
     // limits (lookup 10, pay 6, status 30, billers 30) so normal traffic never
-    // earns a 429.
+    // earns a 429. Enforced as a shared sliding 60 s window across every
+    // process (ProviderRateBudget). The pay budget IS the bill throughput:
+    // 5/min = at most 300 bills/hour. Raise UTILITY_BILLS_PAY_PER_MINUTE only
+    // after KiNG FLEXY confirms a higher limit in writing; nothing else changes.
     'rate' => [
         'lookup_per_minute' => (int) env('UTILITY_BILLS_LOOKUP_PER_MINUTE', 9),
         'pay_per_minute' => (int) env('UTILITY_BILLS_PAY_PER_MINUTE', 5),
         'status_per_minute' => (int) env('UTILITY_BILLS_STATUS_PER_MINUTE', 25),
         'billers_per_minute' => (int) env('UTILITY_BILLS_BILLERS_PER_MINUTE', 25),
     ],
+
+    // The provider's own documented per-key limits, for display only (Admin
+    // shows them next to our budget). Never used to send faster.
+    'provider_documented_rate' => ['lookup' => 10, 'pay' => 6, 'status' => 30, 'billers' => 30],
+
+    // A submit job (queue worker only, never a web request) that finds the pay
+    // budget full but freeing within this many seconds waits for that slot
+    // instead of leaving the order for the next per-minute sweep. 0 disables.
+    'pay_inline_wait_seconds' => (int) env('UTILITY_BILLS_PAY_INLINE_WAIT', 15),
+
+    // Admin pipeline panel: a submission backlog that would take longer than
+    // this to drain at the pay budget is shown as "accumulating".
+    'backlog_warn_minutes' => (int) env('UTILITY_BILLS_BACKLOG_WARN_MINUTES', 10),
 
     // Fulfillment.
     'claim_stale_seconds' => (int) env('UTILITY_BILLS_CLAIM_STALE_SECONDS', 300),

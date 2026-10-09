@@ -8,9 +8,11 @@ use App\Models\UtilityBillOrder;
 use App\Services\Payments\PaymentIntegrityGuard;
 use App\Services\PaymentService;
 use App\Services\UtilityBills\FulfillmentStatus;
+use App\Services\UtilityBills\ProviderRateBudget;
 use App\Support\PaymentFailureTransition;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 /**
@@ -120,6 +122,60 @@ class UtilityBillMySqlConcurrencyTest extends TestCase
         $this->assertNotNull($order->payment_completed_at);
         $this->assertSame(1, $u->events()->where('kind', 'payment_confirmed')->count());
         $this->assertSame(1, $u->events()->where('kind', 'submit_claimed')->count());
+    }
+
+    // ------------------------------------------------------------------
+    // Shared provider budget across processes (database cache store)
+    // ------------------------------------------------------------------
+
+    public function test_the_pay_budget_is_atomic_across_processes(): void
+    {
+        config(['utility_bills.rate.pay_per_minute' => 5]);
+        $startAt = microtime(true) + 3;
+
+        $workers = [];
+        for ($i = 0; $i < 6; $i++) {
+            $workers[] = $this->spawn('budget', ['endpoint' => 'pay', 'attempts' => 5, 'start_at' => $startAt]);
+        }
+        $granted = collect($workers)->sum(fn ($p) => $this->finish($p)['granted']);
+
+        // 30 simultaneous attempts from 6 processes; exactly the budget got through.
+        $this->assertSame(5, $granted);
+        config(['cache.default' => 'database']);
+        $this->assertSame(5, app(ProviderRateBudget::class)->used('pay'));
+    }
+
+    public function test_concurrent_submit_workers_never_exceed_the_pay_budget_or_pay_an_order_twice(): void
+    {
+        Queue::fake();   // keep the orders queued: only the workers below submit them
+        $orders = collect(range(1, 10))->map(function () {
+            $u = $this->unpaidOrder();
+            $order = $u->order;
+            $integrity = app(PaymentIntegrityGuard::class)->guard($order, ['success' => true, 'data' => ['status' => 'success', 'amount' => 100.0, 'currency' => 'GHS', 'reference' => $order->payment_reference, 'id' => 'T'.$u->id]], 'paystack');
+            $order->amount_paid = $integrity->confirmedAmount;
+            app(PaymentService::class)->completeOrder($order);
+
+            return $u->fresh();
+        });
+        $this->assertTrue($orders->every(fn ($u) => $u->fulfillment_status === FulfillmentStatus::QUEUED));
+
+        $ids = $orders->pluck('id')->all();
+        $startAt = microtime(true) + 3;
+        $workers = [];
+        for ($i = 0; $i < 4; $i++) {
+            // Every worker walks the same orders (rotated), as overlapping sweeps/retries would.
+            $mine = array_merge(array_slice($ids, $i * 2), array_slice($ids, 0, $i * 2));
+            $workers[] = $this->spawn('submit', ['ids' => $mine, 'pay_per_minute' => 3, 'start_at' => $startAt]);
+        }
+        $payCalls = collect($workers)->sum(fn ($p) => $this->finish($p)['pay_calls']);
+
+        $this->assertSame(3, $payCalls, 'exactly the pay budget reached the provider');
+        $accepted = DB::table('utility_bill_events')->where('kind', 'provider_accepted')->pluck('utility_bill_order_id');
+        $this->assertCount(3, $accepted);
+        $this->assertCount(3, $accepted->unique(), 'no order was paid twice');
+        $this->assertSame(3, UtilityBillOrder::query()->where('fulfillment_status', FulfillmentStatus::PROVIDER_PENDING)->count());
+        $this->assertSame(7, UtilityBillOrder::query()->where('fulfillment_status', FulfillmentStatus::QUEUED)->where('submit_attempts', 0)->count(),
+            'held-back orders stay queued and uncounted');
     }
 
     // ------------------------------------------------------------------

@@ -4,29 +4,33 @@ namespace Tests\Feature\UtilityBills;
 
 use App\Jobs\SubmitUtilityBillPayment;
 use App\Models\Order;
+use App\Models\PaymentGatewayConfig;
 use App\Models\Setting;
+use App\Models\Transaction;
 use App\Models\User;
-use App\Models\UtilityBillEvent;
 use App\Models\UtilityBillerConfig;
+use App\Models\UtilityBillEvent;
 use App\Models\UtilityBillOrder;
 use App\Models\Vendor;
 use App\Models\WalletLedger;
 use App\Services\PaymentReconciliationService;
 use App\Services\PaymentService;
+use App\Services\UtilityBills\Data\StatusResult;
 use App\Services\UtilityBills\FulfillmentStatus;
 use App\Services\UtilityBills\KingFlexyUtilityProvider;
+use App\Services\UtilityBills\ProviderRateBudget;
 use App\Services\UtilityBills\UtilityBillAvailability;
 use App\Services\UtilityBills\UtilityBillFulfillmentService;
 use App\Services\UtilityBills\UtilityBillSettings;
 use App\Services\UtilityBills\UtilityBillSweeper;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
-use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -117,7 +121,7 @@ class UtilityBillHardeningTest extends UtilityBillTestCase
             fn () => Http::response(['success' => false], 429),
             fn () => Http::response(['success' => true, 'data' => 'garbage'], 200),
         ] as $outcome) {
-            RateLimiter::clear('utility-bills:provider:status');
+            app(ProviderRateBudget::class)->clear('status');
             $this->fake([self::BASE.'/utilities/orders/*' => $outcome]);
 
             $res = $this->svc()->adminRetry($u->id, ['id' => 1], newAttempt: true, reason: 'Provider refunded; customer still needs it');
@@ -140,7 +144,7 @@ class UtilityBillHardeningTest extends UtilityBillTestCase
         ];
 
         foreach ($cases as $label => $outcome) {
-            RateLimiter::clear('utility-bills:provider:pay');
+            app(ProviderRateBudget::class)->clear('pay');
             $this->fake([self::BASE.'/utilities/pay' => $outcome]);
             $u = $this->makeOrder(['paid' => true]);
             $u->refresh();
@@ -152,7 +156,7 @@ class UtilityBillHardeningTest extends UtilityBillTestCase
             $this->assertNull($u->provider_order_reference, $label);
 
             // Retry (as the scheduler/admin would) - identical reference every time.
-            RateLimiter::clear('utility-bills:provider:pay');
+            app(ProviderRateBudget::class)->clear('pay');
             $this->fake([self::BASE.'/utilities/pay' => $outcome]);
             $this->svc()->submit($u->id, force: true);
             $this->assertSame($ref, $u->fresh()->provider_request_reference, $label);
@@ -296,7 +300,7 @@ class UtilityBillHardeningTest extends UtilityBillTestCase
         $this->svc()->syncStatus($u->id);
 
         $this->fake([self::BASE.'/utilities/orders/*' => Http::response($this->statusBody('refunded', 'UTIL-DSTV-C1'))]);
-        $this->svc()->applyProviderStatus($u->id, new \App\Services\UtilityBills\Data\StatusResult('UTIL-DSTV-C1', 'refunded', 'paid', null, null, null, null));
+        $this->svc()->applyProviderStatus($u->id, new StatusResult('UTIL-DSTV-C1', 'refunded', 'paid', null, null, null, null));
 
         $this->assertSame(FulfillmentStatus::COMPLETED, $u->fresh()->fulfillment_status);
         $this->assertSame(1, WalletLedger::count());
@@ -404,6 +408,7 @@ class UtilityBillHardeningTest extends UtilityBillTestCase
 
     public function test_platform_orders_never_leak_into_vendor_views_or_wallets(): void
     {
+        $this->fake([self::BASE.'/utilities/pay' => Http::response($this->payBody())]);
         $vendor = Vendor::factory()->create(['is_approved' => true, 'wallet_balance' => 5]);
         $platform = $this->makeOrder(['vendor' => null, 'paid' => true]);
 
@@ -413,11 +418,12 @@ class UtilityBillHardeningTest extends UtilityBillTestCase
         $this->get(route('vendor.dashboard'))->assertOk();
 
         $this->assertSame('5.00', (string) $vendor->fresh()->wallet_balance);
-        $this->assertSame(0, \App\Models\Transaction::count());
+        $this->assertSame(0, Transaction::count());
     }
 
     public function test_admin_and_public_surfaces_tolerate_a_vendorless_order(): void
     {
+        $this->fake([self::BASE.'/utilities/pay' => Http::response($this->payBody())]);
         $platform = $this->makeOrder(['vendor' => null, 'paid' => true]);
         $order = Order::find($platform->order_id);
         $this->assertNull($order->vendor_id);
@@ -439,6 +445,7 @@ class UtilityBillHardeningTest extends UtilityBillTestCase
 
     public function test_platform_orders_are_not_exposed_through_public_id_or_phone_endpoints(): void
     {
+        $this->fake([self::BASE.'/utilities/pay' => Http::response($this->payBody())]);
         $platform = $this->makeOrder(['vendor' => null, 'paid' => true, 'phone' => '0551617309']);
         $order = Order::find($platform->order_id);
 
@@ -498,7 +505,7 @@ class UtilityBillHardeningTest extends UtilityBillTestCase
         Queue::assertPushed(SubmitUtilityBillPayment::class, 1);
         $this->assertSame('paid', $order->fresh()->payment_status);
         $this->assertSame(FulfillmentStatus::QUEUED, $u->fresh()->fulfillment_status);
-        $this->assertSame(0, \App\Models\Transaction::count());
+        $this->assertSame(0, Transaction::count());
         $this->assertSame(0, WalletLedger::count());
     }
 
@@ -540,12 +547,12 @@ class UtilityBillHardeningTest extends UtilityBillTestCase
         $order = Order::find($u->order_id);
         $order->forceFill(['payment_reference' => 'UB-RECON-1', 'created_at' => now()->subHour()])->save();
 
-        Http::swap(new \Illuminate\Http\Client\Factory);
+        Http::swap(new Factory);
         Http::fake(['https://api.paystack.co/*' => Http::response(['status' => true, 'data' => ['status' => 'success', 'amount' => 10000, 'currency' => 'GHS', 'reference' => 'UB-RECON-1']])]);
-        \App\Models\PaymentGatewayConfig::create([
-            'gateway_name' => \App\Models\PaymentGatewayConfig::GATEWAY_PAYSTACK, 'gateway_type' => \App\Models\PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION,
+        PaymentGatewayConfig::create([
+            'gateway_name' => PaymentGatewayConfig::GATEWAY_PAYSTACK, 'gateway_type' => PaymentGatewayConfig::TYPE_PAYMENT_COLLECTION,
             'supports_collection' => true, 'supports_generic' => true, 'supports_payout' => true, 'supports_sms' => false,
-            'is_active' => true, 'is_default' => true, 'environment' => \App\Models\PaymentGatewayConfig::ENV_SANDBOX,
+            'is_active' => true, 'is_default' => true, 'environment' => PaymentGatewayConfig::ENV_SANDBOX,
             'config_data' => ['public_key' => 'pk', 'secret_key' => 'sk', 'payment_url' => 'https://api.paystack.co'], 'supported_features' => [],
         ]);
 
@@ -556,7 +563,7 @@ class UtilityBillHardeningTest extends UtilityBillTestCase
         $this->assertSame('paid', $order->fresh()->payment_status);
         $this->assertSame('verified', $order->fresh()->payment_integrity_status);
         Queue::assertPushed(SubmitUtilityBillPayment::class, 1);
-        $this->assertSame(0, \App\Models\Transaction::count());
+        $this->assertSame(0, Transaction::count());
     }
 
     public function test_no_normal_vendor_or_reseller_earnings_come_from_a_utility_payment(): void
@@ -571,7 +578,7 @@ class UtilityBillHardeningTest extends UtilityBillTestCase
         $this->assertNull($order->reseller_earning);
         $this->assertNull($order->platform_commission);
         $this->assertFalse((bool) $order->is_reseller_order);
-        $this->assertSame(0, \App\Models\Transaction::count());
+        $this->assertSame(0, Transaction::count());
         $this->assertSame(0, WalletLedger::count());
     }
 
@@ -637,7 +644,7 @@ class UtilityBillHardeningTest extends UtilityBillTestCase
 
         config(['utility_bills.rate.status_per_minute' => 3]);
         $this->fake([self::BASE.'/utilities/orders/*' => Http::response($this->statusBody('processing', 'UTIL-DSTV-P0'))]);
-        RateLimiter::clear('utility-bills:provider:status');
+        app(ProviderRateBudget::class)->clear('status');
 
         app(UtilityBillSweeper::class)->run(submitLimit: 5, pollLimit: 20);
 

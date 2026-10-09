@@ -38,7 +38,7 @@ class SubmitUtilityBillPayment implements ShouldQueue
     public function handle(UtilityBillFulfillmentService $fulfillment): void
     {
         try {
-            $fulfillment->submit($this->utilityBillOrderId, yieldToBacklog: ! $this->fromSweeper);
+            $fulfillment->submitFromWorker($this->utilityBillOrderId, yieldToBacklog: ! $this->fromSweeper);
         } finally {
             // This sweeper dispatch is done: the next run may dispatch the order again if still due.
             if ($this->fromSweeper) {

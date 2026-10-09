@@ -8,12 +8,12 @@ use App\Models\UtilityBillOrder;
 use App\Services\SmsService;
 use App\Services\UtilityBills\Data\StatusResult;
 use App\Services\UtilityBills\FulfillmentStatus;
+use App\Services\UtilityBills\ProviderRateBudget;
 use App\Services\UtilityBills\UtilityBillFulfillmentService;
 use App\Services\UtilityBills\UtilityBillSweeper;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
-use Illuminate\Support\Facades\RateLimiter;
 use Mockery;
 
 /** Stuck-order alerts, atomic "send once" side effects, and database cache pruning. */
@@ -154,7 +154,7 @@ class UtilityBillAlertsTest extends UtilityBillTestCase
 
         Queue::fake();
         $this->fake([self::BASE.'/utilities/orders/*' => Http::response($this->statusBody('refunded', 'UTIL-DSTV-na1'))]);
-        RateLimiter::clear('utility-bills:provider:status');
+        app(ProviderRateBudget::class)->clear('status');
         $result = $svc->adminRetry($u->id, ['id' => 1, 'email' => 'a@x.test'], newAttempt: true, reason: 'customer still needs the bill');
 
         $this->assertTrue($result['ok'], $result['message']);
