@@ -4,9 +4,12 @@ namespace Tests\Feature\UtilityBills;
 
 use App\Models\Order;
 use App\Models\PaymentGatewayConfig;
+use App\Models\UtilityBillerConfig;
 use App\Models\UtilityBillOrder;
 use App\Models\Vendor;
 use App\Services\UtilityBills\FulfillmentStatus;
+use App\Services\UtilityBills\UtilityBillFulfillmentService;
+use App\Services\UtilityBills\UtilityBillSettings;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -232,7 +235,7 @@ class UtilityBillPublicFlowTest extends UtilityBillTestCase
         Http::assertNotSent(fn (Request $q) => str_ends_with($q->url(), '/utilities/pay'));
 
         // Admin changes the rate later: the existing order stays frozen.
-        \App\Models\UtilityBillerConfig::where('biller_key', 'ecg')->update(['commission_value' => '9']);
+        UtilityBillerConfig::where('biller_key', 'ecg')->update(['commission_value' => '9']);
         $this->assertSame('1.5000', (string) $u->fresh()->commission_value);
     }
 
@@ -310,11 +313,11 @@ class UtilityBillPublicFlowTest extends UtilityBillTestCase
         $j = $this->lookupEcg();
         $payload = ['lookup_token' => $j['token'], 'selected_meter_id' => $j['meters'][0]['id'], 'amount' => '10'];
 
-        \App\Services\UtilityBills\UtilityBillSettings::save(false, 'Back soon');
+        UtilityBillSettings::save(false, 'Back soon');
         $this->postJson($this->checkoutUrl(null), $payload)->assertStatus(422)->assertJson(['message' => 'Back soon']);
 
-        \App\Services\UtilityBills\UtilityBillSettings::save(true, null);
-        \App\Models\UtilityBillerConfig::where('biller_key', 'ecg')->update(['is_enabled' => false]);
+        UtilityBillSettings::save(true, null);
+        UtilityBillerConfig::where('biller_key', 'ecg')->update(['is_enabled' => false]);
         $this->postJson($this->checkoutUrl(null), $payload)->assertStatus(422);
         $this->assertSame(0, UtilityBillOrder::count());
     }
@@ -378,11 +381,31 @@ class UtilityBillPublicFlowTest extends UtilityBillTestCase
 
         // Provider completes.
         $this->fake([self::BASE.'/utilities/orders/*' => Http::response($this->statusBody('completed', 'UTIL-ECG-111', 1.3))]);
-        app(\App\Services\UtilityBills\UtilityBillFulfillmentService::class)->syncStatus($u->id);
+        app(UtilityBillFulfillmentService::class)->syncStatus($u->id);
 
         $this->get($u->statusUrl())->assertOk()->assertSee('Utility payment successful');
         $this->assertSame('credited', $u->fresh()->commission_status);
         $this->getJson(route('utility-bills.poll', $u->access_token))->assertJson(['stage' => 'completed', 'terminal' => true]);
+    }
+
+    public function test_a_failed_verify_never_overwrites_a_payment_settled_meanwhile(): void
+    {
+        $this->openService(['ecg']);
+        $this->fakeAll();
+        $u = $this->placeOrder(null);
+        $ref = $u->order->payment_reference;
+
+        // While the browser's verify waits on the gateway, the webhook settles the order.
+        $this->fakeAll(['https://api.paystack.co/transaction/verify/*' => function () use ($u, $ref) {
+            Order::whereKey($u->order_id)->update(['payment_status' => 'paid', 'status' => 'Processing']);
+
+            return Http::response(['status' => true, 'data' => ['status' => 'failed', 'reference' => $ref]]);
+        }]);
+
+        $this->postJson(route('utility-bills.verify'), ['reference' => $ref])->assertOk()
+            ->assertJson(['status' => 'success', 'redirect' => $u->statusUrl()]);
+
+        $this->assertSame('paid', $u->order->fresh()->payment_status);
     }
 
     public function test_underpayment_is_refused_and_never_fulfils(): void

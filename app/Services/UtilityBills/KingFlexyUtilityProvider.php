@@ -20,6 +20,7 @@ use App\Services\UtilityBills\Exceptions\ProviderUnauthorized;
 use App\Services\UtilityBills\Exceptions\ProviderUnreachable;
 use App\Services\UtilityBills\Exceptions\UtilityProviderException;
 use App\Support\Money;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
@@ -52,6 +53,8 @@ class KingFlexyUtilityProvider
 
     private const CATALOG_FAILED_KEY = 'utility_bills.catalog.failed';
 
+    private const CATALOG_LOCK_KEY = 'utility_bills.catalog.refresh';
+
     /** Display only: why the last catalogForDisplay() call fell back ('rejected' | 'unavailable'), else null. */
     public ?string $lastCatalogFailure = null;
 
@@ -71,11 +74,46 @@ class KingFlexyUtilityProvider
      */
     public function catalog(?int $timeout = null): Catalog
     {
-        $cached = Cache::get(self::CATALOG_KEY);
-        if (is_array($cached)) {
-            return Catalog::fromArray($cached);
-        }
+        return $this->cachedCatalog() ?? $this->refreshCatalog($timeout, display: false);
+    }
 
+    private function cachedCatalog(): ?Catalog
+    {
+        $cached = Cache::get(self::CATALOG_KEY);
+
+        return is_array($cached) ? Catalog::fromArray($cached) : null;
+    }
+
+    /**
+     * One provider request per expiry, however many pages render at that moment: the
+     * first caller refreshes under a lock, the others wait briefly for its result
+     * instead of each calling the provider (which would also use up the billers budget
+     * and trip the failure flag). A display caller that finds the refresh just failed
+     * does not try again; the failure flag already covers it.
+     */
+    private function refreshCatalog(?int $timeout, bool $display): Catalog
+    {
+        $wait = max(1, $timeout ?? (int) config('services.kingflexy_utilities.timeout', 20)) + 1;
+
+        try {
+            return Cache::lock(self::CATALOG_LOCK_KEY, $wait + 5)->block($wait, function () use ($timeout, $display) {
+                if ($catalog = $this->cachedCatalog()) {
+                    return $catalog;                                   // refreshed while we waited
+                }
+                if ($display && is_string(Cache::get(self::CATALOG_FAILED_KEY))) {
+                    throw new ProviderUnreachable('Catalog refresh failed moments ago.');
+                }
+
+                return $this->fetchCatalog($timeout);
+            });
+        } catch (LockTimeoutException) {
+            // The refresh in progress outlasted our wait: the provider is slow, so treat it as unreachable.
+            return $this->cachedCatalog() ?? throw new ProviderUnreachable('Catalog refresh still in progress.');
+        }
+    }
+
+    private function fetchCatalog(?int $timeout): Catalog
+    {
         $response = $this->send('billers', 'get', '/utilities/billers', timeout: $timeout);
         $catalog = $this->parseCatalog($response);
 
@@ -111,9 +149,11 @@ class KingFlexyUtilityProvider
         }
 
         try {
-            return [$this->catalog((int) config('utility_bills.display_timeout', 2)), false];
+            return [$this->cachedCatalog() ?? $this->refreshCatalog((int) config('utility_bills.display_timeout', 2), display: true), false];
         } catch (UtilityProviderException $e) {
-            $this->lastCatalogFailure = $e instanceof ProviderUnauthorized ? 'rejected' : 'unavailable';
+            // Keep the reason a concurrent refresh already recorded (e.g. 'rejected').
+            $recorded = Cache::get(self::CATALOG_FAILED_KEY);
+            $this->lastCatalogFailure = is_string($recorded) ? $recorded : ($e instanceof ProviderUnauthorized ? 'rejected' : 'unavailable');
             Cache::put(self::CATALOG_FAILED_KEY, $this->lastCatalogFailure, max(1, (int) config('utility_bills.catalog_failure_ttl', 60)));
 
             return $this->staleCatalog();

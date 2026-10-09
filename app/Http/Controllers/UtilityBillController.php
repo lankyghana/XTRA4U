@@ -20,6 +20,7 @@ use App\Support\PaymentVerificationState;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -90,7 +91,7 @@ class UtilityBillController extends Controller
             'requiresInlineMomo' => PaymentGatewayConfig::defaultCollectionRequiresPayerPhone(),
             'shopUrl' => $vendor ? route('storefront.vendor', ['vendor' => $vendor->vendor_code]) : route('services.utility-bills'),
             // Header "Vendor Dashboard" shortcut only; same convenience check as the store page.
-            'isStoreOwner' => $vendor && \Illuminate\Support\Facades\Auth::guard('vendor')->id() === $vendor->id,
+            'isStoreOwner' => $vendor && Auth::guard('vendor')->id() === $vendor->id,
         ]);
     }
 
@@ -277,7 +278,15 @@ class UtilityBillController extends Controller
         $state = PaymentVerificationState::from($verification);
 
         if ($state === PaymentVerificationState::FAILED) {
-            $order->update(['payment_status' => 'failed', 'status' => 'Failed']);
+            // Conditional: a webhook or reconciliation may have settled this order while we asked
+            // the gateway. A paid order is never flipped to failed (it would never be fulfilled).
+            $marked = Order::query()->whereKey($order->id)
+                ->whereNotIn('payment_status', ['paid', 'completed'])
+                ->update(['payment_status' => 'failed', 'status' => 'Failed']);
+
+            if ($marked === 0 && in_array(Order::query()->whereKey($order->id)->value('payment_status'), ['paid', 'completed'], true)) {
+                return response()->json(['success' => true, 'status' => 'success', 'redirect' => $utility->statusUrl()]);
+            }
 
             return response()->json(['success' => true, 'status' => 'failed', 'message' => 'Payment failed.']);
         }

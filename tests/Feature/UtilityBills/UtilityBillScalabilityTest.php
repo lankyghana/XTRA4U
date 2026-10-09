@@ -19,6 +19,7 @@ use App\Services\UtilityBills\UtilityBillSettings;
 use App\Services\UtilityBills\UtilityBillSweeper;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
@@ -147,6 +148,36 @@ class UtilityBillScalabilityTest extends UtilityBillTestCase
         UtilityBillOrder::whereKey($u->id)->update(['next_submit_at' => now()->subSecond()]);
         $this->assertSame('submitted', $svc->submit($u->id));
         $this->assertSame(1, (int) $u->fresh()->submit_attempts);
+    }
+
+    public function test_storefronts_do_not_stampede_the_provider_while_another_request_refreshes_the_catalog(): void
+    {
+        config(['utility_bills.display_timeout' => 1]);
+        $this->fake([self::BASE.'/utilities/billers' => Http::response($this->billersBody())]);
+        $provider = app(KingFlexyUtilityProvider::class);
+        $provider->catalog();                                   // warm, then expire the fresh copy
+        $provider->forgetCatalog();
+        Http::swap(new Factory);
+        Http::fake([self::BASE.'/utilities/billers' => Http::response($this->billersBody())]);
+
+        // Another request is mid-refresh.
+        $lock = Cache::lock('utility_bills.catalog.refresh', 30);
+        $this->assertTrue($lock->get());
+
+        $started = microtime(true);
+        [$catalog, $stale] = $provider->catalogForDisplay();
+
+        $this->assertCount(0, Http::recorded(), 'a waiting page called the provider');
+        $this->assertLessThan(4, microtime(true) - $started, 'a page waited longer than the display budget');
+        $this->assertNotNull($catalog);
+        $this->assertTrue($stale, 'falls back to the last good copy');
+
+        // Once the refresh is done, the next page refreshes normally (one call).
+        $lock->release();
+        $provider->forgetCatalog();
+        [$catalog, $stale] = $provider->catalogForDisplay();
+        $this->assertFalse($stale);
+        $this->assertCount(1, Http::recorded());
     }
 
     public function test_deferred_and_retried_submissions_never_dispatch_their_own_jobs(): void
