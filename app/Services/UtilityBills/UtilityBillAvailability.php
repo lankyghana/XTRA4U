@@ -28,7 +28,7 @@ class UtilityBillAvailability
      */
     public function sellable(): Collection
     {
-        if (! $this->serviceOpen() || ! $this->provider->isConfigured()) {
+        if (! $this->serviceOpen() || ! $this->provider->isConfigured() || UtilityBillSettings::providerWalletPausedAt() !== null) {
             return collect();
         }
 
@@ -74,6 +74,10 @@ class UtilityBillAvailability
 
         if (! $this->provider->isConfigured()) {
             throw new SaleNotAllowed('Utility bills are not available right now.', 'not_configured');
+        }
+
+        if (UtilityBillSettings::providerWalletPausedAt() !== null) {
+            throw new SaleNotAllowed('Utility bills are temporarily unavailable. Please try again later.', 'provider_wallet_low');
         }
 
         try {

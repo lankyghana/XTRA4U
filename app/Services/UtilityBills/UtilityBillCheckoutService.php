@@ -11,6 +11,7 @@ use App\Services\Payments\CheckoutIntentGuard;
 use App\Services\Payments\OrderPricingSnapshot;
 use App\Services\PaymentService;
 use App\Services\UtilityBills\Exceptions\SaleNotAllowed;
+use App\Support\GhanaPhoneNumber;
 use App\Support\Money;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -105,7 +106,7 @@ class UtilityBillCheckoutService
             $idempotencyKey,
             fn (?string $key) => DB::transaction(function () use (
                 $key, $scope, $amount, $biller, $target, $payerPhone, $payerNetwork, $gatewayName, $vendor,
-                $commissionType, $commissionValue, $commissionAmount, $publicRef, $snapshot, $catalog
+                $commissionType, $commissionValue, $commissionAmount, $publicRef, $catalog
             ) {
                 $order = Order::create([
                     'recipient_phone_number' => $target['phone'] ?? $payerPhone ?? 'N/A',
@@ -294,11 +295,11 @@ class UtilityBillCheckoutService
     private function validatePayer(?string $phone, ?string $network): array
     {
         $needsPayer = PaymentGatewayConfig::defaultCollectionRequiresPayerPhone();
-        $phone = $phone !== null && trim($phone) !== '' ? \App\Support\GhanaPhoneNumber::toLocal($phone) : null;
+        $phone = $phone !== null && trim($phone) !== '' ? GhanaPhoneNumber::toLocal($phone) : null;
         $network = $network !== null && trim($network) !== '' ? strtoupper(trim($network)) : null;
         $errors = [];
 
-        if ($phone !== null && ! \App\Support\GhanaPhoneNumber::isValidLocal($phone)) {
+        if ($phone !== null && ! GhanaPhoneNumber::isValidLocal($phone)) {
             $errors['payer_phone'] = 'Enter a valid Mobile Money number.';
         }
         if ($network !== null && ! in_array($network, ['MTN', 'TELECEL', 'AIRTELTIGO'], true)) {

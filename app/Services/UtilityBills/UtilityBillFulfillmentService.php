@@ -81,13 +81,15 @@ class UtilityBillFulfillmentService
         return true;
     }
 
-    public function dispatchSubmit(int $utilityBillOrderId, int $delaySeconds = 0): void
+    /**
+     * Immediate dispatch (payment confirmed, admin retry). Every LATER attempt — budget
+     * deferrals, transient retries, lost jobs — is re-dispatched only by UtilityBillSweeper,
+     * oldest order first and at most its per-run limit, so a backlog can never multiply
+     * jobs and orders are paid to the provider in the order customers paid.
+     */
+    public function dispatchSubmit(int $utilityBillOrderId, bool $fromSweeper = false): void
     {
-        $pending = SubmitUtilityBillPayment::dispatch($utilityBillOrderId)->afterCommit();
-
-        if ($delaySeconds > 0) {
-            $pending->delay(now()->addSeconds($delaySeconds));
-        }
+        SubmitUtilityBillPayment::dispatch($utilityBillOrderId, $fromSweeper)->afterCommit();
     }
 
     // ------------------------------------------------------------------
@@ -95,11 +97,13 @@ class UtilityBillFulfillmentService
     // ------------------------------------------------------------------
 
     /**
-     * @return string one of: skipped:<why> | submitted | requeued | attention | completed | claim_lost
+     * @param  bool  $yieldToBacklog  true for immediate (non-sweeper) dispatches: step aside when an
+     *                                older paid order is still waiting, so it is not overtaken
+     * @return string one of: skipped:<why> | deferred | submitted | requeued | attention | completed | claim_lost
      */
-    public function submit(int $utilityBillOrderId, bool $force = false): string
+    public function submit(int $utilityBillOrderId, bool $force = false, bool $yieldToBacklog = false): string
     {
-        $claim = $this->claim($utilityBillOrderId, $force);
+        $claim = $this->claim($utilityBillOrderId, $force, $yieldToBacklog);
 
         if (is_string($claim)) {
             return $claim;
@@ -123,9 +127,9 @@ class UtilityBillFulfillmentService
     /**
      * @return array{id:int,token:string,reference:string,biller:string,account:string,amount:string,phone:?string}|string
      */
-    private function claim(int $id, bool $force): array|string
+    private function claim(int $id, bool $force, bool $yieldToBacklog = false): array|string
     {
-        return DB::transaction(function () use ($id, $force) {
+        return DB::transaction(function () use ($id, $force, $yieldToBacklog) {
             $u = UtilityBillOrder::query()->whereKey($id)->lockForUpdate()->first();
 
             if (! $u) {
@@ -137,6 +141,13 @@ class UtilityBillFulfillmentService
             if (! $order
                 || ! in_array($order->payment_status, ['paid', 'completed'], true)
                 || ! $order->allowsFulfillment()) {
+                // A queued order whose payment is no longer confirmed (e.g. integrity re-stamped)
+                // can never be claimed; left queued it would stay "due" and hold one of the
+                // sweeper's oldest-first slots forever. Park it for a human instead.
+                if ($u->fulfillment_status === FulfillmentStatus::QUEUED) {
+                    $this->setAttention($u, 'payment_unconfirmed', 'Customer payment is no longer confirmed for fulfillment.', null);
+                }
+
                 return 'skipped:not_paid';
             }
 
@@ -155,6 +166,19 @@ class UtilityBillFulfillmentService
 
             if (! $force && $u->next_submit_at !== null && $u->next_submit_at->isFuture()) {
                 return 'skipped:backoff';
+            }
+
+            // An immediate dispatch must not overtake older paid orders still waiting; it stays
+            // queued and due, and the sweeper submits it in turn.
+            if ($yieldToBacklog && ! $force && $this->olderSubmissionWaiting($u)) {
+                return 'skipped:backlog';
+            }
+
+            // Check OUR pay budget before an attempt is claimed and counted: being held
+            // back locally sends nothing, so it must never use up the order's attempts.
+            // The order stays due; the sweeper re-dispatches it (oldest first) next run.
+            if ($this->provider->payBudgetAvailableIn() > 0) {
+                return 'deferred';
             }
 
             if (! $force && $u->submit_attempts >= (int) config('utility_bills.max_submit_attempts')) {
@@ -186,6 +210,8 @@ class UtilityBillFulfillmentService
                 'account' => $u->account_number,
                 'amount' => (string) $u->bill_amount,
                 'phone' => $u->customer_phone,
+                'attempts' => $u->submit_attempts,
+                'prev_error' => $u->last_error_code,
             ];
         });
     }
@@ -227,6 +253,11 @@ class UtilityBillFulfillmentService
             return 'claim_lost';
         }
 
+        // The provider just accepted a payment, so its wallet is funded again.
+        if (UtilityBillSettings::providerWalletPausedAt() !== null) {
+            $this->resumeAfterProviderWallet('system');
+        }
+
         $this->afterStatusChange($claim['id']);
 
         return $mapped === FulfillmentStatus::COMPLETED ? 'completed' : 'submitted';
@@ -240,6 +271,15 @@ class UtilityBillFulfillmentService
             'http_status' => $e->httpStatus,
         ]);
 
+        // Outcomes where the provider certainly did NOT act on this attempt: our own
+        // budget refused it before sending, the provider rate-limited it (429), it fell
+        // inside the provider's duplicate window (409), or the provider wallet could not
+        // cover it. They wait for capacity, so they never count toward max_submit_attempts.
+        $notCounted = $e instanceof ProviderRateLimited
+            || $e instanceof ProviderDuplicateWindow
+            || $e instanceof ProviderInsufficientBalance;
+        $attemptAttrs = $notCounted ? ['submit_attempts' => max(0, (int) $claim['attempts'] - 1)] : [];
+
         // Ambiguous or transient outcomes keep the SAME reference and go back to
         // the queue: a replay either returns the order the provider already
         // created, or creates it once.
@@ -251,40 +291,104 @@ class UtilityBillFulfillmentService
         if ($transient) {
             // 409 = the provider's 30 s duplicate window (a new reference would not bypass it):
             // nothing was charged, wait it out and retry with the SAME reference.
+            // Jitter spreads a burst of retries so they do not all collide again.
             $delay = match (true) {
-                $e instanceof ProviderRateLimited => 30,
-                $e instanceof ProviderDuplicateWindow => 40,
-                default => $this->submitBackoff($claim['id']),
+                $e instanceof ProviderRateLimited && $e->local => $this->jitter($e->retryAfter, 20),
+                $e instanceof ProviderRateLimited => $this->jitter(30, 30),
+                $e instanceof ProviderDuplicateWindow => $this->jitter(40, 15),
+                default => $this->jitter($this->submitBackoff($claim['id']), 15),
             };
 
-            $this->finishClaim($claim, [
+            $this->finishClaim($claim, $attemptAttrs + [
                 'fulfillment_status' => FulfillmentStatus::QUEUED,
                 'next_submit_at' => now()->addSeconds($delay),
                 'last_error_code' => $e->errorCode,
                 'last_error_message' => Str::limit($e->getMessage(), 250, ''),
-            ], 'submit_retry_scheduled', $e->errorCode.'; retry in '.$delay.'s with the same reference', $e->httpStatus, FulfillmentStatus::QUEUED);
+            ], 'submit_retry_scheduled', $e->errorCode.'; retry in '.$delay.'s with the same reference'.($notCounted ? ' (not counted as an attempt)' : ''), $e->httpStatus, FulfillmentStatus::QUEUED);
 
-            $this->dispatchSubmit($claim['id'], $delay);
-
+            // No delayed self-dispatch: the sweeper picks the order up once next_submit_at is due.
             return 'requeued';
         }
 
         // Provider wallet empty / biller or service disabled: paid-but-unfulfilled, recoverable.
         $attentionDelay = ($e instanceof ProviderInsufficientBalance || $e instanceof ProviderServiceDisabled) ? 900 : null;
 
-        $this->finishClaim($claim, [
+        $this->finishClaim($claim, $attemptAttrs + [
             'fulfillment_status' => FulfillmentStatus::ATTENTION,
             'next_submit_at' => $attentionDelay ? now()->addSeconds($attentionDelay) : null,
             'last_error_code' => $e->errorCode,
             'last_error_message' => Str::limit($e->getMessage(), 250, ''),
         ], 'needs_attention', $e->errorCode, $e->httpStatus, FulfillmentStatus::ATTENTION);
 
+        if ($e instanceof ProviderInsufficientBalance) {
+            // A provider-wide condition: pause new sales and alert ONCE per incident, not per order.
+            $this->providerWalletEmpty();
+
+            return 'attention';
+        }
+
+        // Alert when the order newly enters this problem, not again on every automatic retry.
         $u = UtilityBillOrder::query()->find($claim['id']);
-        if ($u) {
+        if ($u && $claim['prev_error'] !== $e->errorCode) {
             $this->alertAdmin($u, 'Utility Bill needs attention', $this->attentionMessage($u, $e->errorCode));
         }
 
         return 'attention';
+    }
+
+    // ------------------------------------------------------------------
+    // Provider wallet incident
+    // ------------------------------------------------------------------
+
+    private function providerWalletEmpty(): void
+    {
+        if (! UtilityBillSettings::pauseForProviderWallet()) {
+            return;
+        }
+
+        $waiting = UtilityBillOrder::query()
+            ->where('fulfillment_status', FulfillmentStatus::ATTENTION)
+            ->where('last_error_code', 'insufficient_balance')
+            ->count();
+
+        Log::error('utility_bills.provider_wallet.paused', ['waiting_orders' => $waiting]);
+
+        try {
+            AdminNotification::create([
+                'type' => 'utility_bill_attention',
+                'title' => 'KiNG FLEXY wallet too low: Utility Bills sales paused',
+                'message' => 'KiNG FLEXY reported its wallet cannot cover a bill payment. New Utility Bills sales are paused automatically. '
+                    .$waiting.' paid '.Str::plural('order', $waiting).' will keep retrying with their existing references. '
+                    .'Top up the KiNG FLEXY wallet; sales resume on the next successful payment, or resume them from Utility Bills Settings.',
+                'data' => ['incident' => 'provider_wallet_low', 'waiting_orders' => $waiting],
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('utility_bills.notify.admin_failed', ['error' => class_basename($e)]);
+        }
+    }
+
+    /**
+     * End a wallet incident (a provider payment succeeded, or an admin resumed): reopen
+     * sales and make the orders that were waiting on the wallet due now instead of in
+     * up to 15 minutes. Their provider references are unchanged.
+     *
+     * @return int orders made due now
+     */
+    public function resumeAfterProviderWallet(?string $actor = null): int
+    {
+        if (! UtilityBillSettings::resumeProviderWallet()) {
+            return 0;
+        }
+
+        $woken = UtilityBillOrder::query()
+            ->where('fulfillment_status', FulfillmentStatus::ATTENTION)
+            ->where('last_error_code', 'insufficient_balance')
+            ->whereNull('provider_order_reference')
+            ->update(['next_submit_at' => now(), 'updated_at' => now()]);
+
+        Log::info('utility_bills.provider_wallet.resumed', ['actor' => $actor ?? 'system', 'orders_due_now' => $woken]);
+
+        return $woken;
     }
 
     // ------------------------------------------------------------------
@@ -323,7 +427,6 @@ class UtilityBillFulfillmentService
         }
 
         $this->applyProviderStatus($u->id, $status);
-        $this->raiseStuckAlertIfDue($u->id);
 
         return 'updated';
     }
@@ -412,25 +515,51 @@ class UtilityBillFulfillmentService
         }
     }
 
-    private function raiseStuckAlertIfDue(int $id): void
+    /**
+     * Alert once that a PAID order has not finished in time. Called by the sweeper for every
+     * order past the threshold, whatever the provider has (or has not) answered: waiting on
+     * our pay budget, retrying, or pending at a provider whose status endpoint keeps failing.
+     *
+     * @return bool true when this call sent the alert
+     */
+    public function raiseStuckAlert(int $id): bool
     {
         $u = UtilityBillOrder::query()->find($id);
 
-        if (! $u || ! in_array($u->fulfillment_status, FulfillmentStatus::POLLABLE, true) || ! $u->submitted_at) {
-            return;
+        if (! $u || ! in_array($u->fulfillment_status, FulfillmentStatus::STUCK_ALERTABLE, true)) {
+            return false;
         }
 
-        if ($u->submitted_at->gt(now()->subMinutes((int) config('utility_bills.status_attention_after_minutes')))) {
-            return;
+        if (! $this->claimMarker($u, 'stuck_alerted_at')) {
+            return false;
         }
 
-        if ($u->events()->where('kind', 'stuck_alert')->exists()) {
-            return;
-        }
+        $minutes = (int) config('utility_bills.status_attention_after_minutes');
+        $this->event($u, 'stuck_alert', $u->fulfillment_status, null, null, 'not terminal '.$minutes.' minutes after payment', 'system');
 
-        $this->event($u, 'stuck_alert', $u->fulfillment_status, null, null, 'not terminal after '.config('utility_bills.status_attention_after_minutes').' minutes', 'system');
+        $state = in_array($u->fulfillment_status, FulfillmentStatus::POLLABLE, true)
+            ? 'has not reached a final provider status'
+            : 'has not been accepted by KiNG FLEXY yet ('.FulfillmentStatus::label($u->fulfillment_status).($u->last_error_code ? ', last error: '.$u->last_error_code : '').')';
+
         // Never auto-failed and never auto-refunded: a human decides.
-        $this->alertAdmin($u, 'Utility Bill still processing', $u->biller_label.' bill '.$u->public_ref.' has not reached a final provider status.');
+        $this->alertAdmin($u, 'Utility Bill still processing', $u->biller_label.' bill '.$u->public_ref.' (GHS '.number_format((float) $u->bill_amount, 2).') was paid over '.$minutes.' minutes ago and '.$state.'. Check it in Utility Bill Sales.');
+
+        return true;
+    }
+
+    /**
+     * Atomically claim a "send once" marker: only the caller whose conditional UPDATE sets
+     * the still-null column may perform the side effect, so concurrent callers never both send.
+     */
+    private function claimMarker(UtilityBillOrder $u, string $column): bool
+    {
+        $claimed = UtilityBillOrder::query()->whereKey($u->id)->whereNull($column)->update([$column => now()]) === 1;
+
+        if ($claimed) {
+            $u->setAttribute($column, now());
+        }
+
+        return $claimed;
     }
 
     // ------------------------------------------------------------------
@@ -456,7 +585,7 @@ class UtilityBillFulfillmentService
         }
 
         if (in_array($u->fulfillment_status, [FulfillmentStatus::FAILED, FulfillmentStatus::PROVIDER_REFUNDED], true)
-            && ! $u->events()->where('kind', 'terminal_alert')->exists()) {
+            && $this->claimMarker($u, 'terminal_alerted_at')) {
             $this->event($u, 'terminal_alert', null, $u->fulfillment_status, null, null, 'system');
             $this->alertAdmin($u, 'Utility Bill not completed', $this->attentionMessage($u, $u->fulfillment_status));
         }
@@ -464,7 +593,7 @@ class UtilityBillFulfillmentService
 
     private function notifyCustomerOnce(UtilityBillOrder $u): void
     {
-        if (! $u->customer_phone || $u->events()->where('kind', 'customer_notified')->exists()) {
+        if (! $u->customer_phone || ! $this->claimMarker($u, 'customer_notified_at')) {
             return;
         }
 
@@ -601,6 +730,9 @@ class UtilityBillFulfillmentService
                         'last_error_message' => null,
                         'claim_token' => null,
                         'claimed_at' => null,
+                        // A new attempt may be stuck or end unsuccessfully on its own: alert for it too.
+                        'terminal_alerted_at' => null,
+                        'stuck_alerted_at' => null,
                     ])->save();
                     $this->event($u, 'admin_new_attempt', $from, FulfillmentStatus::QUEUED, null, 'attempt '.$attempt.'; previous request '.$oldRequest.' / provider order '.$oldOrder, $who);
                     $dispatch = true;
@@ -667,6 +799,23 @@ class UtilityBillFulfillmentService
         return (int) ($steps[min($checksSoFar, count($steps) - 1)] ?? 300);
     }
 
+    /** $base plus up to $spread random seconds, so a burst of retries does not fire in lockstep. */
+    private function jitter(int $base, int $spread): int
+    {
+        return max(1, $base) + random_int(0, max(0, $spread));
+    }
+
+    /** An older paid order is queued and due (waiting on budget, a retry, or a lost job). */
+    private function olderSubmissionWaiting(UtilityBillOrder $u): bool
+    {
+        return UtilityBillOrder::query()
+            ->where('fulfillment_status', FulfillmentStatus::QUEUED)
+            ->where(fn ($q) => $q->whereNull('next_submit_at')->orWhere('next_submit_at', '<=', now()))
+            ->whereNull('provider_order_reference')
+            ->where('id', '<', $u->id)
+            ->exists();
+    }
+
     private function submitBackoff(int $id): int
     {
         $attempts = (int) UtilityBillOrder::query()->whereKey($id)->value('submit_attempts');
@@ -716,6 +865,10 @@ class UtilityBillFulfillmentService
 
     private function attentionMessage(UtilityBillOrder $u, string $code): string
     {
+        if ($code === 'payment_unconfirmed') {
+            return $u->biller_label.' bill '.$u->public_ref.' (GHS '.number_format((float) $u->bill_amount, 2).') was queued for the provider, but its customer payment is no longer confirmed for fulfillment. Nothing was sent to KiNG FLEXY. Review the payment before retrying from Utility Bill Sales.';
+        }
+
         $reason = match ($code) {
             'insufficient_balance' => 'the KiNG FLEXY provider wallet is too low',
             'disabled' => 'the provider has disabled this service or biller',

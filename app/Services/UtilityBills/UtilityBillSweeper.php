@@ -2,6 +2,7 @@
 
 namespace App\Services\UtilityBills;
 
+use App\Jobs\SyncUtilityBillStatus;
 use App\Models\UtilityBillOrder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -12,24 +13,66 @@ use Illuminate\Support\Facades\DB;
  * rate limits (pay 6/min, status 30/min); the provider client enforces its own
  * budget on top of these.
  *
- *  - re-dispatches paid orders still queued (lost job) or whose worker died
- *    (stale submitting claim);
+ *  - is the ONLY re-dispatcher of submissions: paid orders still queued (budget
+ *    deferral, transient retry, lost job) or whose worker died (stale submitting
+ *    claim), oldest order first, at most the pay budget per run;
  *  - re-queues attention orders whose cause is transient (provider wallet,
  *    provider disabled, timeouts), at most every 15 minutes;
- *  - polls in-flight provider orders with backoff; terminal orders are never polled.
+ *  - queues status checks for in-flight provider orders with backoff (the HTTP
+ *    happens in SyncUtilityBillStatus on a worker, never inside schedule:run);
+ *    terminal orders are never polled;
+ *  - alerts an admin once for any order PAID longer than
+ *    status_attention_after_minutes that still has not finished, whatever the
+ *    provider has answered (never auto-failed, never auto-refunded).
  */
 class UtilityBillSweeper
 {
     public function __construct(private UtilityBillFulfillmentService $fulfillment) {}
 
-    /** @return array{dispatched:int, requeued:int, polled:int} */
-    public function run(int $submitLimit = 5, int $pollLimit = 20): array
+    /** Marks an order as having a sweeper-dispatched submit job queued or running. */
+    public static function dispatchKey(int $id): string
     {
+        return 'utility_bills.dispatched.'.$id;
+    }
+
+    /** Called when that job finishes, so the next run may dispatch the order again if still due. */
+    public static function releaseDispatch(int $id): void
+    {
+        Cache::forget(self::dispatchKey($id));
+    }
+
+    /**
+     * @param  ?int  $submitLimit  defaults to the pay budget per minute (the sweep runs every minute)
+     * @return array{dispatched:int, requeued:int, polled:int, alerted:int}
+     */
+    public function run(?int $submitLimit = null, int $pollLimit = 20): array
+    {
+        $submitLimit ??= max(1, (int) config('utility_bills.rate.pay_per_minute', 5));
+
         $requeued = $this->requeueTransientAttention($submitLimit);
         $dispatched = $this->dispatchDueSubmissions($submitLimit);
         $polled = $this->pollDueOrders($pollLimit);
+        $alerted = $this->alertStuckOrders();
 
-        return ['dispatched' => $dispatched, 'requeued' => $requeued, 'polled' => $polled];
+        return ['dispatched' => $dispatched, 'requeued' => $requeued, 'polled' => $polled, 'alerted' => $alerted];
+    }
+
+    private function alertStuckOrders(int $limit = 20): int
+    {
+        $cutoff = now()->subMinutes(max(1, (int) config('utility_bills.status_attention_after_minutes')));
+
+        $ids = UtilityBillOrder::query()
+            ->whereIn('fulfillment_status', FulfillmentStatus::STUCK_ALERTABLE)
+            ->whereNull('stuck_alerted_at')
+            ->where('created_at', '<=', $cutoff)   // cheap pre-filter: an order is paid after it is created
+            ->whereHas('order', fn ($o) => $o
+                ->whereIn('payment_status', ['paid', 'completed'])
+                ->where(fn ($q) => $q->whereNull('payment_completed_at')->orWhere('payment_completed_at', '<=', $cutoff)))
+            ->orderBy('id')
+            ->limit($limit)
+            ->pluck('id');
+
+        return $ids->filter(fn ($id) => $this->fulfillment->raiseStuckAlert((int) $id))->count();
     }
 
     private function dispatchDueSubmissions(int $limit): int
@@ -53,13 +96,14 @@ class UtilityBillSweeper
         $dispatched = 0;
 
         foreach ($ids as $id) {
-            // One dispatch per order per ~2 minutes: if workers are down the queue must not fill with
-            // duplicate jobs for the same order (the DB claim would make them harmless, but wasteful).
-            if (! Cache::add('utility_bills.dispatched.'.$id, 1, 120)) {
+            // One queued job per order: the key is released when the job finishes, and expires after
+            // ~2 minutes if workers are down, so the queue never fills with duplicates. An older order
+            // whose job is still pending keeps its slot, which keeps submissions oldest-first.
+            if (! Cache::add(self::dispatchKey((int) $id), 1, 120)) {
                 continue;
             }
 
-            $this->fulfillment->dispatchSubmit((int) $id);
+            $this->fulfillment->dispatchSubmit((int) $id, fromSweeper: true);
             $dispatched++;
         }
 
@@ -118,12 +162,21 @@ class UtilityBillSweeper
             ->limit($limit)
             ->pluck('id');
 
+        $dispatched = 0;
+
+        // The checks themselves run on the queue: provider latency must never hold
+        // schedule:run (and every other scheduled task) hostage. The per-run limit
+        // stays under the status budget, and each order is queued at most once per
+        // couple of minutes so a stopped worker cannot pile up duplicates.
         foreach ($ids as $id) {
-            if ($this->fulfillment->syncStatus((int) $id) === 'rate_limited') {
-                break; // out of budget: stop for this run
+            if (! Cache::add('utility_bills.status_dispatched.'.$id, 1, 120)) {
+                continue;
             }
+
+            SyncUtilityBillStatus::dispatch((int) $id);
+            $dispatched++;
         }
 
-        return $ids->count();
+        return $dispatched;
     }
 }

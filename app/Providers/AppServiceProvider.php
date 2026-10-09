@@ -38,5 +38,24 @@ class AppServiceProvider extends ServiceProvider
 		Queue::before(function (JobProcessing $event): void {
 			app(DynamicMailConfigurator::class)->apply(true);
 		});
+
+		// Utility Bills account verification spends a provider budget shared by every
+		// customer on every store (see config/utility_bills.php), so one visitor (or
+		// bot) must not be able to use it up for everyone.
+		\Illuminate\Support\Facades\RateLimiter::for('utility-lookup', function (\Illuminate\Http\Request $request) {
+			$tooMany = fn () => response()->json([
+				'success' => false,
+				'message' => 'Too many verification attempts. Please wait a minute and try again.',
+			], 429);
+
+			return [
+				\Illuminate\Cache\RateLimiting\Limit::perMinute(max(1, (int) config('utility_bills.lookup_limit.per_session_per_minute', 3)))
+					->by('ub-lookup:session:'.($request->hasSession() ? $request->session()->getId() : $request->ip()))
+					->response($tooMany),
+				\Illuminate\Cache\RateLimiting\Limit::perMinute(max(1, (int) config('utility_bills.lookup_limit.per_ip_per_minute', 6)))
+					->by('ub-lookup:ip:'.$request->ip())
+					->response($tooMany),
+			];
+		});
     }
 }

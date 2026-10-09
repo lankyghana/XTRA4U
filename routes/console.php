@@ -548,3 +548,14 @@ Schedule::call(function () {
         Log::error('Scheduled utility bills sync failed', ['error' => $e->getMessage()]);
     }
 })->everyMinute()->name('utility-bills:sync')->withoutOverlapping(5);
+
+// ---------------------------------------------------------------------------
+// Database cache pruning
+// ---------------------------------------------------------------------------
+// The database cache store never deletes expired one-off keys (Utility Bill
+// lookup tokens/results hold customer names, meters and phone numbers), so the
+// table would grow forever and keep that data past its TTL. Hourly keeps the
+// retention short. In-process call, like the others.
+Schedule::call(function () {
+    Artisan::call('xtra4u:prune-expired-cache');
+})->hourly()->name('cache:prune-expired')->withoutOverlapping();

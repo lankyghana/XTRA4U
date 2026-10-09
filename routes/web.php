@@ -160,11 +160,11 @@ Route::get('/store/{vendor:vendor_code}', [StorefrontController::class, 'showVen
 // the URL path; direct XTRA4U purchases have none. No vendor id is ever read from a request body.
 Route::get('/store/{vendor:vendor_code}/utility-bills', [\App\Http\Controllers\UtilityBillController::class, 'store'])->name('storefront.utility-bills');
 Route::post('/store/{vendor:vendor_code}/utility-bills/lookup', [\App\Http\Controllers\UtilityBillController::class, 'lookupStore'])
-    ->middleware('throttle:20,1,utility-lookup')->name('storefront.utility-bills.lookup');
+    ->middleware('throttle:utility-lookup')->name('storefront.utility-bills.lookup');
 Route::post('/store/{vendor:vendor_code}/utility-bills/checkout', [\App\Http\Controllers\UtilityBillController::class, 'checkoutStore'])
     ->middleware('throttle:20,1,utility-checkout')->name('storefront.utility-bills.checkout');
 Route::post('/utility-bills/lookup', [\App\Http\Controllers\UtilityBillController::class, 'lookupDirect'])
-    ->middleware('throttle:20,1,utility-lookup')->name('utility-bills.lookup');
+    ->middleware('throttle:utility-lookup')->name('utility-bills.lookup');
 Route::post('/utility-bills/checkout', [\App\Http\Controllers\UtilityBillController::class, 'checkoutDirect'])
     ->middleware('throttle:20,1,utility-checkout')->name('utility-bills.checkout');
 Route::post('/utility-bills/payment/verify', [\App\Http\Controllers\UtilityBillController::class, 'verify'])
@@ -523,6 +523,10 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
     Route::get('settings/utility-bills', [\App\Http\Controllers\Admin\UtilityBillSettingsController::class, 'index'])->name('utility-bills.settings');
     Route::put('settings/utility-bills/credentials', [\App\Http\Controllers\Admin\UtilityBillSettingsController::class, 'updateCredentials'])
         ->middleware('throttle:10,1')->name('utility-bills.settings.credentials');
+    Route::post('settings/utility-bills/image', [\App\Http\Controllers\Admin\UtilityBillSettingsController::class, 'updateImage'])
+        ->middleware('throttle:10,1')->name('utility-bills.settings.image');
+    Route::post('settings/utility-bills/resume-wallet', [\App\Http\Controllers\Admin\UtilityBillSettingsController::class, 'resumeAfterWallet'])
+        ->middleware('throttle:10,1')->name('utility-bills.settings.resume-wallet');
     Route::put('settings/utility-bills', [\App\Http\Controllers\Admin\UtilityBillSettingsController::class, 'update'])->name('utility-bills.settings.update');
     Route::get('utility-bill-sales', [\App\Http\Controllers\Admin\UtilityBillSalesController::class, 'index'])->name('utility-bill-sales.index');
     Route::get('utility-bill-sales/{order}', [\App\Http\Controllers\Admin\UtilityBillSalesController::class, 'show'])->whereNumber('order')->name('utility-bill-sales.show');

@@ -177,7 +177,7 @@ class StorefrontController extends Controller
                 'key' => 'utility_bills_service',
                 'name' => 'Utility Bills',
                 'category' => 'ecg',
-                'logo' => null,
+                'logo' => \App\Services\UtilityBills\UtilityBillSettings::imageUrl(),
                 'is_utility_bills' => true,
                 'utility_url' => $utilityUrl,
                 'packages' => [[

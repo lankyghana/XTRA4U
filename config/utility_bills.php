@@ -10,6 +10,21 @@ return [
     'catalog_ttl' => (int) env('UTILITY_BILLS_CATALOG_TTL', 120),
     'catalog_stale_ttl' => (int) env('UTILITY_BILLS_CATALOG_STALE_TTL', 900),
 
+    // The catalog is read while every vendor storefront renders, so a slow or
+    // down provider must not hold pages: display reads use a short timeout and
+    // a failure is remembered (no further requests) for `catalog_failure_ttl`.
+    'display_timeout' => (int) env('UTILITY_BILLS_DISPLAY_TIMEOUT', 2),
+    'catalog_failure_ttl' => (int) env('UTILITY_BILLS_CATALOG_FAILURE_TTL', 60),
+
+    // Customer-facing lookup limits. The provider budget below is shared by
+    // every customer on every store, so no single visitor may take most of it.
+    // Per IP is looser than per session because many mobile customers share a
+    // carrier IP.
+    'lookup_limit' => [
+        'per_session_per_minute' => (int) env('UTILITY_BILLS_LOOKUPS_PER_SESSION', 3),
+        'per_ip_per_minute' => (int) env('UTILITY_BILLS_LOOKUPS_PER_IP', 6),
+    ],
+
     // Identical lookups (same biller/account/phone) are served from cache for
     // this long. Lookup is the tightest provider limit (10/min per key, shared
     // by every customer), so this is what keeps normal traffic inside it.

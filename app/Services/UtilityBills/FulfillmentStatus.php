@@ -54,6 +54,12 @@ final class FulfillmentStatus
     /** Where the provider has (or may have) a live order for the current attempt. */
     public const IN_FLIGHT = [self::SUBMITTING, self::PROVIDER_PENDING, self::PROVIDER_PROCESSING];
 
+    /**
+     * Paid and still moving automatically, so a long wait is otherwise silent. ATTENTION is
+     * excluded: entering it already alerts (or is covered by the one-per-incident wallet alert).
+     */
+    public const STUCK_ALERTABLE = [self::QUEUED, self::SUBMITTING, self::PROVIDER_PENDING, self::PROVIDER_PROCESSING];
+
     public static function isTerminal(?string $status): bool
     {
         return in_array($status, self::TERMINAL, true);

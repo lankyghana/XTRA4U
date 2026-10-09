@@ -31,6 +31,10 @@ abstract class UtilityBillTestCase extends TestCase
             'services.kingflexy_utilities.api_key' => 'kf_cs_live_testkey123',
             'services.kingflexy_utilities.base_url' => self::BASE,
             'queue.default' => 'sync',
+            // Flow tests verify many accounts from one session; the customer lookup
+            // limiter is covered on its own in UtilityBillScalabilityTest.
+            'utility_bills.lookup_limit.per_session_per_minute' => 1000,
+            'utility_bills.lookup_limit.per_ip_per_minute' => 1000,
         ]);
         Cache::flush();
         foreach (['billers', 'lookup', 'pay', 'status'] as $e) {

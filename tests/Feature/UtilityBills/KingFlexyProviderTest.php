@@ -130,6 +130,68 @@ class KingFlexyProviderTest extends TestCase
         $this->assertSame('20.00', \App\Services\UtilityBills\Data\LookupResult::credit($result->amountDue));
     }
 
+    public function test_v2_nested_error_message_is_logged(): void
+    {
+        \Illuminate\Support\Facades\Log::spy();
+        $this->refake([self::BASE.'/utilities/lookup*' => Http::response(['success' => false, 'error' => ['code' => 404, 'message' => 'Invalid Smart Card Number Unable to verify details']], 404)]);
+
+        try {
+            app(KingFlexyUtilityProvider::class)->lookup('dstv', '7012345678');
+            $this->fail('expected not found');
+        } catch (ProviderNotFound) {
+        }
+
+        \Illuminate\Support\Facades\Log::shouldHaveReceived('warning')->withArgs(fn ($msg, $ctx) => $msg === 'utility_bills.provider.error'
+            && $ctx['provider_message'] === 'Invalid Smart Card Number Unable to verify details')->once();
+    }
+
+    public function test_rejected_2xx_lookup_is_logged_by_shape_without_values(): void
+    {
+        \Illuminate\Support\Facades\Log::spy();
+        $this->refake([self::BASE.'/utilities/lookup*' => Http::response(['success' => true, 'data' => ['account_name' => null, 'meters' => [
+            ['name' => 'KWAME MENSAH', 'meterNumber' => '0123 456/789', 'outstanding' => 1],
+        ]]])]);
+
+        try {
+            app(KingFlexyUtilityProvider::class)->lookup('ecg', '0551617309', '0551617309');
+            $this->fail('expected malformed');
+        } catch (ProviderMalformedResponse) {
+        }
+
+        \Illuminate\Support\Facades\Log::shouldHaveReceived('warning')->withArgs(function ($msg, $ctx) {
+            $flat = json_encode($ctx);
+
+            return $msg === 'utility_bills.provider.malformed'
+                && $ctx['reason'] === 'Meter number malformed (len=12 digits+space+other).'
+                && $ctx['meter_count'] === 1 && $ctx['biller'] === 'ecg'
+                && ! str_contains($flat, '456') && ! str_contains($flat, 'KWAME') && ! str_contains($flat, '0551617309');
+        })->once();
+    }
+
+    public function test_meters_without_a_number_are_skipped_and_the_rest_stay_payable(): void
+    {
+        $this->refake([self::BASE.'/utilities/lookup*' => Http::response(['success' => true, 'data' => ['account_name' => null, 'meters' => [
+            ['name' => 'NO NUMBER A', 'meterNumber' => '', 'outstanding' => 0],
+            ['name' => 'KWAME MENSAH', 'meterNumber' => '3701234567', 'outstanding' => 12],
+            ['name' => 'NO NUMBER B', 'outstanding' => 0],
+        ]]])]);
+
+        $result = app(KingFlexyUtilityProvider::class)->lookup('ecg', '0551617309', '0551617309');
+
+        $this->assertCount(1, $result->meters);
+        $this->assertSame('3701234567', $result->meters[0]['meterNumber']);
+    }
+
+    public function test_only_meters_without_a_number_means_nothing_payable_was_found(): void
+    {
+        $this->refake([self::BASE.'/utilities/lookup*' => Http::response(['success' => true, 'data' => ['account_name' => null, 'meters' => [
+            ['name' => 'NO NUMBER', 'meterNumber' => '', 'outstanding' => 0],
+        ]]])]);
+
+        $this->expectException(ProviderNotFound::class);
+        app(KingFlexyUtilityProvider::class)->lookup('ecg', '0551617309', '0551617309');
+    }
+
     public function test_lookup_not_found_malformed_and_unavailable(): void
     {
         $provider = app(KingFlexyUtilityProvider::class);
@@ -143,7 +205,7 @@ class KingFlexyProviderTest extends TestCase
         }
 
         RateLimiter::clear('utility-bills:provider:lookup');
-        $this->refake([self::BASE.'/utilities/lookup*' => Http::response(['success' => true, 'data' => ['meters' => [['name' => 'x']]]])]);
+        $this->refake([self::BASE.'/utilities/lookup*' => Http::response(['success' => true, 'data' => ['meters' => [['name' => 'x', 'meterNumber' => '12/34']]]])]);
         try {
             $provider->lookup('ecg', '0551617309', '0551617309');
             $this->fail('expected malformed');

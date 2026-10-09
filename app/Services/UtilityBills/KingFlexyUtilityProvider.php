@@ -50,6 +50,11 @@ class KingFlexyUtilityProvider
 
     private const CATALOG_STALE_KEY = 'utility_bills.catalog.stale';
 
+    private const CATALOG_FAILED_KEY = 'utility_bills.catalog.failed';
+
+    /** Display only: why the last catalogForDisplay() call fell back ('rejected' | 'unavailable'), else null. */
+    public ?string $lastCatalogFailure = null;
+
     public function isConfigured(): bool
     {
         $key = UtilityBillCredentials::apiKey();
@@ -64,20 +69,21 @@ class KingFlexyUtilityProvider
      * reached — callers deciding whether a SALE may proceed must not fall back
      * to an old copy (see catalogForDisplay()).
      */
-    public function catalog(): Catalog
+    public function catalog(?int $timeout = null): Catalog
     {
         $cached = Cache::get(self::CATALOG_KEY);
         if (is_array($cached)) {
             return Catalog::fromArray($cached);
         }
 
-        $response = $this->send('billers', 'get', '/utilities/billers');
+        $response = $this->send('billers', 'get', '/utilities/billers', timeout: $timeout);
         $catalog = $this->parseCatalog($response);
 
         $ttl = max(1, (int) config('utility_bills.catalog_ttl'));
         Cache::put(self::CATALOG_KEY, $catalog->toArray(), $ttl);
         Cache::put(self::CATALOG_STALE_KEY, $catalog->toArray(), max($ttl, (int) config('utility_bills.catalog_stale_ttl')));
         Cache::forever('utility_bills.catalog.last_success_at', time());
+        Cache::forget(self::CATALOG_FAILED_KEY);
 
         return $catalog;
     }
@@ -87,22 +93,56 @@ class KingFlexyUtilityProvider
      * (up to catalog_stale_ttl old) so pages can still render. Never used to
      * authorise a sale.
      *
+     * Runs while EVERY vendor storefront renders, so it must never make pages
+     * wait on the provider: it uses a short timeout, and a failure is remembered
+     * for `catalog_failure_ttl` seconds, during which no request is made at all.
+     *
      * @return array{0: ?Catalog, 1: bool} [catalog, isStale]
      */
     public function catalogForDisplay(): array
     {
-        try {
-            return [$this->catalog(), false];
-        } catch (UtilityProviderException) {
-            $stale = Cache::get(self::CATALOG_STALE_KEY);
+        $this->lastCatalogFailure = null;
 
-            return is_array($stale) ? [Catalog::fromArray($stale), true] : [null, false];
+        $recentFailure = Cache::get(self::CATALOG_FAILED_KEY);
+        if (is_string($recentFailure) && ! is_array(Cache::get(self::CATALOG_KEY))) {
+            $this->lastCatalogFailure = $recentFailure;
+
+            return $this->staleCatalog();
+        }
+
+        try {
+            return [$this->catalog((int) config('utility_bills.display_timeout', 2)), false];
+        } catch (UtilityProviderException $e) {
+            $this->lastCatalogFailure = $e instanceof ProviderUnauthorized ? 'rejected' : 'unavailable';
+            Cache::put(self::CATALOG_FAILED_KEY, $this->lastCatalogFailure, max(1, (int) config('utility_bills.catalog_failure_ttl', 60)));
+
+            return $this->staleCatalog();
         }
     }
 
+    /** @return array{0: ?Catalog, 1: bool} */
+    private function staleCatalog(): array
+    {
+        $stale = Cache::get(self::CATALOG_STALE_KEY);
+
+        return is_array($stale) ? [Catalog::fromArray($stale), true] : [null, false];
+    }
+
+    /** Drop the cached catalog AND any remembered failure, so the next read asks the provider. */
     public function forgetCatalog(): void
     {
         Cache::forget(self::CATALOG_KEY);
+        Cache::forget(self::CATALOG_FAILED_KEY);
+    }
+
+    /** Seconds until the local pay budget has room again; 0 when a pay call may be sent now. */
+    public function payBudgetAvailableIn(): int
+    {
+        $key = 'utility-bills:provider:pay';
+
+        return RateLimiter::tooManyAttempts($key, (int) config('utility_bills.rate.pay_per_minute', 5))
+            ? max(1, RateLimiter::availableIn($key))
+            : 0;
     }
 
     public function lookup(string $biller, string $account, ?string $phone = null): LookupResult
@@ -114,7 +154,48 @@ class KingFlexyUtilityProvider
 
         $response = $this->send('lookup', 'get', '/utilities/lookup', ['query' => $query], ['biller' => $biller]);
 
-        return $this->parseLookup($response);
+        try {
+            return $this->parseLookup($response, ['biller' => $biller]);
+        } catch (ProviderMalformedResponse $e) {
+            $this->logMalformed('lookup', $e, $response, ['biller' => $biller]);
+            throw $e;
+        }
+    }
+
+    /**
+     * A 2xx we refused to trust. Logs our own reason plus the payload's STRUCTURE
+     * (keys and types, never values) so the cause is diagnosable without
+     * recording account numbers, names or meter numbers.
+     */
+    private function logMalformed(string $endpoint, ProviderMalformedResponse $e, Response $response, array $logContext = []): void
+    {
+        $json = $response->json();
+        $data = is_array($json) ? ($json['data'] ?? null) : null;
+
+        Log::warning('utility_bills.provider.malformed', [
+            'endpoint' => $endpoint,
+            'http_status' => $response->status(),
+            'reason' => $e->getMessage(),
+            'is_json' => is_array($json),
+            'success' => is_array($json) ? ($json['success'] ?? null) : null,
+            'top_keys' => is_array($json) ? array_keys($json) : null,
+            'data_keys' => is_array($data) ? array_keys($data) : gettype($data),
+            'meter_count' => is_array($data['meters'] ?? null) ? count($data['meters']) : null,
+        ] + $logContext);
+    }
+
+    /** Length and character classes only, e.g. "len=12 digits+space". Never the value. */
+    private static function describeShape(string $value): string
+    {
+        $classes = array_keys(array_filter([
+            'digits' => preg_match('/\d/', $value),
+            'letters' => preg_match('/[A-Za-z]/', $value),
+            'dash' => str_contains($value, '-'),
+            'space' => preg_match('/\s/', $value),
+            'other' => preg_match('/[^A-Za-z0-9\-\s]/', $value),
+        ]));
+
+        return 'len='.strlen($value).' '.implode('+', $classes);
     }
 
     /**
@@ -160,7 +241,7 @@ class KingFlexyUtilityProvider
     /**
      * @param  array{query?:array,json?:array}  $options
      */
-    private function send(string $endpoint, string $method, string $path, array $options = [], array $logContext = [], bool $isPay = false): Response
+    private function send(string $endpoint, string $method, string $path, array $options = [], array $logContext = [], bool $isPay = false, ?int $timeout = null): Response
     {
         if (! $this->isConfigured()) {
             throw new NotConfigured('Commission Services API key is not configured.');
@@ -169,14 +250,16 @@ class KingFlexyUtilityProvider
         $limitKey = 'utility-bills:provider:'.$endpoint;
         $perMinute = (int) config('utility_bills.rate.'.$endpoint.'_per_minute', 5);
 
-        if (RateLimiter::tooManyAttempts($limitKey, $perMinute)) {
+        // Count and compare in ONE atomic increment: a separate check followed by a hit lets two
+        // concurrent workers both pass and overshoot the provider's limit.
+        if (RateLimiter::hit($limitKey, 60) > $perMinute) {
             Log::warning('utility_bills.provider.local_rate_limited', ['endpoint' => $endpoint] + $logContext);
-            throw new ProviderRateLimited('Local provider rate budget exhausted.');
+            // Nothing was sent: callers may retry without counting an attempt.
+            throw ProviderRateLimited::local(RateLimiter::availableIn($limitKey));
         }
-        RateLimiter::hit($limitKey, 60);
 
         try {
-            $http = $this->client();
+            $http = $this->client($timeout);
             $response = $method === 'post'
                 ? $http->post($path, $options['json'] ?? [])
                 : $http->get($path, $options['query'] ?? []);
@@ -192,14 +275,18 @@ class KingFlexyUtilityProvider
         throw $this->exceptionFor($response, $endpoint, $logContext);
     }
 
-    private function client(): PendingRequest
+    /** @param  ?int  $timeout  overall and connect cap in seconds (display paths), else the configured defaults */
+    private function client(?int $timeout = null): PendingRequest
     {
+        $connect = (int) config('services.kingflexy_utilities.connect_timeout', 5);
+        $total = (int) config('services.kingflexy_utilities.timeout', 20);
+
         return Http::baseUrl(rtrim((string) config('services.kingflexy_utilities.base_url'), '/'))
             ->withHeaders(['Authorization' => UtilityBillCredentials::apiKey()])
             ->acceptJson()
             ->asJson()
-            ->connectTimeout((int) config('services.kingflexy_utilities.connect_timeout', 5))
-            ->timeout((int) config('services.kingflexy_utilities.timeout', 20));
+            ->connectTimeout($timeout !== null ? max(1, min($timeout, $connect)) : $connect)
+            ->timeout($timeout !== null ? max(1, min($timeout, $total)) : $total);
     }
 
     private function exceptionFor(Response $response, string $endpoint, array $logContext): UtilityProviderException
@@ -220,8 +307,7 @@ class KingFlexyUtilityProvider
             $status === 409 => new ProviderDuplicateWindow('Provider duplicate-payment window on '.$endpoint.'.', $status),
             $status === 429 => new ProviderRateLimited('Provider rate limit hit on '.$endpoint.'.', $status),
             $status === 503 => new ProviderServiceDisabled('Provider reports the service/biller disabled.', $status),
-            $status === 400 && $message !== null && preg_match('/insufficient|not enough|low balance|wallet/i', $message) === 1
-                => new ProviderInsufficientBalance('Provider wallet cannot cover this bill.', $status),
+            $status === 400 && $message !== null && preg_match('/insufficient|not enough|low balance|wallet/i', $message) === 1 => new ProviderInsufficientBalance('Provider wallet cannot cover this bill.', $status),
             $status >= 500 => new ProviderServerError('Provider error '.$status.' on '.$endpoint.'.', $status),
             default => new ProviderRejected('Provider rejected the request on '.$endpoint.' ('.$status.').', $status),
         };
@@ -230,7 +316,8 @@ class KingFlexyUtilityProvider
     private function providerMessage(Response $response): ?string
     {
         $json = $response->json();
-        $message = is_array($json) ? ($json['message'] ?? $json['error'] ?? null) : null;
+        // v2 errors nest the text: {"success":false,"error":{"code":404,"message":"..."}}.
+        $message = is_array($json) ? ($json['message'] ?? $json['error']['message'] ?? $json['error'] ?? null) : null;
 
         return is_string($message) ? self::clean($message, 200) : null;
     }
@@ -276,18 +363,27 @@ class KingFlexyUtilityProvider
         );
     }
 
-    private function parseLookup(Response $response): LookupResult
+    private function parseLookup(Response $response, array $logContext = []): LookupResult
     {
         $data = $this->data($response);
 
         $meters = [];
+        $withoutNumber = 0;
         foreach ((array) ($data['meters'] ?? []) as $meter) {
             if (! is_array($meter)) {
                 throw new ProviderMalformedResponse('Meter entry malformed.');
             }
             $number = isset($meter['meterNumber']) ? trim((string) $meter['meterNumber']) : '';
-            if ($number === '' || ! preg_match('/^[A-Za-z0-9-]{3,30}$/', $number)) {
-                throw new ProviderMalformedResponse('Meter number malformed.');
+            // Seen live: ECG lists linked meters with no meter number. Such a
+            // meter cannot be paid, so it is left out; the others stay payable.
+            // A number that IS present but malformed still rejects the lookup.
+            if ($number === '') {
+                $withoutNumber++;
+
+                continue;
+            }
+            if (! preg_match('/^[A-Za-z0-9-]{3,30}$/', $number)) {
+                throw new ProviderMalformedResponse('Meter number malformed ('.self::describeShape($number).').');
             }
             $meters[] = [
                 'name' => self::clean(isset($meter['name']) ? (string) $meter['name'] : null, 150),
@@ -299,7 +395,15 @@ class KingFlexyUtilityProvider
         $name = self::clean(isset($data['account_name']) ? (string) $data['account_name'] : null, 150);
         $number = self::clean(isset($data['account_number']) ? (string) $data['account_number'] : null, 40);
 
+        if ($withoutNumber > 0) {
+            Log::info('utility_bills.provider.meters_without_number', ['skipped' => $withoutNumber, 'kept' => count($meters)] + $logContext);
+        }
+
         if ($meters === [] && $name === null && $number === null) {
+            // Every listed meter lacked a number: nothing payable was found.
+            if ($withoutNumber > 0) {
+                throw new ProviderNotFound('Lookup listed only meters without a meter number.');
+            }
             throw new ProviderMalformedResponse('Lookup returned no account information.');
         }
 

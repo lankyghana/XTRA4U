@@ -588,7 +588,7 @@ class UtilityBillHardeningTest extends UtilityBillTestCase
 
         // No completed orders yet: economics unknown, no warning, not blocked.
         $this->get(route('admin.utility-bills.settings'))->assertOk()
-            ->assertSee('Provider economics unknown')->assertDontSee('could cost XTRA4U more');
+            ->assertSee('No completed-sale data yet')->assertDontSee('could cost XTRA4U more');
 
         // Provider has paid 0.40% on completed DSTV orders; the vendor is configured at 1%.
         $this->fake([self::BASE.'/utilities/pay' => Http::response($this->payBody('UTIL-DSTV-E1'))]);

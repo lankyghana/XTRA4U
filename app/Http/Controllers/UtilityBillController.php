@@ -89,6 +89,8 @@ class UtilityBillController extends Controller
             ],
             'requiresInlineMomo' => PaymentGatewayConfig::defaultCollectionRequiresPayerPhone(),
             'shopUrl' => $vendor ? route('storefront.vendor', ['vendor' => $vendor->vendor_code]) : route('services.utility-bills'),
+            // Header "Vendor Dashboard" shortcut only; same convenience check as the store page.
+            'isStoreOwner' => $vendor && \Illuminate\Support\Facades\Auth::guard('vendor')->id() === $vendor->id,
         ]);
     }
 
@@ -304,8 +306,18 @@ class UtilityBillController extends Controller
     {
         $u = $this->findByToken($token);
 
+        // Display only: keep the customer inside the store the bill was bought from.
+        $vendor = $u->vendor_id ? $u->vendor : null;
+        $vendor = $vendor?->is_approved ? $vendor : null;
+
         return response()
-            ->view('utility-bills.status', ['u' => $u, 'view' => $this->present($u)])
+            ->view('utility-bills.status', [
+                'u' => $u,
+                'view' => $this->present($u),
+                'vendor' => $vendor,
+                'shopUrl' => $vendor ? route('storefront.vendor', ['vendor' => $vendor->vendor_code]) : route('services.utility-bills'),
+                'payAnotherUrl' => $vendor ? route('storefront.utility-bills', ['vendor' => $vendor->vendor_code]) : route('services.utility-bills'),
+            ])
             ->header('Cache-Control', 'no-store, private')
             ->header('X-Robots-Tag', 'noindex, nofollow');
     }

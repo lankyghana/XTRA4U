@@ -55,9 +55,11 @@ class UtilityBillLookupService
             try {
                 $result = $this->provider->lookup($billerKey, $inputAccount, $inputPhone);
             } catch (ProviderNotFound) {
-                throw ValidationException::withMessages([
-                    'account' => 'We could not find that '.strtolower($biller->accountLabel).'. Please check it and try again.',
-                ]);
+                // Key the error to the field the customer actually typed into:
+                // phone-lookup billers (ECG) have no account input on the form.
+                throw ValidationException::withMessages($biller->lookupBy === 'phone'
+                    ? ['phone' => 'We could not find any meters linked to that phone number. Please check it and try again.']
+                    : ['account' => 'We could not find that '.strtolower($biller->accountLabel).'. Please check it and try again.']);
             } catch (ProviderRateLimited) {
                 throw new SaleNotAllowed('Account verification is busy right now. Please try again in a minute.', 'lookup_busy');
             }
@@ -68,7 +70,7 @@ class UtilityBillLookupService
         // ECG-style billers must resolve to at least one meter to be payable.
         if ($biller->linksPhoneToAccount && ! $result->hasMeters()) {
             throw ValidationException::withMessages([
-                'account' => 'No meters were found for that phone number.',
+                $biller->lookupBy === 'phone' ? 'phone' : 'account' => 'No meters were found for that phone number.',
             ]);
         }
 
@@ -116,7 +118,7 @@ class UtilityBillLookupService
     }
 
     /**
-     * @return array{0:string,1:?string}  [accountToQuery, phone]
+     * @return array{0:string,1:?string} [accountToQuery, phone]
      */
     private function normaliseInput(Biller $biller, ?string $account, ?string $phone): array
     {

@@ -166,6 +166,31 @@ class UtilityBillPublicFlowTest extends UtilityBillTestCase
             ->assertStatus(502);
     }
 
+    public function test_ecg_lookup_with_some_numberless_meters_lists_only_payable_ones(): void
+    {
+        $this->openService(['ecg']);
+        $this->fakeAll([self::BASE.'/utilities/lookup*' => Http::response(['success' => true, 'data' => [
+            'account_name' => null, 'account_number' => null, 'amount_due' => null, 'bouquet' => null, 'meters' => [
+                ['name' => 'KWAME MENSAH', 'meterNumber' => '3701234567', 'outstanding' => 10],
+                ['name' => 'LINKED, NO METER', 'meterNumber' => '', 'outstanding' => 0],
+                ['name' => 'AMA SERWAA', 'meterNumber' => '3709999999', 'outstanding' => 0],
+            ]]])]);
+
+        $j = $this->postJson(route('utility-bills.lookup'), ['biller' => 'ecg', 'phone' => '0551617309'])->assertOk()->json();
+        $this->assertSame(['KWAME MENSAH', 'AMA SERWAA'], array_column($j['meters'], 'name'));
+    }
+
+    public function test_ecg_not_found_is_reported_on_the_phone_field_the_form_shows(): void
+    {
+        // ECG looks up by phone; the form has no account input, so an error
+        // keyed to `account` would be invisible to the customer.
+        $this->openService(['ecg']);
+        $this->fakeAll([self::BASE.'/utilities/lookup*' => Http::response(['success' => false], 404)]);
+
+        $this->postJson(route('utility-bills.lookup'), ['biller' => 'ecg', 'phone' => '0244000000'])
+            ->assertStatus(422)->assertJsonValidationErrors('phone')->assertJsonMissingValidationErrors('account');
+    }
+
     // ---- order creation / security ------------------------------------
 
     public function test_storefront_checkout_freezes_server_side_terms_and_attribution(): void

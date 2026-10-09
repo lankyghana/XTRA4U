@@ -37,6 +37,9 @@ class UtilityBillOrder extends Model
         'last_status_check_at' => 'datetime',
         'next_status_check_at' => 'datetime',
         'fulfilled_at' => 'datetime',
+        'customer_notified_at' => 'datetime',
+        'terminal_alerted_at' => 'datetime',
+        'stuck_alerted_at' => 'datetime',
         'commission_credited_at' => 'datetime',
     ];
 
