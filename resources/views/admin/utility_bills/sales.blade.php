@@ -14,13 +14,14 @@
                     Pay capacity {{ $p['pay_per_minute'] }}/min (&asymp;{{ number_format($p['pay_per_hour']) }}/hour), the configured KiNG FLEXY budget @if ($p['provider_documented_pay_per_minute'])(provider documents {{ $p['provider_documented_pay_per_minute'] }}/min per key)@endif. Used this minute: {{ $p['pay_used_this_minute'] }}/{{ $p['pay_per_minute'] }}.
                 </p>
             </div>
-            <div class="grid gap-3 grid-cols-2 lg:grid-cols-4">
+            <div class="grid gap-3 grid-cols-2 lg:grid-cols-5">
                 <x-admin.stat label="Awaiting submission" :value="number_format($p['awaiting_submission'])"
                     :hint="$p['awaiting_submission'] ? 'Oldest paid '.$p['oldest_waiting_minutes'].' min ago'.($p['retry_scheduled'] ? ' · '.$p['retry_scheduled'].' retry scheduled' : '') : 'None waiting'"
                     :tone="$p['accumulating'] ? 'warning' : 'neutral'" :href="route('admin.utility-bill-sales.index', ['fulfillment' => 'queued'])" />
                 <x-admin.stat label="Submitting now" :value="number_format($p['submitting'])" :href="route('admin.utility-bill-sales.index', ['fulfillment' => 'submitting'])" />
                 <x-admin.stat label="With provider" :value="number_format($p['with_provider'])" hint="Pending or processing at KiNG FLEXY" tone="brand" :href="route('admin.utility-bill-sales.index', ['fulfillment' => 'provider_pending'])" />
-                <x-admin.stat label="Needs attention" :value="number_format($p['attention'])" :tone="$p['attention'] ? 'danger' : 'neutral'" :href="route('admin.utility-bill-sales.index', ['fulfillment' => 'attention'])" />
+                <x-admin.stat label="Needs attention" :value="number_format($p['attention'])" :tone="$p['attention'] ? 'warning' : 'neutral'" :href="route('admin.utility-bill-sales.index', ['fulfillment' => 'attention'])" />
+                <x-admin.stat label="Status unresolved" :value="number_format($p['unresolved'])" hint="Automatic checks stopped; not failed" :tone="$p['unresolved'] ? 'warning' : 'neutral'" :href="route('admin.utility-bill-sales.index', ['fulfillment' => 'provider_unresolved'])" />
             </div>
             @if ($p['state'] === 'capacity_backlog')
                 <p class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -86,7 +87,10 @@
                     <td>{{ $s->maskedAccount() }}<span class="block text-xs text-gray-500">{{ $s->account_name }}</span></td>
                     <td class="whitespace-nowrap">GHS {{ number_format((float) $s->bill_amount, 2) }}</td>
                     <td><x-admin.status :status="$s->order?->payment_status ?? 'unknown'" /></td>
-                    <td><x-admin.status :status="in_array($s->fulfillment_status, ['attention']) ? 'failed' : ($s->fulfillment_status === 'provider_refunded' ? 'refunded' : $s->fulfillment_status)" :label="\App\Services\UtilityBills\FulfillmentStatus::label($s->fulfillment_status)" /></td>
+                    <td>
+                        <x-admin.status :status="match ($s->fulfillment_status) { 'attention', 'provider_unresolved' => 'review', 'provider_refunded' => 'refunded', 'provider_pending', 'provider_processing', 'submitting' => 'processing', default => $s->fulfillment_status }" :label="\App\Services\UtilityBills\FulfillmentStatus::label($s->fulfillment_status)" />
+                        @if ($s->fulfillment_status === 'attention' && $s->last_error_code)<span class="block text-xs text-gray-500">{{ \App\Services\UtilityBills\UtilityBillFulfillmentService::reasonLabel($s->last_error_code) }}</span>@endif
+                    </td>
                     <td class="whitespace-nowrap">
                         @if ($s->vendor_id)
                             GHS {{ number_format((float) $s->commission_amount, 2) }}

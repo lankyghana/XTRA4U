@@ -64,8 +64,19 @@ return [
     'max_submit_attempts' => (int) env('UTILITY_BILLS_MAX_SUBMIT_ATTEMPTS', 8),
 
     // Status polling backoff (seconds between checks, by number of checks so
-    // far; the last value repeats). Terminal orders are never polled.
-    'status_backoff' => [20, 45, 90, 180, 300, 600, 1200],
+    // far; the last value repeats). Frequent right after submission, then
+    // progressively rarer. Terminal orders are never polled.
+    'status_backoff' => [20, 45, 90, 180, 300, 600, 1200, 1800, 3600],
+
+    // Automatic polling is BOUNDED: after this many automatic checks, or this
+    // many hours since polling started, whichever comes first, the order moves
+    // to provider_unresolved and is no longer polled automatically. With the
+    // backoff above, 30 checks span about 23 hours (8 checks in the first
+    // ~70 minutes, then hourly). This is never a failure: the bill is not
+    // failed, refunded or re-sent, and an admin refresh still queries the
+    // same provider order.
+    'status_poll_max_checks' => (int) env('UTILITY_BILLS_STATUS_POLL_MAX_CHECKS', 30),
+    'status_poll_max_hours' => (int) env('UTILITY_BILLS_STATUS_POLL_MAX_HOURS', 24),
 
     // After this long without a terminal status the order is surfaced for
     // human attention (never auto-failed and never auto-refunded).

@@ -20,7 +20,9 @@ use Illuminate\Support\Facades\DB;
  *    provider disabled, timeouts), at most every 15 minutes;
  *  - queues status checks for in-flight provider orders with backoff (the HTTP
  *    happens in SyncUtilityBillStatus on a worker, never inside schedule:run);
- *    terminal orders are never polled;
+ *    terminal orders are never polled, and polling is bounded: past
+ *    status_poll_max_checks / status_poll_max_hours an order becomes
+ *    provider_unresolved (not failed) and is only refreshed by an admin;
  *  - alerts an admin once for any order PAID longer than
  *    status_attention_after_minutes that still has not finished, whatever the
  *    provider has answered (never auto-failed, never auto-refunded).
@@ -41,6 +43,21 @@ class UtilityBillSweeper
         Cache::forget(self::dispatchKey($id));
     }
 
+    /** Marks an order as having a status-check job queued or running (at most one at a time). */
+    public static function statusDispatchKey(int $id): string
+    {
+        return 'utility_bills.status_dispatched.'.$id;
+    }
+
+    /**
+     * Released when the status job finishes, so the backoff schedule (not the 2-minute safety
+     * expiry of this marker) decides when the order is checked next.
+     */
+    public static function releaseStatusDispatch(int $id): void
+    {
+        Cache::forget(self::statusDispatchKey($id));
+    }
+
     /**
      * @param  ?int  $submitLimit  defaults to the pay budget per minute (the sweep runs every minute)
      * @return array{dispatched:int, requeued:int, polled:int, alerted:int}
@@ -51,10 +68,32 @@ class UtilityBillSweeper
 
         $requeued = $this->requeueTransientAttention($submitLimit);
         $dispatched = $this->dispatchDueSubmissions($submitLimit);
+        $unresolved = $this->stopExhaustedPolling();
         $polled = $this->pollDueOrders($pollLimit);
         $alerted = $this->alertStuckOrders();
 
-        return ['dispatched' => $dispatched, 'requeued' => $requeued, 'polled' => $polled, 'alerted' => $alerted];
+        return ['dispatched' => $dispatched, 'requeued' => $requeued, 'unresolved' => $unresolved, 'polled' => $polled, 'alerted' => $alerted];
+    }
+
+    /**
+     * Bounded polling: orders past the automatic horizon (max checks or max hours since polling
+     * started) move to provider_unresolved and are never polled automatically again.
+     */
+    private function stopExhaustedPolling(int $limit = 50): int
+    {
+        $cutoff = now()->subHours(max(1, (int) config('utility_bills.status_poll_max_hours', 24)));
+
+        $ids = UtilityBillOrder::query()
+            ->whereIn('fulfillment_status', FulfillmentStatus::POLLABLE)
+            ->where(fn ($q) => $q
+                ->where('status_check_attempts', '>=', max(1, (int) config('utility_bills.status_poll_max_checks', 30)))
+                ->orWhere('status_poll_started_at', '<=', $cutoff)
+                ->orWhere(fn ($q) => $q->whereNull('status_poll_started_at')->where('submitted_at', '<=', $cutoff)))
+            ->orderBy('id')
+            ->limit($limit)
+            ->pluck('id');
+
+        return $ids->filter(fn ($id) => $this->fulfillment->markStatusUnresolved((int) $id))->count();
     }
 
     private function alertStuckOrders(int $limit = 20): int
@@ -157,6 +196,7 @@ class UtilityBillSweeper
         $ids = UtilityBillOrder::query()
             ->whereIn('fulfillment_status', FulfillmentStatus::POLLABLE)
             ->whereNotNull('provider_order_reference')
+            ->where('status_check_attempts', '<', max(1, (int) config('utility_bills.status_poll_max_checks', 30)))
             ->where(fn ($q) => $q->whereNull('next_status_check_at')->orWhere('next_status_check_at', '<=', now()))
             ->orderBy('next_status_check_at')
             ->limit($limit)
@@ -169,7 +209,7 @@ class UtilityBillSweeper
         // stays under the status budget, and each order is queued at most once per
         // couple of minutes so a stopped worker cannot pile up duplicates.
         foreach ($ids as $id) {
-            if (! Cache::add('utility_bills.status_dispatched.'.$id, 1, 120)) {
+            if (! Cache::add(self::statusDispatchKey((int) $id), 1, 120)) {
                 continue;
             }
 

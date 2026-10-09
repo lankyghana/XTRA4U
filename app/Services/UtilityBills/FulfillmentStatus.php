@@ -18,6 +18,11 @@ namespace App\Services\UtilityBills;
  *   provider_refunded provider refunded XTRA4U's PROVIDER wallet (NOT a customer refund)
  *   attention         recoverable problem needing a human or a later retry
  *                     (provider wallet empty, provider/biller disabled, key rejected, ...)
+ *   provider_unresolved the provider holds the order but gave no final status within the
+ *                     automatic polling horizon; automatic polling stopped. NOT a failure:
+ *                     payment, references and commission terms are kept, an admin
+ *                     refresh still queries the SAME provider order, and a late
+ *                     "completed" still finalises it (and pays commission once)
  */
 final class FulfillmentStatus
 {
@@ -39,20 +44,25 @@ final class FulfillmentStatus
 
     public const ATTENTION = 'attention';
 
+    public const PROVIDER_UNRESOLVED = 'provider_unresolved';
+
     public const ALL = [
         self::AWAITING_PAYMENT, self::QUEUED, self::SUBMITTING, self::PROVIDER_PENDING,
         self::PROVIDER_PROCESSING, self::COMPLETED, self::FAILED, self::PROVIDER_REFUNDED,
-        self::ATTENTION,
+        self::ATTENTION, self::PROVIDER_UNRESOLVED,
     ];
 
     /** Nothing more will happen to these automatically. */
     public const TERMINAL = [self::COMPLETED, self::FAILED, self::PROVIDER_REFUNDED];
 
-    /** Provider holds the order; poll it. */
+    /** Provider holds the order; poll it automatically (within the polling horizon). */
     public const POLLABLE = [self::PROVIDER_PENDING, self::PROVIDER_PROCESSING];
 
+    /** An admin may query the provider for these (automatic polling has stopped for unresolved). */
+    public const REFRESHABLE = [self::PROVIDER_PENDING, self::PROVIDER_PROCESSING, self::PROVIDER_UNRESOLVED];
+
     /** Where the provider has (or may have) a live order for the current attempt. */
-    public const IN_FLIGHT = [self::SUBMITTING, self::PROVIDER_PENDING, self::PROVIDER_PROCESSING];
+    public const IN_FLIGHT = [self::SUBMITTING, self::PROVIDER_PENDING, self::PROVIDER_PROCESSING, self::PROVIDER_UNRESOLVED];
 
     /**
      * Paid and still moving automatically, so a long wait is otherwise silent. ATTENTION is
@@ -76,6 +86,7 @@ final class FulfillmentStatus
             self::FAILED => 'Failed',
             self::PROVIDER_REFUNDED => 'Not completed',
             self::ATTENTION => 'Needs attention',
+            self::PROVIDER_UNRESOLVED => 'Provider status unresolved',
             default => 'Unknown',
         };
     }

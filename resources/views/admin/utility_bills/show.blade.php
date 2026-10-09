@@ -6,7 +6,8 @@
     $paid = in_array($sale->order?->payment_status, ['paid', 'completed'], true);
     $closed = in_array($sale->fulfillment_status, [FS::FAILED, FS::PROVIDER_REFUNDED], true);
     $retryable = $paid && in_array($sale->fulfillment_status, [FS::ATTENTION, FS::QUEUED, FS::SUBMITTING], true) && $sale->provider_order_reference === null;
-    $pollable = in_array($sale->fulfillment_status, FS::POLLABLE, true);
+    $pollable = in_array($sale->fulfillment_status, FS::REFRESHABLE, true);
+    $unresolved = $sale->fulfillment_status === FS::PROVIDER_UNRESOLVED;
 @endphp
 <x-admin-layout title="Utility Bill {{ $sale->public_ref }}" subtitle="{{ $sale->biller_label }} · {{ $sale->vendor?->name ?? 'Direct sale' }}" active="utility-bill-sales">
     <div class="space-y-6 max-w-4xl">
@@ -47,7 +48,8 @@
                     'Wallet ledger id' => $sale->commission_wallet_ledger_id ?? '—',
                     'Last error' => $sale->last_error_code ? $sale->last_error_code.': '.$sale->last_error_message : '—',
                     'Submit attempts' => $sale->submit_attempts,
-                    'Next status check' => $sale->next_status_check_at?->diffForHumans() ?? '—',
+                    'Status checks' => $sale->status_check_attempts.($sale->last_status_check_at ? ' (last '.$sale->last_status_check_at->diffForHumans().')' : ''),
+                    'Next status check' => $sale->next_status_check_at?->diffForHumans() ?? ($unresolved ? 'stopped (unresolved)' : '—'),
                 ] as $label => $value)
                     <div class="flex justify-between gap-4 px-4 py-2.5"><dt class="text-gray-500">{{ $label }}</dt><dd class="text-right font-medium text-gray-900 break-all">{{ $value }}</dd></div>
                 @endforeach
@@ -65,11 +67,26 @@
                 </form>
             @endif
 
+            @if ($unresolved)
+                <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                    <p class="font-semibold">Provider status unresolved &middot; automatic checks stopped</p>
+                    <p class="mt-1">KiNG FLEXY accepted this bill (provider order <code class="text-xs">{{ $sale->provider_order_reference }}</code>) but gave no final status within the automatic polling window. This is <strong>not</strong> a failure: the customer payment, both references and the frozen commission terms are unchanged, and nothing will be re-sent. Refresh the status (it queries the same provider order); if KiNG FLEXY reports it completed, it is finalised and any vendor commission is credited once.</p>
+                </div>
+            @endif
+
             @if ($pollable)
                 <form method="POST" action="{{ route('admin.utility-bill-sales.refresh', $sale) }}" class="rounded-lg border border-gray-200 p-4">@csrf
                     <p class="text-sm font-semibold text-gray-900">Refresh status from the provider</p>
-                    <p class="text-sm text-gray-600 mt-1">Read-only. Asks KiNG FLEXY for the current status of <code class="text-xs">{{ $sale->provider_order_reference }}</code>.</p>
+                    <p class="text-sm text-gray-600 mt-1">Read-only. Asks KiNG FLEXY for the current status of <code class="text-xs">{{ $sale->provider_order_reference }}</code>. Uses the shared status budget.</p>
                     <button class="mt-3 px-4 py-2 bg-gray-100 text-gray-800 rounded-lg text-sm font-semibold">Refresh status</button>
+                </form>
+            @endif
+
+            @if ($unresolved)
+                <form method="POST" action="{{ route('admin.utility-bill-sales.resume-polling', $sale) }}" class="rounded-lg border border-gray-200 p-4">@csrf
+                    <p class="text-sm font-semibold text-gray-900">Resume automatic status checks</p>
+                    <p class="text-sm text-gray-600 mt-1">Starts one new bounded polling window ({{ (int) config('utility_bills.status_poll_max_checks') }} checks / {{ (int) config('utility_bills.status_poll_max_hours') }} h) for the same provider order. Use it when KiNG FLEXY says the bill is still being worked on.</p>
+                    <button class="mt-3 px-4 py-2 bg-gray-100 text-gray-800 rounded-lg text-sm font-semibold">Resume automatic checks</button>
                 </form>
             @endif
 

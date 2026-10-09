@@ -24,7 +24,7 @@ class UtilityBillPipeline
     public function snapshot(): array
     {
         $open = [FulfillmentStatus::QUEUED, FulfillmentStatus::SUBMITTING, FulfillmentStatus::PROVIDER_PENDING,
-            FulfillmentStatus::PROVIDER_PROCESSING, FulfillmentStatus::ATTENTION];
+            FulfillmentStatus::PROVIDER_PROCESSING, FulfillmentStatus::ATTENTION, FulfillmentStatus::PROVIDER_UNRESOLVED];
 
         $counts = UtilityBillOrder::query()
             ->whereIn('fulfillment_status', $open)
@@ -60,6 +60,7 @@ class UtilityBillPipeline
             'submitting' => $counts->get(FulfillmentStatus::SUBMITTING, 0),
             'with_provider' => $counts->get(FulfillmentStatus::PROVIDER_PENDING, 0) + $counts->get(FulfillmentStatus::PROVIDER_PROCESSING, 0),
             'attention' => $counts->get(FulfillmentStatus::ATTENTION, 0),
+            'unresolved' => $counts->get(FulfillmentStatus::PROVIDER_UNRESOLVED, 0),
             'oldest_waiting_since' => $oldestSince,
             'oldest_waiting_minutes' => $oldestMinutes,
             'pay_per_minute' => $perMinute,

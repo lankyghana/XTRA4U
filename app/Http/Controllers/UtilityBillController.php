@@ -369,7 +369,7 @@ class UtilityBillController extends Controller
             [$stage, $headline, $detail, $label] = ['completed', 'Utility bill payment completed', 'Your bill payment has been completed.', 'Completed'];
         } elseif (in_array($u->fulfillment_status, [FulfillmentStatus::FAILED, FulfillmentStatus::PROVIDER_REFUNDED], true)) {
             [$stage, $headline, $detail, $label] = ['needs_support', 'Payment received', 'We could not complete your bill payment yet. Your payment is safe; our team has been alerted and will resolve it. Please keep your reference.', 'Under review'];
-        } elseif ($u->fulfillment_status === FulfillmentStatus::ATTENTION) {
+        } elseif (in_array($u->fulfillment_status, [FulfillmentStatus::ATTENTION, FulfillmentStatus::PROVIDER_UNRESOLVED], true)) {
             [$stage, $headline, $detail, $label] = ['delayed', 'Payment received', 'Your utility bill is taking longer than expected. We are reviewing it. Please keep your reference.', 'Under review'];
         } else {
             [$stage, $headline, $detail, $label] = ['processing', 'Payment received', 'Your utility bill is being processed.', 'Processing'];

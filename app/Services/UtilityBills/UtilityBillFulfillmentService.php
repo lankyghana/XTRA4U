@@ -253,6 +253,7 @@ class UtilityBillFulfillmentService
             'provider_commission_share_percent' => $result->commissionSharePercent,
             'status_check_attempts' => 0,
             'next_status_check_at' => now()->addSeconds($this->backoff(0)),
+            'status_poll_started_at' => now(),
             'last_error_code' => null,
             'last_error_message' => null,
         ];
@@ -423,16 +424,24 @@ class UtilityBillFulfillmentService
     // ------------------------------------------------------------------
 
     /**
-     * Poll the provider for one in-flight order, by the PROVIDER's reference.
+     * Poll the provider for one in-flight order, by the PROVIDER's reference (always the
+     * EXISTING provider order; nothing is ever re-sent from here). Automatic polling covers
+     * pending/processing orders; an admin refresh ($adminActor set) may also query an order
+     * whose automatic polling stopped (provider_unresolved). Both draw on the shared status budget.
      *
      * @return string skipped | rate_limited | error | not_found | updated
      */
-    public function syncStatus(int $utilityBillOrderId): string
+    public function syncStatus(int $utilityBillOrderId, ?string $adminActor = null): string
     {
         $u = UtilityBillOrder::query()->find($utilityBillOrderId);
+        $allowed = $adminActor !== null ? FulfillmentStatus::REFRESHABLE : FulfillmentStatus::POLLABLE;
 
-        if (! $u || ! in_array($u->fulfillment_status, FulfillmentStatus::POLLABLE, true) || $u->provider_order_reference === null) {
+        if (! $u || ! in_array($u->fulfillment_status, $allowed, true) || $u->provider_order_reference === null) {
             return 'skipped';
+        }
+
+        if ($adminActor !== null) {
+            $this->event($u, 'admin_status_refresh', null, null, null, 'queried provider order '.$u->provider_order_reference, $adminActor);
         }
 
         try {
@@ -494,7 +503,21 @@ class UtilityBillFulfillmentService
                 return;
             }
 
-            if (! in_array($u->fulfillment_status, FulfillmentStatus::POLLABLE, true)) {
+            if (! in_array($u->fulfillment_status, FulfillmentStatus::REFRESHABLE, true)) {
+                return;
+            }
+
+            // Automatic polling stopped for this order. A non-final answer is recorded but changes
+            // nothing else; a final one (below) is applied exactly as it would have been in time.
+            if ($u->fulfillment_status === FulfillmentStatus::PROVIDER_UNRESOLVED && ! FulfillmentStatus::isTerminal($mapped)) {
+                $u->forceFill([
+                    'provider_status' => $status->status,
+                    'provider_payment_status' => $status->paymentStatus,
+                    'provider_status_reason' => $status->reason,
+                    'last_status_check_at' => now(),
+                ])->save();
+                $this->event($u, 'status_still_unresolved', FulfillmentStatus::PROVIDER_UNRESOLVED, null, null, 'provider status '.$status->status.'; automatic polling stays stopped', 'provider');
+
                 return;
             }
 
@@ -529,6 +552,83 @@ class UtilityBillFulfillmentService
         });
 
         $this->afterStatusChange($id);
+    }
+
+    /**
+     * Automatic polling horizon reached (status_poll_max_checks or status_poll_max_hours) without a
+     * final provider status: stop routine polling and surface the order. Payment, both references,
+     * provider status, attempt history, attribution and frozen commission terms are untouched; the
+     * order is NOT failed, refunded or re-sent, and an admin refresh still queries the same order.
+     *
+     * @return bool true when this call moved the order
+     */
+    public function markStatusUnresolved(int $id): bool
+    {
+        $moved = DB::transaction(function () use ($id) {
+            $u = UtilityBillOrder::query()->whereKey($id)->lockForUpdate()->first();
+
+            if (! $u || ! in_array($u->fulfillment_status, FulfillmentStatus::POLLABLE, true) || ! $this->pollingExhausted($u)) {
+                return null;
+            }
+
+            $from = $u->fulfillment_status;
+            $since = $u->status_poll_started_at ?? $u->submitted_at;
+            $u->forceFill(['fulfillment_status' => FulfillmentStatus::PROVIDER_UNRESOLVED, 'next_status_check_at' => null])->save();
+            $this->event($u, 'status_polling_stopped', $from, FulfillmentStatus::PROVIDER_UNRESOLVED, null,
+                $u->status_check_attempts.' automatic checks since '.($since?->toDateTimeString() ?? '?').' without a final status (provider last said '
+                .($u->provider_status ?? 'nothing').'); polling stopped, not failed; provider order '.$u->provider_order_reference.' kept', 'system');
+
+            return $u;
+        });
+
+        if (! $moved) {
+            return false;
+        }
+
+        $this->alertAdmin($moved, 'Utility Bill provider status unresolved', $this->attentionMessage($moved, FulfillmentStatus::PROVIDER_UNRESOLVED));
+
+        return true;
+    }
+
+    /** The automatic polling horizon (count or time, whichever first) has been reached. */
+    public function pollingExhausted(UtilityBillOrder $u): bool
+    {
+        $since = $u->status_poll_started_at ?? $u->submitted_at;
+
+        return $u->status_check_attempts >= max(1, (int) config('utility_bills.status_poll_max_checks', 30))
+            || ($since !== null && $since->lte(now()->subHours(max(1, (int) config('utility_bills.status_poll_max_hours', 24)))));
+    }
+
+    /**
+     * Controlled recovery: give an unresolved order a fresh automatic polling window (same provider
+     * order, same references). Nothing is sent to the pay endpoint.
+     *
+     * @param  array{id:?int,email:?string}  $actor
+     * @return array{ok:bool,message:string}
+     */
+    public function adminResumePolling(int $id, array $actor): array
+    {
+        return DB::transaction(function () use ($id, $actor) {
+            $u = UtilityBillOrder::query()->whereKey($id)->lockForUpdate()->first();
+
+            if (! $u || $u->fulfillment_status !== FulfillmentStatus::PROVIDER_UNRESOLVED || $u->provider_order_reference === null) {
+                return ['ok' => false, 'message' => 'Automatic status checks can only be resumed for an order whose provider status is unresolved.'];
+            }
+
+            $to = ProviderStatusMapper::toFulfillmentStatus($u->provider_status) === FulfillmentStatus::PROVIDER_PROCESSING
+                ? FulfillmentStatus::PROVIDER_PROCESSING
+                : FulfillmentStatus::PROVIDER_PENDING;
+
+            $u->forceFill([
+                'fulfillment_status' => $to,
+                'status_check_attempts' => 0,
+                'status_poll_started_at' => now(),
+                'next_status_check_at' => now(),
+            ])->save();
+            $this->event($u, 'admin_resume_polling', FulfillmentStatus::PROVIDER_UNRESOLVED, $to, null, 'new automatic polling window for provider order '.$u->provider_order_reference, 'admin:'.($actor['id'] ?? '?'));
+
+            return ['ok' => true, 'message' => 'Automatic status checks resumed for provider order '.$u->provider_order_reference.'.'];
+        });
     }
 
     private function scheduleNextCheck(int $id, int $seconds, bool $countAttempt = true): void
@@ -685,6 +785,9 @@ class UtilityBillFulfillmentService
                 case FulfillmentStatus::PROVIDER_PENDING:
                 case FulfillmentStatus::PROVIDER_PROCESSING:
                     return ['ok' => false, 'message' => 'The provider is still processing this bill. Refresh its status instead.'];
+
+                case FulfillmentStatus::PROVIDER_UNRESOLVED:
+                    return ['ok' => false, 'message' => 'KiNG FLEXY already holds this order; its final status is unresolved. Refresh its status (or resume automatic checks) instead. It is never re-sent.'];
 
                 case FulfillmentStatus::SUBMITTING:
                     if ($u->claimed_at && $u->claimed_at->gt(now()->subSeconds((int) config('utility_bills.claim_stale_seconds')))) {
@@ -890,6 +993,25 @@ class UtilityBillFulfillmentService
         $this->alertAdmin($u, 'Utility Bill needs attention', $this->attentionMessage($u, $code));
     }
 
+    /** Short admin label for why an order needs attention (never shown to customers). */
+    public static function reasonLabel(?string $code): string
+    {
+        return match ($code) {
+            'insufficient_balance' => 'Provider wallet low',
+            'disabled' => 'Provider/biller disabled',
+            'auth', 'not_configured' => 'Provider key rejected',
+            'timeout' => 'Provider timeouts',
+            'upstream', 'malformed' => 'Provider unavailable',
+            'rate_limited' => 'Provider rate limit',
+            'max_attempts' => 'Retries exhausted',
+            'payment_unconfirmed' => 'Payment unconfirmed',
+            'reference_conflict' => 'Reference conflict',
+            'rejected' => 'Rejected by provider',
+            null, '' => 'Needs review',
+            default => ucfirst(str_replace('_', ' ', $code)),
+        };
+    }
+
     private function attentionMessage(UtilityBillOrder $u, string $code): string
     {
         if ($code === 'payment_unconfirmed') {
@@ -903,6 +1025,7 @@ class UtilityBillFulfillmentService
             'max_attempts' => 'automatic submission attempts were exhausted',
             FulfillmentStatus::FAILED => 'the provider reported the payment failed',
             FulfillmentStatus::PROVIDER_REFUNDED => 'the provider refunded its wallet',
+            FulfillmentStatus::PROVIDER_UNRESOLVED => 'KiNG FLEXY gave no final status within the automatic polling window (provider order '.$u->provider_order_reference.'), so automatic checks stopped. It is not failed: refresh its status',
             default => 'the provider reported: '.$code,
         };
 

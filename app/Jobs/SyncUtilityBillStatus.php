@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Services\UtilityBills\UtilityBillFulfillmentService;
+use App\Services\UtilityBills\UtilityBillSweeper;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -29,6 +30,10 @@ class SyncUtilityBillStatus implements ShouldQueue
 
     public function handle(UtilityBillFulfillmentService $fulfillment): void
     {
-        $fulfillment->syncStatus($this->utilityBillOrderId);
+        try {
+            $fulfillment->syncStatus($this->utilityBillOrderId);
+        } finally {
+            UtilityBillSweeper::releaseStatusDispatch($this->utilityBillOrderId);
+        }
     }
 }

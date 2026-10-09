@@ -112,16 +112,27 @@ class UtilityBillSalesController extends Controller
         return back()->with($result['ok'] ? 'success' : 'error', $result['message']);
     }
 
+    /** Read-only query of the EXISTING provider order (also for orders whose automatic polling stopped). */
     public function refresh(UtilityBillOrder $order, UtilityBillFulfillmentService $fulfillment)
     {
-        $outcome = $fulfillment->syncStatus($order->id);
+        $outcome = $fulfillment->syncStatus($order->id, 'admin:'.($this->actor()['id'] ?? '?'));
+        $now = $order->fresh();
 
         return back()->with($outcome === 'updated' ? 'success' : 'error', match ($outcome) {
-            'updated' => 'Status refreshed from the provider.',
+            'updated' => $now->fulfillment_status === FulfillmentStatus::PROVIDER_UNRESOLVED
+                ? 'KiNG FLEXY still reports "'.($now->provider_status ?? 'unknown').'". The order stays unresolved; refresh again later or resume automatic checks.'
+                : 'Status refreshed from the provider: '.FulfillmentStatus::label($now->fulfillment_status).'.',
             'rate_limited' => 'Provider rate limit reached; try again in a minute.',
             'skipped' => 'This order is not waiting on the provider.',
             default => 'Could not refresh the status ('.$outcome.').',
         });
+    }
+
+    public function resumePolling(UtilityBillOrder $order, UtilityBillFulfillmentService $fulfillment)
+    {
+        $result = $fulfillment->adminResumePolling($order->id, $this->actor());
+
+        return back()->with($result['ok'] ? 'success' : 'error', $result['message']);
     }
 
     /** @return array{id:?int,email:?string} */
