@@ -49,9 +49,13 @@ class UtilityBillFulfillmentService
     /** Error codes worth retrying automatically (the sweeper re-dispatches these). */
     public const AUTO_RETRY_CODES = ['insufficient_balance', 'disabled', 'timeout', 'upstream', 'rate_limited', 'malformed'];
 
+    /** Last error codes of a provider-wide problem; orders exhausted by them are re-queued on recovery. */
+    private const RECOVERABLE_ON_PROVIDER_RECOVERY = ['max_attempts', 'auth', 'not_configured', 'disabled', 'timeout', 'upstream', 'malformed', 'rate_limited'];
+
     public function __construct(
         private KingFlexyUtilityProvider $provider,
         private UtilityBillCommissionService $commission,
+        private UtilityBillIncidents $incidents,
     ) {}
 
     // ------------------------------------------------------------------
@@ -154,7 +158,9 @@ class UtilityBillFulfillmentService
      */
     private function claim(int $id, bool $force, bool $yieldToBacklog = false): array|string
     {
-        return DB::transaction(function () use ($id, $force, $yieldToBacklog) {
+        $groupInto = null;
+
+        $claim = DB::transaction(function () use ($id, $force, $yieldToBacklog, &$groupInto) {
             $u = UtilityBillOrder::query()->whereKey($id)->lockForUpdate()->first();
 
             if (! $u) {
@@ -207,7 +213,12 @@ class UtilityBillFulfillmentService
             }
 
             if (! $force && $u->submit_attempts >= (int) config('utility_bills.max_submit_attempts')) {
-                $this->setAttention($u, 'max_attempts', 'Automatic submission attempts exhausted.', null);
+                // Exhausted by a provider-wide problem (timeouts, outage, ...): grouped into that
+                // incident (one alert) and re-queued automatically when the provider recovers.
+                // Anything else is order-specific and alerts on its own.
+                $category = UtilityBillIncidents::categoryForSubmit((string) $u->last_error_code);
+                $this->setAttention($u, 'max_attempts', 'Automatic submission attempts exhausted.', null, alert: $category === null);
+                $groupInto = $category !== null ? [$category, $u->id, $u->biller_key] : null;
 
                 return 'attention';
             }
@@ -239,6 +250,13 @@ class UtilityBillFulfillmentService
                 'prev_error' => $u->last_error_code,
             ];
         });
+
+        if ($groupInto !== null) {
+            [$category, $orderId, $biller] = $groupInto;
+            $this->incidents->record($category, $orderId, 'automatic submission attempts exhausted', $category === 'service_disabled' ? $biller : '');
+        }
+
+        return $claim;
     }
 
     private function recordSubmitSuccess(array $claim, PayResult $result): string
@@ -284,6 +302,7 @@ class UtilityBillFulfillmentService
             $this->resumeAfterProviderWallet('system');
         }
 
+        $this->providerRecovered($claim['biller']);
         $this->afterStatusChange($claim['id']);
 
         return $mapped === FulfillmentStatus::COMPLETED ? 'completed' : 'submitted';
@@ -334,6 +353,12 @@ class UtilityBillFulfillmentService
                 'last_error_message' => Str::limit($e->getMessage(), 250, ''),
             ], 'submit_retry_scheduled', $e->errorCode.'; retry in '.$delay.'s with the same reference'.($notCounted ? ' (not counted as an attempt)' : ''), $e->httpStatus, FulfillmentStatus::QUEUED);
 
+            // Repeated timeouts / 5xx / provider 429 across orders become ONE incident.
+            $local = $e instanceof ProviderRateLimited && $e->local;
+            if ($category = UtilityBillIncidents::categoryForSubmit($e->errorCode, $local)) {
+                $this->incidents->record($category, $claim['id'], $e->getMessage());
+            }
+
             // No delayed self-dispatch: the sweeper picks the order up once next_submit_at is due.
             return 'requeued';
         }
@@ -349,14 +374,25 @@ class UtilityBillFulfillmentService
         ], 'needs_attention', $e->errorCode, $e->httpStatus, FulfillmentStatus::ATTENTION);
 
         if ($e instanceof ProviderInsufficientBalance) {
-            // A provider-wide condition: pause new sales and alert ONCE per incident, not per order.
+            // A provider-wide condition: pause new sales and alert ONCE per incident, not per order
+            // (the pause sends that alert; the incident only tracks the affected orders).
+            $this->incidents->record('provider_wallet_low', $claim['id'], $e->getMessage(), notify: false);
             $this->providerWalletEmpty();
 
             return 'attention';
         }
 
-        // Alert when the order newly enters this problem, not again on every automatic retry.
         $u = UtilityBillOrder::query()->find($claim['id']);
+
+        // Provider-wide (key rejected, service/biller disabled): one incident alert for all orders.
+        if ($category = UtilityBillIncidents::categoryForSubmit($e->errorCode)) {
+            $this->incidents->record($category, $claim['id'], $e->getMessage(), $category === 'service_disabled' ? $claim['biller'] : '',
+                firstOrderNote: $u ? $this->attentionMessage($u, $e->errorCode) : null);
+
+            return 'attention';
+        }
+
+        // Order-specific: alert when the order newly enters this problem, not on every automatic retry.
         if ($u && $claim['prev_error'] !== $e->errorCode) {
             $this->alertAdmin($u, 'Utility Bill needs attention', $this->attentionMessage($u, $e->errorCode));
         }
@@ -404,6 +440,8 @@ class UtilityBillFulfillmentService
      */
     public function resumeAfterProviderWallet(?string $actor = null): int
     {
+        $this->incidents->recover(['provider_wallet_low'], $actor && $actor !== 'system' ? 'sales resumed by '.$actor : 'a provider payment succeeded');
+
         if (! UtilityBillSettings::resumeProviderWallet()) {
             return 0;
         }
@@ -417,6 +455,58 @@ class UtilityBillFulfillmentService
         Log::info('utility_bills.provider_wallet.resumed', ['actor' => $actor ?? 'system', 'orders_due_now' => $woken]);
 
         return $woken;
+    }
+
+    /**
+     * A provider payment just succeeded: close the pay-side incidents it disproves and put the
+     * orders they had parked (attempts exhausted during the outage, key rejected, ...) back in
+     * the oldest-first queue with their SAME provider reference.
+     */
+    private function providerRecovered(?string $biller): void
+    {
+        $recovered = $this->incidents->recover(UtilityBillIncidents::RECOVERED_BY_PAY_SUCCESS, 'a provider payment succeeded');
+        if ($biller !== null && $biller !== '') {
+            $recovered = array_merge($recovered, $this->incidents->recover(['service_disabled'], 'a payment for this biller succeeded', $biller));
+        }
+
+        if ($recovered !== []) {
+            $this->requeueAfterRecovery($recovered);
+        }
+    }
+
+    /** @param  list<int>  $incidentIds */
+    private function requeueAfterRecovery(array $incidentIds): int
+    {
+        $requeued = 0;
+
+        DB::table('utility_bill_incident_orders')->whereIn('utility_bill_incident_id', $incidentIds)
+            ->orderBy('utility_bill_order_id')->distinct()->pluck('utility_bill_order_id')
+            ->each(function ($id) use (&$requeued) {
+                $moved = DB::transaction(function () use ($id) {
+                    $u = UtilityBillOrder::query()->whereKey($id)->lockForUpdate()->first();
+
+                    if (! $u || $u->fulfillment_status !== FulfillmentStatus::ATTENTION || $u->provider_order_reference !== null
+                        || ! in_array($u->last_error_code, self::RECOVERABLE_ON_PROVIDER_RECOVERY, true)) {
+                        return false;
+                    }
+
+                    $u->forceFill([
+                        'fulfillment_status' => FulfillmentStatus::QUEUED,
+                        'next_submit_at' => now(),
+                        'submit_attempts' => 0,
+                        'claim_token' => null,
+                        'claimed_at' => null,
+                    ])->save();
+                    $this->event($u, 'auto_requeue_after_recovery', FulfillmentStatus::ATTENTION, FulfillmentStatus::QUEUED, null,
+                        'provider recovered; same provider reference '.($u->provider_request_reference ?? '(none yet)'), 'system');
+
+                    return true;
+                });
+
+                $requeued += $moved ? 1 : 0;
+            });
+
+        return $requeued;
     }
 
     // ------------------------------------------------------------------
@@ -446,8 +536,11 @@ class UtilityBillFulfillmentService
 
         try {
             $status = $this->provider->status($u->provider_order_reference);
-        } catch (ProviderRateLimited) {
+        } catch (ProviderRateLimited $e) {
             $this->scheduleNextCheck($u->id, 45, false);
+            if (! $e->local) {
+                $this->incidents->record('provider_rate_limited', $u->id, 'status endpoint 429');
+            }
 
             return 'rate_limited';
         } catch (ProviderNotFound) {
@@ -458,10 +551,12 @@ class UtilityBillFulfillmentService
         } catch (UtilityProviderException $e) {
             Log::warning('utility_bills.status.sync_failed', ['utility_bill_order_id' => $u->id, 'error_code' => $e->errorCode]);
             $this->scheduleNextCheck($u->id, $this->backoff($u->status_check_attempts));
+            $this->incidents->record(in_array($e->errorCode, ['auth', 'not_configured'], true) ? 'provider_auth' : 'status_sync_unavailable', $u->id, $e->getMessage());
 
             return 'error';
         }
 
+        $this->incidents->recover(UtilityBillIncidents::RECOVERED_BY_STATUS_SUCCESS, 'a status check succeeded');
         $this->applyProviderStatus($u->id, $status);
 
         return 'updated';
@@ -585,7 +680,9 @@ class UtilityBillFulfillmentService
             return false;
         }
 
-        $this->alertAdmin($moved, 'Utility Bill provider status unresolved', $this->attentionMessage($moved, FulfillmentStatus::PROVIDER_UNRESOLVED));
+        // Grouped: many orders left unresolved by one provider problem produce one alert.
+        $this->incidents->record('status_unresolved', $moved->id, 'automatic polling horizon reached',
+            firstOrderNote: $this->attentionMessage($moved, FulfillmentStatus::PROVIDER_UNRESOLVED));
 
         return true;
     }
@@ -668,8 +765,12 @@ class UtilityBillFulfillmentService
             ? 'has not reached a final provider status'
             : 'has not been accepted by KiNG FLEXY yet ('.FulfillmentStatus::label($u->fulfillment_status).($u->last_error_code ? ', last error: '.$u->last_error_code : '').')';
 
-        // Never auto-failed and never auto-refunded: a human decides.
-        $this->alertAdmin($u, 'Utility Bill still processing', $u->biller_label.' bill '.$u->public_ref.' (GHS '.number_format((float) $u->bill_amount, 2).') was paid over '.$minutes.' minutes ago and '.$state.'. Check it in Utility Bill Sales.');
+        // Never auto-failed and never auto-refunded: a human decides. Grouped into one incident, so
+        // a provider outage does not produce one alert per stuck order.
+        // An order already in an active outage incident is grouped silently: that alert explains it.
+        $this->incidents->record('delayed_orders', $u->id, 'not finished '.$minutes.' min after payment',
+            notify: ! $this->incidents->explainedByActiveOutage($u->id),
+            firstOrderNote: $u->biller_label.' bill '.$u->public_ref.' (GHS '.number_format((float) $u->bill_amount, 2).') was paid over '.$minutes.' minutes ago and '.$state.'.');
 
         return true;
     }
@@ -978,7 +1079,7 @@ class UtilityBillFulfillmentService
         return true;
     }
 
-    private function setAttention(UtilityBillOrder $u, string $code, string $message, ?int $http): void
+    private function setAttention(UtilityBillOrder $u, string $code, string $message, ?int $http, bool $alert = true): void
     {
         $from = $u->fulfillment_status;
         $u->forceFill([
@@ -990,7 +1091,9 @@ class UtilityBillFulfillmentService
         ])->save();
 
         $this->event($u, 'needs_attention', $from, FulfillmentStatus::ATTENTION, $http, $code, 'system');
-        $this->alertAdmin($u, 'Utility Bill needs attention', $this->attentionMessage($u, $code));
+        if ($alert) {
+            $this->alertAdmin($u, 'Utility Bill needs attention', $this->attentionMessage($u, $code));
+        }
     }
 
     /** Short admin label for why an order needs attention (never shown to customers). */

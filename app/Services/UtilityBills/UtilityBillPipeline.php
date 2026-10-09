@@ -16,7 +16,10 @@ use App\Models\UtilityBillOrder;
  */
 class UtilityBillPipeline
 {
-    public function __construct(private ProviderRateBudget $budget) {}
+    public function __construct(
+        private ProviderRateBudget $budget,
+        private UtilityBillIncidents $incidents,
+    ) {}
 
     /**
      * @return array<string, mixed>
@@ -53,6 +56,8 @@ class UtilityBillPipeline
         $submittedLastHour = UtilityBillEvent::query()->where('kind', 'provider_accepted')->where('created_at', '>=', $hourAgo)->count();
 
         $accumulating = $waiting > 0 && ($drainMinutes > $warnAfter || $oldestMinutes > $warnAfter);
+        $incidents = $this->incidents->active();
+        $outage = $incidents->contains(fn ($i) => UtilityBillIncidents::CATEGORIES[$i->category]['outage'] ?? false);
 
         return [
             'awaiting_submission' => $waiting,
@@ -71,7 +76,15 @@ class UtilityBillPipeline
             'paid_last_hour' => $paidLastHour,
             'submitted_last_hour' => $submittedLastHour,
             'accumulating' => $accumulating,
-            'state' => $waiting === 0 ? 'clear' : ($accumulating ? 'capacity_backlog' : 'flowing'),
+            'incidents' => $incidents,
+            // An active provider-wide incident is an OUTAGE, whatever the queue looks like; only
+            // without one is a growing queue a CAPACITY backlog (the pay limit, not a fault).
+            'state' => match (true) {
+                $outage => 'outage',
+                $waiting === 0 => 'clear',
+                $accumulating => 'capacity_backlog',
+                default => 'flowing',
+            },
         ];
     }
 }

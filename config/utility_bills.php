@@ -78,6 +78,12 @@ return [
     'status_poll_max_checks' => (int) env('UTILITY_BILLS_STATUS_POLL_MAX_CHECKS', 30),
     'status_poll_max_hours' => (int) env('UTILITY_BILLS_STATUS_POLL_MAX_HOURS', 24),
 
+    // Provider-wide problems are grouped into one incident per issue (see
+    // UtilityBillIncidents): one alert when it starts, at most one "still
+    // ongoing" reminder per this many minutes while it keeps happening, and one
+    // "recovered" notice.
+    'incident_realert_minutes' => (int) env('UTILITY_BILLS_INCIDENT_REALERT_MINUTES', 60),
+
     // After this long without a terminal status the order is surfaced for
     // human attention (never auto-failed and never auto-refunded).
     'status_attention_after_minutes' => (int) env('UTILITY_BILLS_ATTENTION_AFTER_MINUTES', 120),

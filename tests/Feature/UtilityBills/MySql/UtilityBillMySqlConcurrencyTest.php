@@ -40,7 +40,7 @@ class UtilityBillMySqlConcurrencyTest extends TestCase
             'services.kingflexy_utilities.base_url' => 'https://api.kingflexygh.com/api/v2']);
 
         DB::statement('SET FOREIGN_KEY_CHECKS=0');
-        foreach (['utility_bill_events', 'utility_bill_orders', 'orders', 'payment_gateway_configs', 'cache', 'cache_locks'] as $table) {
+        foreach (['utility_bill_incident_orders', 'utility_bill_incidents', 'admin_notifications', 'utility_bill_events', 'utility_bill_orders', 'orders', 'payment_gateway_configs', 'cache', 'cache_locks'] as $table) {
             DB::table($table)->truncate();
         }
         DB::statement('SET FOREIGN_KEY_CHECKS=1');
@@ -176,6 +176,31 @@ class UtilityBillMySqlConcurrencyTest extends TestCase
         $this->assertSame(3, UtilityBillOrder::query()->where('fulfillment_status', FulfillmentStatus::PROVIDER_PENDING)->count());
         $this->assertSame(7, UtilityBillOrder::query()->where('fulfillment_status', FulfillmentStatus::QUEUED)->where('submit_attempts', 0)->count(),
             'held-back orders stay queued and uncounted');
+    }
+
+    // ------------------------------------------------------------------
+    // Incident alert deduplication across processes
+    // ------------------------------------------------------------------
+
+    public function test_concurrent_workers_hitting_one_outage_open_one_incident_and_send_one_alert(): void
+    {
+        $ids = collect(range(1, 12))->map(fn () => $this->unpaidOrder()->id)->all();
+        $startAt = microtime(true) + 3;
+
+        $workers = [];
+        for ($i = 0; $i < 6; $i++) {
+            // Overlapping slices: every order is reported by several workers.
+            $workers[] = $this->spawn('incident', ['category' => 'provider_unreachable', 'ids' => array_slice($ids, $i, 8), 'start_at' => $startAt]);
+        }
+        $calls = collect($workers)->sum(fn ($p) => $this->finish($p)['done']);
+
+        $incidents = DB::table('utility_bill_incidents')->get();
+        $this->assertCount(1, $incidents, 'one active incident, however many processes saw the outage');
+        $this->assertSame('active', $incidents[0]->active_key);
+        $this->assertSame($calls, (int) $incidents[0]->occurrences);
+        $this->assertSame(12, (int) $incidents[0]->affected_orders);
+        $this->assertSame(12, DB::table('utility_bill_incident_orders')->count());
+        $this->assertSame(1, DB::table('admin_notifications')->where('type', 'utility_bill_incident')->count(), 'exactly one alert');
     }
 
     // ------------------------------------------------------------------

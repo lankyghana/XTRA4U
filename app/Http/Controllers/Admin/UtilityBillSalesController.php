@@ -84,7 +84,7 @@ class UtilityBillSalesController extends Controller
 
     public function show(UtilityBillOrder $order)
     {
-        $order->load(['order', 'vendor:id,name,vendor_code', 'events']);
+        $order->load(['order', 'vendor:id,name,vendor_code', 'events', 'incidents']);
 
         return view('admin.utility_bills.show', [
             'sale' => $order,

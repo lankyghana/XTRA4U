@@ -56,6 +56,14 @@
             </dl>
         </div>
 
+        @if ($sale->incidents->isNotEmpty())
+            <p class="text-sm text-gray-600">Affected by:
+                @foreach ($sale->incidents as $inc)
+                    <a href="{{ route('admin.utility-bill-incidents.show', $inc) }}" class="text-brand-violet hover:underline">{{ $inc->label() }}</a> ({{ $inc->isActive() ? 'active' : 'recovered' }})@if (! $loop->last), @endif
+                @endforeach
+            </p>
+        @endif
+
         <div class="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
             <h2 class="text-base font-semibold text-gray-900">Recovery</h2>
 

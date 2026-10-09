@@ -6,6 +6,7 @@ use App\Services\UtilityBills\FulfillmentStatus;
 use App\Support\PaymentIntegrity;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
@@ -59,6 +60,12 @@ class UtilityBillOrder extends Model
     public function vendor(): BelongsTo
     {
         return $this->belongsTo(Vendor::class);
+    }
+
+    /** Provider incidents this order was affected by (grouped alerts; the order keeps its own state). */
+    public function incidents(): BelongsToMany
+    {
+        return $this->belongsToMany(UtilityBillIncident::class, 'utility_bill_incident_orders')->withPivot('first_seen_at');
     }
 
     public function events(): HasMany

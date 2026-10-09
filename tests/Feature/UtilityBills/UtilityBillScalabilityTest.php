@@ -413,6 +413,18 @@ class UtilityBillScalabilityTest extends UtilityBillTestCase
             $svc->submit($u->id);
         }
 
+        // Service/biller disabled is provider-wide: one incident alert, not one per order or retry.
+        $this->assertSame(1, AdminNotification::query()->where('type', 'utility_bill_incident')->count());
+        $this->assertSame(0, AdminNotification::query()->where('title', 'Utility Bill needs attention')->count());
+
+        // An order-specific rejection still alerts for that order, once.
+        $this->fake([self::BASE.'/utilities/pay' => Http::response(['success' => false, 'message' => 'invalid account'], 400)]);
+        $other = $this->makeOrder(['paid' => true]);
+        for ($i = 0; $i < 3; $i++) {
+            app(ProviderRateBudget::class)->clear('pay');
+            UtilityBillOrder::whereKey($other->id)->update(['fulfillment_status' => FulfillmentStatus::QUEUED, 'next_submit_at' => now()->subSecond()]);
+            $svc->submit($other->id);
+        }
         $this->assertSame(1, AdminNotification::query()->where('title', 'Utility Bill needs attention')->count());
     }
 

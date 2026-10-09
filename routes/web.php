@@ -536,6 +536,9 @@ Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(functi
         ->whereNumber('order')->middleware('throttle:10,1,utility-admin-new-attempt')->name('utility-bill-sales.new-attempt');
     Route::post('utility-bill-sales/{order}/refresh', [\App\Http\Controllers\Admin\UtilityBillSalesController::class, 'refresh'])
         ->whereNumber('order')->middleware('throttle:30,1,utility-admin-refresh')->name('utility-bill-sales.refresh');
+    Route::get('utility-bill-incidents', [\App\Http\Controllers\Admin\UtilityBillIncidentsController::class, 'index'])->name('utility-bill-incidents.index');
+    Route::get('utility-bill-incidents/{incident}', [\App\Http\Controllers\Admin\UtilityBillIncidentsController::class, 'show'])
+        ->whereNumber('incident')->name('utility-bill-incidents.show');
     Route::post('utility-bill-sales/{order}/resume-polling', [\App\Http\Controllers\Admin\UtilityBillSalesController::class, 'resumePolling'])
         ->whereNumber('order')->middleware('throttle:10,1,utility-admin-resume-polling')->name('utility-bill-sales.resume-polling');
 

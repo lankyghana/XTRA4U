@@ -23,13 +23,30 @@
                 <x-admin.stat label="Needs attention" :value="number_format($p['attention'])" :tone="$p['attention'] ? 'warning' : 'neutral'" :href="route('admin.utility-bill-sales.index', ['fulfillment' => 'attention'])" />
                 <x-admin.stat label="Status unresolved" :value="number_format($p['unresolved'])" hint="Automatic checks stopped; not failed" :tone="$p['unresolved'] ? 'warning' : 'neutral'" :href="route('admin.utility-bill-sales.index', ['fulfillment' => 'provider_unresolved'])" />
             </div>
-            @if ($p['state'] === 'capacity_backlog')
+            @if ($p['state'] === 'outage')
+                <p class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+                    <strong>Provider outage.</strong> KiNG FLEXY is not processing normally ({{ $p['incidents']->map->label()->implode('; ') }}). Paid orders wait or retry with their existing references; nothing is failed or refunded automatically.
+                    @if ($p['awaiting_submission']) {{ number_format($p['awaiting_submission']) }} {{ \Illuminate\Support\Str::plural('bill', $p['awaiting_submission']) }} waiting for submission. @endif
+                </p>
+            @elseif ($p['state'] === 'capacity_backlog')
                 <p class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                     <strong>Provider capacity backlog.</strong> {{ number_format($p['awaiting_submission']) }} paid {{ \Illuminate\Support\Str::plural('bill', $p['awaiting_submission']) }} are queued faster than KiNG FLEXY's pay limit accepts them
                     (paid in the last hour: {{ $p['paid_last_hour'] }}, submitted: {{ $p['submitted_last_hour'] }}). At {{ $p['pay_per_minute'] }}/min the queue clears in about {{ $p['drain_minutes'] }} min, oldest first. This is a capacity limit, not an outage; the provider limit can only be raised by KiNG FLEXY.
                 </p>
             @elseif ($p['state'] === 'flowing')
                 <p class="text-xs text-gray-500">Queue is draining normally: about {{ $p['drain_minutes'] }} min at the current pay capacity, oldest first.</p>
+            @endif
+
+            @if ($p['incidents']->isNotEmpty())
+                <div class="space-y-2">
+                    <div class="flex items-baseline justify-between gap-2">
+                        <h3 class="text-sm font-semibold text-gray-900">Active incidents</h3>
+                        <a href="{{ route('admin.utility-bill-incidents.index') }}" class="text-xs text-brand-violet hover:underline">All incidents</a>
+                    </div>
+                    @include('admin.utility_bills.partials.incident-rows', ['incidents' => $p['incidents'], 'empty' => ''])
+                </div>
+            @else
+                <p class="text-xs text-gray-500"><a href="{{ route('admin.utility-bill-incidents.index') }}" class="text-brand-violet hover:underline">Incident history</a> &middot; no active provider incidents.</p>
             @endif
         </section>
 

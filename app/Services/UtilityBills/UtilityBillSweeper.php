@@ -29,7 +29,10 @@ use Illuminate\Support\Facades\DB;
  */
 class UtilityBillSweeper
 {
-    public function __construct(private UtilityBillFulfillmentService $fulfillment) {}
+    public function __construct(
+        private UtilityBillFulfillmentService $fulfillment,
+        private UtilityBillIncidents $incidents,
+    ) {}
 
     /** Marks an order as having a sweeper-dispatched submit job queued or running. */
     public static function dispatchKey(int $id): string
@@ -71,8 +74,28 @@ class UtilityBillSweeper
         $unresolved = $this->stopExhaustedPolling();
         $polled = $this->pollDueOrders($pollLimit);
         $alerted = $this->alertStuckOrders();
+        $this->closeSettledIncidents();
 
         return ['dispatched' => $dispatched, 'requeued' => $requeued, 'unresolved' => $unresolved, 'polled' => $polled, 'alerted' => $alerted];
+    }
+
+    /**
+     * Incidents that describe ORDER states (delayed, unresolved) recover once none of their
+     * orders is still in that state; provider-wide ones recover on an observed provider success.
+     */
+    private function closeSettledIncidents(): void
+    {
+        $still = [
+            // Delayed means "paid but not finished": it is over only when none is still unfinished.
+            'delayed_orders' => [...FulfillmentStatus::STUCK_ALERTABLE, FulfillmentStatus::ATTENTION, FulfillmentStatus::PROVIDER_UNRESOLVED],
+            'status_unresolved' => [FulfillmentStatus::PROVIDER_UNRESOLVED],
+        ];
+
+        foreach ($this->incidents->active()->whereIn('category', array_keys($still)) as $incident) {
+            if (! $incident->orders()->whereIn('fulfillment_status', $still[$incident->category])->exists()) {
+                $this->incidents->recover([$incident->category], 'every affected order has moved on');
+            }
+        }
     }
 
     /**

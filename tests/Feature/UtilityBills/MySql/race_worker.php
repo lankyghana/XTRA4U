@@ -15,6 +15,7 @@ use App\Services\Payments\PaymentIntegrityGuard;
 use App\Services\PaymentService;
 use App\Services\UtilityBills\ProviderRateBudget;
 use App\Services\UtilityBills\UtilityBillFulfillmentService;
+use App\Services\UtilityBills\UtilityBillIncidents;
 use App\Support\PaymentFailureTransition;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\DB;
@@ -88,6 +89,15 @@ switch ($mode) {
             $out['results'][$id] = app(UtilityBillFulfillmentService::class)->submit((int) $id);
         }
         $out['pay_calls'] = Http::recorded()->count();
+        break;
+
+        // Workers hitting the same provider outage for overlapping orders at the same instant.
+    case 'incident':
+        time_sleep_until((float) $args['start_at']);
+        foreach ($args['ids'] as $id) {
+            app(UtilityBillIncidents::class)->record($args['category'], (int) $id, 'timed out');
+        }
+        $out['done'] = count($args['ids']);
         break;
 
     default:
