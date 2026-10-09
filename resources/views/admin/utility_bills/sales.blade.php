@@ -86,7 +86,11 @@
                 <label class="block text-sm font-medium text-gray-700">From<input type="date" name="from" value="{{ $filters['from'] ?? '' }}" class="mt-1 w-full rounded-md border-gray-300 shadow-sm"></label>
                 <label class="block text-sm font-medium text-gray-700">To<input type="date" name="to" value="{{ $filters['to'] ?? '' }}" class="mt-1 w-full rounded-md border-gray-300 shadow-sm"></label>
                 <label class="block text-sm font-medium text-gray-700 sm:col-span-2">Reference / account
-                    <input name="q" value="{{ $filters['q'] ?? '' }}" class="mt-1 w-full rounded-md border-gray-300 shadow-sm" placeholder="UB…, provider ref, account number or name">
+                    <input name="q" value="{{ $filters['q'] ?? '' }}" class="mt-1 w-full rounded-md border-gray-300 shadow-sm" placeholder="Starts with: UB…, XU-…, UTIL-…, account number or name; or exact payment ref">
+                    <span class="mt-1 flex items-center gap-2 text-xs font-normal text-gray-500">
+                        <input type="checkbox" name="match" value="contains" @checked(($filters['match'] ?? '') === 'contains') class="rounded border-gray-300">
+                        Match anywhere in the text (slower: scans every sale)
+                    </span>
                 </label>
                 <div class="sm:col-span-2 lg:col-span-4 flex gap-2">
                     <button type="submit" class="inline-flex items-center px-4 py-2 bg-brand-violet text-white rounded-lg text-sm font-semibold">Apply Filters</button>
@@ -94,6 +98,11 @@
                 </div>
             </form>
         </div>
+
+        <p class="text-xs text-gray-500">
+            {{ $totalCapped ? number_format($total).'+' : number_format($total) }} {{ \Illuminate\Support\Str::plural('sale', $total) }}
+            @if ($totalCapped) &middot; counted up to {{ number_format($total) }}; narrow by date to page further back. @endif
+        </p>
 
         <x-admin.table :headers="['Reference', 'Vendor', 'Biller', 'Account', 'Bill', 'Payment', 'Fulfillment', 'Vendor comm.', 'Provider comm.', 'Provider ref', 'Date']">
             @forelse ($sales as $s)

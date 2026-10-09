@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Order;
 use App\Models\UtilityBillerConfig;
 use App\Models\UtilityBillEvent;
 use App\Models\UtilityBillOrder;
@@ -12,6 +13,11 @@ use App\Services\UtilityBills\UtilityBillFulfillmentService;
 use App\Services\UtilityBills\UtilityBillPipeline;
 use App\Support\AdminAccess;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Admin view of every Utility Bill transaction, with recovery actions.
@@ -20,6 +26,14 @@ use Illuminate\Http\Request;
  */
 class UtilityBillSalesController extends Controller
 {
+    /** Searchable columns. Each has an index, so a "starts with" match is an index range read. */
+    private const SEARCH_COLUMNS = ['public_ref', 'provider_order_reference', 'provider_request_reference', 'account_number', 'account_name'];
+
+    /** Filters that need the envelope order (or a full scan) are counted only this far. */
+    private const COUNT_CAP = 1000;
+
+    private const PER_PAGE = 30;
+
     public function index(Request $request)
     {
         $filters = $request->validate([
@@ -30,9 +44,13 @@ class UtilityBillSalesController extends Controller
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date'],
             'q' => ['nullable', 'string', 'max:80'],
+            'match' => ['nullable', 'in:prefix,contains'],
         ]);
+        $contains = ($filters['match'] ?? 'prefix') === 'contains';
 
-        $query = UtilityBillOrder::query()->with(['order:id,payment_status,payment_integrity_status,payment_reference', 'vendor:id,name,vendor_code'])->latest('id');
+        // Newest first. Every predicate below is sargable on utility_bill_orders' own indexes.
+        $query = UtilityBillOrder::query()->with(['order:id,payment_status,payment_integrity_status,payment_reference', 'vendor:id,name,vendor_code'])
+            ->orderByDesc('utility_bill_orders.id');
 
         if (($filters['vendor_id'] ?? '') === 'direct') {
             $query->whereNull('vendor_id');
@@ -48,38 +66,108 @@ class UtilityBillSalesController extends Controller
                 'failed' => ['failed'],
                 default => ['unpaid', 'pending'],
             };
-            $query->whereHas('order', fn ($o) => $o->whereIn('payment_status', $statuses));
+            // A correlated lookup by the envelope order's primary key, so MySQL walks the (much
+            // smaller) utility table newest-first instead of scanning every marketplace order.
+            $query->whereIn(DB::raw('(select o.payment_status from orders o where o.id = utility_bill_orders.order_id)'), $statuses);
         }
         if (! empty($filters['fulfillment'])) {
             $query->where('fulfillment_status', $filters['fulfillment']);
         }
+        // Whole days, as before, but as index ranges rather than DATE(created_at).
         if (! empty($filters['from'])) {
-            $query->whereDate('created_at', '>=', $filters['from']);
+            $query->where('created_at', '>=', Carbon::parse($filters['from'])->startOfDay());
         }
         if (! empty($filters['to'])) {
-            $query->whereDate('created_at', '<=', $filters['to']);
+            $query->where('created_at', '<', Carbon::parse($filters['to'])->addDay()->startOfDay());
         }
-        if (! empty($filters['q'])) {
-            $term = trim($filters['q']);
-            $query->where(function ($q) use ($term) {
-                $q->where('public_ref', 'like', "%{$term}%")
-                    ->orWhere('provider_order_reference', 'like', "%{$term}%")
-                    ->orWhere('provider_request_reference', 'like', "%{$term}%")
-                    ->orWhere('account_number', 'like', "%{$term}%")
-                    ->orWhere('account_name', 'like', "%{$term}%");
-            });
+        if (($term = trim((string) ($filters['q'] ?? ''))) !== '') {
+            $this->applySearch($query, $term, $contains);
         }
 
+        // Exact totals when the count is an index read; a capped count when the filter needs the
+        // envelope order or a full scan (payment status, "match anywhere").
+        $capped = ! empty($filters['payment']) || ($contains && $term !== '');
+        [$sales, $total, $totalCapped] = $capped ? $this->cappedPage($request, $query) : $this->exactPage($query);
+
         return view('admin.utility_bills.sales', [
-            'sales' => $query->paginate(30)->withQueryString(),
+            'sales' => $sales,
+            'total' => $total,
+            'totalCapped' => $totalCapped,
             'filters' => $filters,
-            'vendors' => Vendor::query()->whereIn('id', UtilityBillOrder::query()->whereNotNull('vendor_id')->select('vendor_id'))->orderBy('name')->get(['id', 'name']),
-            'billers' => UtilityBillOrder::query()->select('biller_key', 'biller_label')->distinct()->orderBy('biller_label')->get()->toBase()
-                ->merge(UtilityBillerConfig::query()->get(['biller_key'])->map(fn ($c) => (object) ['biller_key' => $c->biller_key, 'biller_label' => $c->biller_key]))
-                ->unique('biller_key')->values(),
+            ...$this->filterOptions(),
             'attentionCount' => UtilityBillOrder::query()->where('fulfillment_status', FulfillmentStatus::ATTENTION)->count(),
             'pipeline' => app(UtilityBillPipeline::class)->snapshot(),
         ]);
+    }
+
+    /**
+     * Default: "starts with" on the indexed reference/account columns (MySQL serves the OR with an
+     * index merge), plus an exact gateway payment reference. "Match anywhere" keeps the original
+     * substring search on the same columns; it cannot use an index, so it scans the table.
+     */
+    private function applySearch($query, string $term, bool $contains): void
+    {
+        $escaped = str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $term);
+        $pattern = $contains ? '%'.$escaped.'%' : $escaped.'%';
+        $paymentOrderId = $contains ? null : Order::query()->where('payment_reference', $term)->value('id');
+
+        $query->where(function ($q) use ($pattern, $paymentOrderId) {
+            foreach (self::SEARCH_COLUMNS as $column) {
+                $q->orWhereRaw('utility_bill_orders.'.$column." like ? escape '!'", [$pattern]);
+            }
+            if ($paymentOrderId !== null) {
+                $q->orWhere('utility_bill_orders.order_id', $paymentOrderId);
+            }
+        });
+    }
+
+    /** @return array{0: LengthAwarePaginator, 1: int, 2: bool} */
+    private function exactPage($query): array
+    {
+        $page = $query->paginate(self::PER_PAGE)->withQueryString();
+
+        return [$page, $page->total(), false];
+    }
+
+    /** @return array{0: LengthAwarePaginator, 1: int, 2: bool} */
+    private function cappedPage(Request $request, $query): array
+    {
+        $total = DB::query()->fromSub((clone $query)->toBase()->select('utility_bill_orders.id')->limit(self::COUNT_CAP + 1), 'capped')->count();
+        $page = LengthAwarePaginator::resolveCurrentPage();
+        $items = (clone $query)->forPage($page, self::PER_PAGE)->get();
+
+        $paginator = (new LengthAwarePaginator($items, $total, self::PER_PAGE, $page, ['path' => $request->url()]))->withQueryString();
+
+        return [$paginator, min($total, self::COUNT_CAP), $total > self::COUNT_CAP];
+    }
+
+    /**
+     * Dropdown options, cached briefly: they change rarely and recomputing them on every page
+     * load used to scan the whole table (SELECT DISTINCT ... ORDER BY).
+     *
+     * @return array{vendors: Collection, billers: Collection}
+     */
+    private function filterOptions(): array
+    {
+        $options = Cache::remember('utility_bills.admin.sales_filter_options', 600, function () {
+            // GROUP BY on the biller_key index (a loose index scan), then one indexed lookup per key.
+            $keys = UtilityBillOrder::query()->select('biller_key')->groupBy('biller_key')->pluck('biller_key')
+                ->merge(UtilityBillerConfig::query()->pluck('biller_key'))->unique()->values();
+
+            return [
+                'vendors' => Vendor::query()->whereIn('id', UtilityBillOrder::query()->whereNotNull('vendor_id')->select('vendor_id'))
+                    ->orderBy('name')->get(['id', 'name'])->map(fn ($v) => ['id' => $v->id, 'name' => $v->name])->all(),
+                'billers' => $keys->map(fn ($key) => [
+                    'biller_key' => $key,
+                    'biller_label' => UtilityBillOrder::query()->where('biller_key', $key)->value('biller_label') ?? $key,
+                ])->sortBy('biller_label')->values()->all(),
+            ];
+        });
+
+        return [
+            'vendors' => collect($options['vendors'])->map(fn ($v) => (object) $v),
+            'billers' => collect($options['billers'])->map(fn ($b) => (object) $b),
+        ];
     }
 
     public function show(UtilityBillOrder $order)
