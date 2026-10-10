@@ -3,6 +3,7 @@
 namespace Tests\Feature\UtilityBills;
 
 use App\Http\Controllers\PlatformServiceController;
+use App\Http\Controllers\UtilityBillController;
 use App\Models\NetworkService;
 use App\Models\Product;
 use App\Models\ResellerProduct;
@@ -207,7 +208,8 @@ class LegacyEcgRetirementTest extends UtilityBillTestCase
         $this->fake([self::BASE.'/utilities/billers' => Http::response($this->billersBody())]);
         $vendor = Vendor::factory()->create(['is_approved' => true]);
 
-        $this->get('/store/'.$vendor->vendor_code)->assertOk()->assertSee('Utility Bills')->assertSee('utility_bills_service');
+        $this->get('/store/'.$vendor->vendor_code)->assertOk()->assertSee('Utility Bills')
+            ->assertSee('href="'.route('storefront.utility-bills', ['vendor' => $vendor->vendor_code]).'"', false);
     }
 
     // ---- Routes / dead code ---------------------------------------------------
@@ -222,7 +224,7 @@ class LegacyEcgRetirementTest extends UtilityBillTestCase
 
     public function test_there_is_no_product_based_utility_bills_or_ecg_page_left(): void
     {
-        $this->assertSame(\App\Http\Controllers\UtilityBillController::class.'@direct', Route::getRoutes()->getByName('services.utility-bills')->getActionName());
+        $this->assertSame(UtilityBillController::class.'@direct', Route::getRoutes()->getByName('services.utility-bills')->getActionName());
 
         foreach (['utilityBills', 'ecg'] as $method) {
             $this->assertFalse(method_exists(PlatformServiceController::class, $method), $method);

@@ -6,6 +6,11 @@ use App\Models\NetworkService;
 use App\Models\PaymentGatewayConfig;
 use App\Models\ResellerProduct;
 use App\Models\Vendor;
+use App\Models\VendorResultCheckerSetting;
+use App\Services\UtilityBills\UtilityBillAvailability;
+use App\Support\MainStore;
+use App\Support\ServiceAvailability;
+use App\Support\SupersededCategories;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
@@ -15,7 +20,7 @@ class StorefrontController extends Controller
     public function index()
     {
         return view('storefront.index', [
-            'mainStore' => \App\Support\MainStore::vendor(),
+            'mainStore' => MainStore::vendor(),
         ]);
     }
 
@@ -84,7 +89,7 @@ class StorefrontController extends Controller
         // Add Result Checker NetworkServices to the services collection.
         // Only show checkers where the vendor has an active setting (i.e. has configured a profit margin).
         // The displayed price is the vendor's selling price = base_price + profit_amount.
-        $vendorCheckerSettings = \App\Models\VendorResultCheckerSetting::where('vendor_id', $vendor->id)
+        $vendorCheckerSettings = VendorResultCheckerSetting::where('vendor_id', $vendor->id)
             ->where('is_active', true)
             ->with('service')
             ->get();
@@ -166,35 +171,16 @@ class StorefrontController extends Controller
             $services->push($afaService);
         }
 
-        // Utility Bills is a global platform service: it appears on every approved
-        // storefront automatically (no per-vendor product rows) whenever it is open
-        // for sale, and links to this storefront's own Utility Bills page so sales
-        // are attributed to this vendor.
-        if ($vendor->is_approved && app(\App\Services\UtilityBills\UtilityBillAvailability::class)->sellable()->isNotEmpty()) {
-            $utilityUrl = route('storefront.utility-bills', ['vendor' => $vendor->vendor_code]);
+        // Utility Bills is a global platform service, not a product: it never enters
+        // the service/package pipeline. Its category tile links straight to this
+        // storefront's own Utility Bills page (so sales are attributed to this
+        // vendor) whenever it is open for sale; otherwise the tile shows as closed.
+        $sellableBillers = $vendor->is_approved ? app(UtilityBillAvailability::class)->sellable() : collect();
+        $utilityBillsUrl = $sellableBillers->isNotEmpty()
+            ? route('storefront.utility-bills', ['vendor' => $vendor->vendor_code])
+            : null;
 
-            $services->push([
-                'key' => 'utility_bills_service',
-                'name' => 'Utility Bills',
-                'category' => 'ecg',
-                'logo' => \App\Services\UtilityBills\UtilityBillSettings::imageUrl(),
-                'is_utility_bills' => true,
-                'utility_url' => $utilityUrl,
-                'packages' => [[
-                    'id' => 'utility_bills_package',
-                    'name' => 'Pay electricity, water and TV bills',
-                    'price' => 0,
-                    'size' => null,
-                    'validity' => null,
-                    'tag' => null,
-                    'notes' => 'Pay electricity, water and TV bills.',
-                    'is_utility_bills' => true,
-                    'utility_url' => $utilityUrl,
-                ]],
-            ]);
-        }
-
-        $categories = $this->buildGlobalCategoryList($services, $categoryConfig, $defaultCategory);
+        $categories = $this->buildGlobalCategoryList($services, $categoryConfig, $defaultCategory, $utilityBillsUrl, $sellableBillers->count());
 
         // Ownership check for the "Vendor Dashboard" storefront button:
         // convenience UI only, not an authorization mechanism. $vendor is
@@ -216,8 +202,10 @@ class StorefrontController extends Controller
             'initialCategory' => $initialCategory,
             // Admin-controlled per-category open/closed flags for UX (server-side
             // guards at the purchase endpoints are the real enforcement).
-            'serviceStatuses' => \App\Support\ServiceAvailability::statuses(),
-            'serviceClosedMessage' => \App\Support\ServiceAvailability::message(),
+            // The Utility Bills slot is governed by its own global switch, not Service Availability.
+            'serviceStatuses' => ServiceAvailability::statuses()
+                + [SupersededCategories::UTILITY_BILLS_KEY => $utilityBillsUrl !== null],
+            'serviceClosedMessage' => ServiceAvailability::message(),
             // Inline/API gateways like BulkClix require a MoMo number (and network) before initiating payment.
             'requiresInlineMomo' => PaymentGatewayConfig::defaultCollectionRequiresPayerPhone(),
         ]);
@@ -328,21 +316,30 @@ class StorefrontController extends Controller
         return collect($grouped)->values();
     }
 
-    private function buildGlobalCategoryList(Collection $services, array $categoryConfig, string $defaultCategory): Collection
+    private function buildGlobalCategoryList(Collection $services, array $categoryConfig, string $defaultCategory, ?string $utilityBillsUrl = null, int $utilityBillerCount = 0): Collection
     {
         $categoryMeta = collect($categoryConfig);
         $serviceCounts = $services
             ->groupBy('category')
             ->map(fn ($group) => $group->sum(fn ($service) => count($service['packages'])));
 
-        $globalCategories = $categoryMeta->map(function ($meta, $categoryKey) use ($serviceCounts) {
+        $globalCategories = $categoryMeta->map(function ($meta, $categoryKey) use ($serviceCounts, $utilityBillsUrl, $utilityBillerCount) {
             $label = $meta['public_label'] ?? $meta['label'] ?? Str::title(str_replace(['-', '_'], ' ', $categoryKey));
             $description = $meta['public_description'] ?? $meta['description'] ?? 'Explore services in the '.Str::lower($label).' category.';
 
             // The electricity slot is now the global Utility Bills service (ECG is one biller in it).
-            if ($categoryKey === \App\Support\SupersededCategories::UTILITY_BILLS_KEY) {
-                $label = \App\Support\SupersededCategories::UTILITY_BILLS_LABEL;
-                $description = \App\Support\SupersededCategories::UTILITY_BILLS_DESCRIPTION;
+            // It is a direct link, never a selectable category; its count is the billers
+            // currently payable on its page (not products/packages).
+            if ($categoryKey === SupersededCategories::UTILITY_BILLS_KEY) {
+                return [
+                    'id' => $categoryKey,
+                    'value' => $categoryKey,
+                    'label' => SupersededCategories::UTILITY_BILLS_LABEL,
+                    'description' => SupersededCategories::UTILITY_BILLS_DESCRIPTION,
+                    'serviceCount' => $utilityBillsUrl !== null ? $utilityBillerCount : 0,
+                    'is_utility_bills' => true,
+                    'url' => $utilityBillsUrl,
+                ];
             }
 
             return [
