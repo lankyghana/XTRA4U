@@ -94,13 +94,14 @@ class UtilityBillPublicFlowTest extends UtilityBillTestCase
         $vendor = Vendor::factory()->create(['is_approved' => true]);
         $this->fakeAll();
 
-        $this->get('/store/'.$vendor->vendor_code)->assertOk()->assertDontSee('utility_bills_service');
+        $link = '<a href="'.route('storefront.utility-bills', ['vendor' => $vendor->vendor_code]).'" class="x4-cat-tile">';
+
+        $this->get('/store/'.$vendor->vendor_code)->assertOk()->assertDontSee($link, false);
 
         $this->openService(['ecg']);
         $this->get('/store/'.$vendor->vendor_code)->assertOk()
-            ->assertSee('utility_bills_service')
-            ->assertSee('Pay electricity, water and TV bills')
-            ->assertSee(str_replace('/', '\/', '/store/'.$vendor->vendor_code.'/utility-bills'), false);
+            ->assertSee($link, false)
+            ->assertDontSee('utility_bills_package');
 
         $this->get('/store/'.$vendor->vendor_code.'/utility-bills')->assertOk()->assertSee('Utility Bills');
     }

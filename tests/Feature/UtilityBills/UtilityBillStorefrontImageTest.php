@@ -68,13 +68,17 @@ class UtilityBillStorefrontImageTest extends UtilityBillTestCase
         $this->assertSame('', UtilityBillSettings::imagePath());
     }
 
-    public function test_storefront_card_uses_the_uploaded_image(): void
+    public function test_storefront_category_tile_keeps_its_icon_and_links_directly(): void
     {
+        // The uploaded image used to be the logo of a synthetic "Choose Service" row; that row
+        // is gone (the tile links straight to the Utility Bills page), so the tile keeps the
+        // same icon style as every other category.
         $this->openService(['ecg']);
         $vendor = Vendor::factory()->create(['is_approved' => true]);
         UtilityBillSettings::saveImagePath('utility-bills/card.png');
 
         $this->get('/store/'.$vendor->vendor_code)->assertOk()
-            ->assertSee('storage\/utility-bills\/card.png', false);
+            ->assertSee('<a href="'.route('storefront.utility-bills', ['vendor' => $vendor->vendor_code]).'" class="x4-cat-tile">', false)
+            ->assertDontSee('utility-bills/card.png', false);
     }
 }

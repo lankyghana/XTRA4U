@@ -162,7 +162,8 @@ class UtilityBillsArchitectureCleanupTest extends UtilityBillTestCase
 
         // None of them has products, assignments, settings or ECG ownership.
         foreach ([$a, $b] as $vendor) {
-            $this->get('/store/'.$vendor->vendor_code)->assertOk()->assertSee('utility_bills_service')->assertSee('Pay electricity, water and TV bills');
+            $this->get('/store/'.$vendor->vendor_code)->assertOk()
+                ->assertSee('href="'.route('storefront.utility-bills', ['vendor' => $vendor->vendor_code]).'"', false);
             $this->get('/store/'.$vendor->vendor_code.'/utility-bills')->assertOk()->assertSee('ECG Prepaid');
         }
         $this->get('/store/'.$pending->vendor_code.'/utility-bills')->assertNotFound();
@@ -220,7 +221,8 @@ class UtilityBillsArchitectureCleanupTest extends UtilityBillTestCase
         PlatformServiceVendor::setVendorFor('ecg', null);
 
         $this->get('/services/utility-bills')->assertOk()->assertSee('ECG Prepaid');
-        $this->get('/store/'.$vendor->vendor_code)->assertOk()->assertSee('utility_bills_service');
+        $this->get('/store/'.$vendor->vendor_code)->assertOk()
+            ->assertSee('href="'.route('storefront.utility-bills', ['vendor' => $vendor->vendor_code]).'"', false);
     }
 
     // ---- Backward compatibility -------------------------------------------

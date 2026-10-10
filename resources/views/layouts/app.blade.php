@@ -126,9 +126,10 @@
                         };
                         const requested = String(this.initialCategory || '').toLowerCase().trim();
                         const preferred = requested
-                            ? this.categories.find((cat) => String(cat.value || '').toLowerCase().trim() === requested && hasServices(cat))
+                            ? this.categories.find((cat) => !cat.is_utility_bills && String(cat.value || '').toLowerCase().trim() === requested && hasServices(cat))
                             : null;
-                        const firstAvailable = preferred || this.categories.find(hasServices);
+                        // Utility Bills is a link to its own page, never an auto-selected category.
+                        const firstAvailable = preferred || this.categories.find((cat) => !cat.is_utility_bills && hasServices(cat));
                         if (firstAvailable) {
                             this.selectCategory(firstAvailable);
                             // Optionally pre-select the first service under that category
@@ -184,6 +185,11 @@
 
                 selectCategory(cat) {
                     if (!cat) return;
+                    // Utility Bills has its own page; it never opens the service/package flow.
+                    if (cat.is_utility_bills) {
+                        if (cat.url) window.location.href = cat.url;
+                        return;
+                    }
                     this.selectedCategory = cat;
                     this.selectedService = null;
                     this.selectedPackage = null;
@@ -207,12 +213,6 @@
                         window.location.href = svc.afa_url;
                         return;
                     }
-                    
-                    // Utility Bills is a global platform service with its own verified flow.
-                    if (svc.is_utility_bills && svc.utility_url) {
-                        window.location.href = svc.utility_url;
-                        return;
-                    }
 
                     // If this is a result checker service, proceed normally but mark it
                     this.selectedService = svc;
@@ -233,11 +233,6 @@
                         return;
                     }
 
-                    if (pkg.is_utility_bills && pkg.utility_url) {
-                        window.location.href = pkg.utility_url;
-                        return;
-                    }
-                    
                     this.selectedPackage = pkg;
                     this.quantity = 1;
                     this.showAllPackages = false;
