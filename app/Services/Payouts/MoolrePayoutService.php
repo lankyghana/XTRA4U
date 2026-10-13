@@ -3,6 +3,7 @@
 namespace App\Services\Payouts;
 
 use App\Contracts\Gateways\HandlesPayouts;
+use App\Contracts\Gateways\ResolvesPayoutAccountName;
 use App\Models\PaymentGatewayConfig;
 use App\Models\VendorWithdrawal;
 use App\Services\Payouts\Concerns\FormatsGhanaPhoneNumber;
@@ -10,7 +11,7 @@ use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
-class MoolrePayoutService implements HandlesPayouts
+class MoolrePayoutService implements HandlesPayouts, ResolvesPayoutAccountName
 {
     use FormatsGhanaPhoneNumber;
 
@@ -93,6 +94,78 @@ class MoolrePayoutService implements HandlesPayouts
     public function isConfigured(): bool
     {
         return $this->config->isConfigured();
+    }
+
+    /**
+     * Resolve the recipient name via Moolre's validate endpoint (needs the network channel).
+     */
+    public function lookupAccountName(string $phone, ?string $network = null): array
+    {
+        if (!$this->isConfigured()) {
+            return [
+                'success' => false,
+                'name' => null,
+                'message' => 'Payout gateway is not properly configured. Please check the API credentials.',
+            ];
+        }
+
+        $channel = $network !== null ? ($this->networkCodes[$network] ?? null) : null;
+        if ($channel === null) {
+            return [
+                'success' => false,
+                'name' => null,
+                'message' => 'Select a network to verify account name.',
+            ];
+        }
+
+        $receiver = $this->formatPhoneNumber($phone);
+
+        try {
+            $response = $this->http([
+                'X-API-USER' => $this->apiUser(),
+                'X-API-KEY' => $this->apiKey(),
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
+            ])->post($this->baseUrl() . '/open/transact/validate', [
+                'type' => 1,
+                'receiver' => $receiver,
+                'channel' => $channel,
+                'sublistid' => '',
+                'currency' => $this->currency(),
+                'accountnumber' => $this->accountNumber(),
+            ]);
+
+            $json = $response->json() ?? [];
+            $data = $json['data'] ?? null;
+            $name = trim((string) (is_string($data)
+                ? $data
+                : (data_get($data, 'name') ?? data_get($data, 'accountname') ?? data_get($data, 'account_name') ?? '')));
+
+            if ($response->successful() && (int) ($json['status'] ?? 0) === 1 && $name !== '') {
+                return [
+                    'success' => true,
+                    'name' => $name,
+                    'message' => $this->responseMessage($json, 'Account name resolved successfully.'),
+                ];
+            }
+
+            return [
+                'success' => false,
+                'name' => null,
+                'message' => $this->responseMessage($json, 'Unable to verify account name. Check the number and network.'),
+            ];
+        } catch (\Throwable $e) {
+            Log::warning('Moolre validate-name lookup exception', [
+                'receiver' => $receiver,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'success' => false,
+                'name' => null,
+                'message' => 'Unable to lookup account name right now. Please try again.',
+            ];
+        }
     }
 
     public function processPayout(VendorWithdrawal $withdrawal): array

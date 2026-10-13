@@ -69,6 +69,103 @@ class VendorWithdrawalNameQueryTest extends TestCase
             ]);
     }
 
+    private function seedActiveMoolrePayoutGateway(): void
+    {
+        PaymentGatewayConfig::create([
+            'gateway_name' => PaymentGatewayConfig::GATEWAY_MOOLRE,
+            'gateway_type' => PaymentGatewayConfig::TYPE_PAYOUT,
+            'supports_collection' => false,
+            'supports_generic' => false,
+            'supports_payout' => true,
+            'supports_sms' => false,
+            'is_active' => true,
+            'is_default' => true,
+            'environment' => PaymentGatewayConfig::ENV_SANDBOX,
+            'config_data' => [
+                'api_user' => 'test-api-user',
+                'api_key' => 'test-api-key',
+                'account_number' => '1234567890',
+                'currency' => 'GHS',
+                'base_url' => 'https://api.moolre.com',
+            ],
+            'supported_features' => [],
+        ]);
+    }
+
+    public function test_withdrawal_name_query_resolves_name_via_moolre_with_network_channel(): void
+    {
+        $this->seedActiveMoolrePayoutGateway();
+
+        $this->actingAs(Vendor::factory()->create(['is_approved' => true]), 'vendor');
+
+        Http::fake([
+            'https://api.moolre.com/open/transact/validate' => Http::response([
+                'status' => 1,
+                'code' => 'AVS01',
+                'message' => 'Name validated',
+                'data' => 'JOHN DOE',
+            ], 200),
+        ]);
+
+        $this->postJson(route('vendor.withdrawals.name-query'), [
+            'momo_number' => '0244123456',
+            'momo_network' => VendorWithdrawal::NETWORK_TELECEL,
+        ])
+            ->assertOk()
+            ->assertJson([
+                'success' => true,
+                'name' => 'JOHN DOE',
+            ]);
+
+        Http::assertSent(fn ($request) => $request->url() === 'https://api.moolre.com/open/transact/validate'
+            && $request['receiver'] === '0244123456'
+            && $request['channel'] === '6'
+            && $request->hasHeader('X-API-USER', 'test-api-user'));
+    }
+
+    public function test_withdrawal_name_query_via_moolre_requires_network_and_skips_api(): void
+    {
+        $this->seedActiveMoolrePayoutGateway();
+
+        $this->actingAs(Vendor::factory()->create(['is_approved' => true]), 'vendor');
+
+        Http::fake();
+
+        $this->postJson(route('vendor.withdrawals.name-query'), [
+            'momo_number' => '0244123456',
+        ])
+            ->assertOk()
+            ->assertJson(['success' => false, 'name' => null]);
+
+        Http::assertNothingSent();
+    }
+
+    public function test_withdrawal_name_query_reports_moolre_validation_failure(): void
+    {
+        $this->seedActiveMoolrePayoutGateway();
+
+        $this->actingAs(Vendor::factory()->create(['is_approved' => true]), 'vendor');
+
+        Http::fake([
+            'https://api.moolre.com/open/transact/validate' => Http::response([
+                'status' => 0,
+                'message' => 'Invalid account',
+                'data' => null,
+            ], 200),
+        ]);
+
+        $this->postJson(route('vendor.withdrawals.name-query'), [
+            'momo_number' => '0244123456',
+            'momo_network' => VendorWithdrawal::NETWORK_MTN,
+        ])
+            ->assertOk()
+            ->assertJson([
+                'success' => false,
+                'name' => null,
+                'message' => 'Invalid account',
+            ]);
+    }
+
     public function test_vendor_withdrawal_request_persists_momo_account_name_and_type(): void
     {
         Queue::fake();
