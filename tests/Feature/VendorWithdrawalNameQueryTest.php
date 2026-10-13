@@ -166,6 +166,86 @@ class VendorWithdrawalNameQueryTest extends TestCase
             ]);
     }
 
+    private function seedActivePaystackPayoutGateway(): void
+    {
+        PaymentGatewayConfig::create([
+            'gateway_name' => PaymentGatewayConfig::GATEWAY_PAYSTACK,
+            'gateway_type' => PaymentGatewayConfig::TYPE_PAYOUT,
+            'supports_collection' => false,
+            'supports_generic' => false,
+            'supports_payout' => true,
+            'supports_sms' => false,
+            'is_active' => true,
+            'is_default' => true,
+            'environment' => PaymentGatewayConfig::ENV_SANDBOX,
+            'config_data' => [
+                'public_key' => 'pk_test_x',
+                'secret_key' => 'sk_test_x',
+                'payment_url' => 'https://api.paystack.co',
+            ],
+            'supported_features' => [],
+        ]);
+    }
+
+    public function test_withdrawal_name_query_resolves_name_via_paystack(): void
+    {
+        $this->seedActivePaystackPayoutGateway();
+
+        $this->actingAs(Vendor::factory()->create(['is_approved' => true]), 'vendor');
+
+        Http::fake([
+            'https://api.paystack.co/bank/resolve*' => Http::response([
+                'status' => true,
+                'message' => 'Account number resolved',
+                'data' => [
+                    'account_number' => '0244123456',
+                    'account_name' => 'JOHN DOE',
+                    'bank_id' => 1,
+                ],
+            ], 200),
+        ]);
+
+        $this->postJson(route('vendor.withdrawals.name-query'), [
+            'momo_number' => '0244123456',
+            'momo_network' => VendorWithdrawal::NETWORK_TELECEL,
+        ])
+            ->assertOk()
+            ->assertJson([
+                'success' => true,
+                'name' => 'JOHN DOE',
+            ]);
+
+        Http::assertSent(fn ($request) => str_starts_with($request->url(), 'https://api.paystack.co/bank/resolve')
+            && $request['account_number'] === '0244123456'
+            && $request['bank_code'] === 'VOD'
+            && $request->hasHeader('Authorization', 'Bearer sk_test_x'));
+    }
+
+    public function test_withdrawal_name_query_reports_paystack_resolve_failure(): void
+    {
+        $this->seedActivePaystackPayoutGateway();
+
+        $this->actingAs(Vendor::factory()->create(['is_approved' => true]), 'vendor');
+
+        Http::fake([
+            'https://api.paystack.co/bank/resolve*' => Http::response([
+                'status' => false,
+                'message' => 'Could not resolve account name. Check parameters or try again.',
+            ], 422),
+        ]);
+
+        $this->postJson(route('vendor.withdrawals.name-query'), [
+            'momo_number' => '0244123456',
+            'momo_network' => VendorWithdrawal::NETWORK_MTN,
+        ])
+            ->assertOk()
+            ->assertJson([
+                'success' => false,
+                'name' => null,
+                'message' => 'Could not resolve account name. Check parameters or try again.',
+            ]);
+    }
+
     public function test_vendor_withdrawal_request_persists_momo_account_name_and_type(): void
     {
         Queue::fake();

@@ -3,6 +3,7 @@
 namespace App\Services\Payouts;
 
 use App\Contracts\Gateways\HandlesPayouts;
+use App\Contracts\Gateways\ResolvesPayoutAccountName;
 use App\Models\PaymentGatewayConfig;
 use App\Models\VendorWithdrawal;
 use App\Services\Payouts\Concerns\FormatsGhanaPhoneNumber;
@@ -10,7 +11,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
-class PaystackPayoutService implements HandlesPayouts
+class PaystackPayoutService implements HandlesPayouts, ResolvesPayoutAccountName
 {
     use FormatsGhanaPhoneNumber;
 
@@ -20,6 +21,15 @@ class PaystackPayoutService implements HandlesPayouts
         VendorWithdrawal::NETWORK_MTN       => 'mtn',
         VendorWithdrawal::NETWORK_TELECEL   => 'vod',
         VendorWithdrawal::NETWORK_AIRTELTIGO => 'tgo',
+    ];
+
+    /**
+     * Ghana mobile money bank codes as returned by GET /bank?currency=GHS&type=mobile_money.
+     */
+    protected array $resolveBankCodes = [
+        VendorWithdrawal::NETWORK_MTN       => 'MTN',
+        VendorWithdrawal::NETWORK_TELECEL   => 'VOD',
+        VendorWithdrawal::NETWORK_AIRTELTIGO => 'ATL',
     ];
 
     public function __construct(PaymentGatewayConfig $config)
@@ -70,6 +80,75 @@ class PaystackPayoutService implements HandlesPayouts
     private function recipientCacheKey(string $formattedPhone, string $networkCode): string
     {
         return 'paystack_recipient:' . md5($formattedPhone . ':' . $networkCode);
+    }
+
+    /**
+     * Resolve the registered mobile money name via GET /bank/resolve.
+     */
+    public function lookupAccountName(string $phone, ?string $network = null): array
+    {
+        if (!$this->isConfigured()) {
+            return [
+                'success' => false,
+                'name'    => null,
+                'message' => 'Payout gateway is not properly configured. Please check the API credentials.',
+            ];
+        }
+
+        $bankCode = $network !== null ? ($this->resolveBankCodes[$network] ?? null) : null;
+        if ($bankCode === null) {
+            return [
+                'success' => false,
+                'name'    => null,
+                'message' => 'Select a network to verify account name.',
+            ];
+        }
+
+        $secretKey = (string) $this->config->getConfig('secret_key');
+        $baseUrl   = (string) $this->config->getConfig('payment_url', 'https://api.paystack.co');
+        $accountNumber = $this->formatPhoneNumber($phone);
+
+        try {
+            // No retry: retry() throws on 4xx, which would hide Paystack's "could not resolve" message.
+            $response = $this->httpNoRetry($secretKey)->get($baseUrl . '/bank/resolve', [
+                'account_number' => $accountNumber,
+                'bank_code'      => $bankCode,
+            ]);
+
+            $json = $response->json() ?? [];
+            $name = trim((string) data_get($json, 'data.account_name', ''));
+
+            if ($response->successful() && ($json['status'] ?? false) && $name !== '') {
+                return [
+                    'success' => true,
+                    'name'    => $name,
+                    'message' => $json['message'] ?? 'Account name resolved successfully.',
+                ];
+            }
+
+            Log::info('Paystack account name resolve unsuccessful', [
+                'bank_code'   => $bankCode,
+                'http_status' => $response->status(),
+                'response'    => $json,
+            ]);
+
+            return [
+                'success' => false,
+                'name'    => null,
+                'message' => $json['message'] ?? 'Unable to verify account name. Check the number and network.',
+            ];
+        } catch (\Throwable $e) {
+            Log::warning('Paystack account name resolve exception', [
+                'bank_code' => $bankCode,
+                'error'     => $e->getMessage(),
+            ]);
+
+            return [
+                'success' => false,
+                'name'    => null,
+                'message' => 'Unable to lookup account name right now. Please try again.',
+            ];
+        }
     }
 
     public function processPayout(VendorWithdrawal $withdrawal): array
