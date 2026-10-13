@@ -3,12 +3,13 @@
 namespace App\Services\Payouts;
 
 use App\Contracts\Gateways\HandlesPayouts;
+use App\Contracts\Gateways\ResolvesPayoutAccountName;
 use App\Models\PaymentGatewayConfig;
 use App\Models\VendorWithdrawal;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
-class BulkClixPayoutService implements HandlesPayouts
+class BulkClixPayoutService implements HandlesPayouts, ResolvesPayoutAccountName
 {
     protected PaymentGatewayConfig $config;
 
@@ -67,6 +68,12 @@ class BulkClixPayoutService implements HandlesPayouts
     public function isConfigured(): bool
     {
         return $this->config->isConfigured();
+    }
+
+    public function lookupAccountName(string $phone, ?string $network = null): array
+    {
+        // BulkClix KYC resolves by MSISDN alone; the network is not needed.
+        return $this->lookupMsisdnName($phone);
     }
 
     /**

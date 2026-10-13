@@ -1043,7 +1043,7 @@
                         'Content-Type': 'application/json',
                         'Accept': 'application/json'
                     },
-                    body: JSON.stringify({ momo_number: momoNumber }),
+                    body: JSON.stringify({ momo_number: momoNumber, momo_network: selectedNetwork }),
                     signal: inFlight.signal
                 });
 

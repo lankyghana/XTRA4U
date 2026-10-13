@@ -788,12 +788,13 @@ class VendorDashboardController extends Controller
 
         $data = $request->validate([
             'momo_number' => ['required', 'string', 'regex:/^0[235][0-9]{8}$/'],
+            'momo_network' => ['nullable', 'string', Rule::in(VendorWithdrawal::networks())],
         ]);
 
         $gatewayManager = app(\App\Services\GatewayManager::class);
         $payoutService = $gatewayManager->getPayoutService();
 
-        if (! $payoutService || ! ($payoutService instanceof \App\Services\Payouts\BulkClixPayoutService)) {
+        if (! $payoutService instanceof \App\Contracts\Gateways\ResolvesPayoutAccountName) {
             return response()->json([
                 'success' => false,
                 'name' => null,
@@ -801,7 +802,10 @@ class VendorDashboardController extends Controller
             ]);
         }
 
-        $result = $payoutService->lookupMsisdnName((string) $data['momo_number']);
+        $result = $payoutService->lookupAccountName(
+            (string) $data['momo_number'],
+            $data['momo_network'] ?? null
+        );
 
         return response()->json([
             'success' => (bool) ($result['success'] ?? false),
