@@ -215,6 +215,16 @@
                                     style="background-color: #fef3c7; color: #92400e; border-radius: var(--x4-r-pill); padding: 2px 8px;"
                                 >Temporarily closed</span>
                             </div>
+                        @elseif (! empty($category['is_utility_bills']))
+                            {{-- Global platform service: a real link to this storefront's own
+                                 Utility Bills page; it never enters the service/package flow. --}}
+                            <a href="{{ $category['url'] }}" class="x4-cat-tile">
+                                <span class="x4-cat-icon"><x-storefront.icon :name="$iconName" class="w-5 h-5" /></span>
+                                <span class="x4-caption" style="font-weight: 500; color: var(--x4-ink);">{{ $category['label'] }}</span>
+                                @if (($category['serviceCount'] ?? 0) > 0)
+                                    <span class="x4-micro-cap" style="color: var(--x4-ink-mute);">{{ $category['serviceCount'] }} available</span>
+                                @endif
+                            </a>
                         @else
                             <button
                                 type="button"

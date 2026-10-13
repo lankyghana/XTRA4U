@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -16,8 +17,14 @@ use Illuminate\Support\Facades\Schema;
  */
 return new class extends Migration
 {
+    /** Created by this migration, children first. */
+    private const TABLES = ['utility_bill_events', 'utility_bill_orders', 'utility_bill_config_audits', 'utility_biller_configs'];
+
     public function up(): void
     {
+        $this->assertReferencedTablesSupportForeignKeys();
+        $this->dropEmptyLeftoversOfAFailedRun();
+
         Schema::create('utility_biller_configs', function (Blueprint $table) {
             $table->id();
             $table->string('biller_key', 40)->unique();
@@ -134,6 +141,49 @@ return new class extends Migration
             $table->index(['utility_bill_order_id', 'id']);
             $table->index(['kind', 'created_at']);
         });
+    }
+
+    /**
+     * MySQL/MariaDB cannot add a foreign key to a MyISAM table (errno 150), and DDL is not
+     * transactional, so a failure half-way would leave tables behind. Check first and stop with
+     * an actionable message instead.
+     */
+    private function assertReferencedTablesSupportForeignKeys(): void
+    {
+        if (! in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)) {
+            return;
+        }
+
+        $engines = DB::select(
+            "select TABLE_NAME as name, ENGINE as engine from information_schema.TABLES where TABLE_SCHEMA = ? and TABLE_NAME in ('orders', 'vendors')",
+            [DB::connection()->getDatabaseName()]
+        );
+
+        foreach ($engines as $row) {
+            [$table, $engine] = [$row->name, $row->engine];
+            if (strcasecmp((string) $engine, 'InnoDB') !== 0) {
+                throw new RuntimeException("Table `{$table}` uses the {$engine} engine, which cannot hold foreign keys (and ignores transactions and row locks). Back up, then run `ALTER TABLE {$table} ENGINE=InnoDB;` and re-run the migration.");
+            }
+        }
+    }
+
+    /**
+     * A previous run that failed part-way (non-transactional DDL) may have left some of these
+     * tables behind. Remove them only when they hold no rows; never touch data.
+     */
+    private function dropEmptyLeftoversOfAFailedRun(): void
+    {
+        foreach (self::TABLES as $table) {
+            if (Schema::hasTable($table) && DB::select('select 1 from '.DB::getQueryGrammar()->wrapTable($table).' limit 1') !== []) {
+                throw new RuntimeException("Table `{$table}` already exists and contains data; refusing to recreate it. Investigate before re-running this migration.");
+            }
+        }
+
+        Schema::disableForeignKeyConstraints();
+        foreach (self::TABLES as $table) {
+            Schema::dropIfExists($table);
+        }
+        Schema::enableForeignKeyConstraints();
     }
 
     public function down(): void
