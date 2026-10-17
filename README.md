@@ -451,6 +451,38 @@ Gateway authentication (`ussd.gateway` / `EnsureUssdGatewayRequest`): optional I
 
 Scheduled: expire subscriptions hourly, expiry warnings daily 08:00, session pruning daily 03:30.
 
+### GWO SEVO gateway
+
+A second, independent gateway adapter. It shares the menu, metering, checkout-intent protection and payment code with `/api/ussd` (both go through `UssdCallService` -> `UssdMenuService`); only the wire format, authentication, vendor pinning and session keying differ. The existing endpoint is unchanged.
+
+**Callback URL:** `POST https://<domain>/api/ussd/gwosevo` (JSON or form-encoded; CSRF-exempt at route level, like `/api/ussd`). Give this URL to GWO SEVO operations.
+
+**Protocol** (per the GWO SEVO guide):
+
+| | Field | Values |
+|---|---|---|
+| Request | `sessionID`, `ussdServiceOp`, `ussdString`, `network`, `msisdn` | op `1` = start, `18` = continue; network `01` MTN, `02` Telecel, `04` AT |
+| Response | `message`, `ussdServiceOp`, `sessionID` | op `2` = continue, `17` = end; `sessionID` echoed verbatim |
+
+```json
+{"sessionID":"12345","ussdServiceOp":1,"ussdString":"","network":"01","msisdn":"233531005130"}
+{"message":"Welcome to XTRA4U\n1. Buy Data Bundle\n2. Results Checker","ussdServiceOp":2,"sessionID":"12345"}
+```
+
+The internal `CON `/`END ` prefixes are stripped; invalid payloads, unsupported operations and refusals all return a well-formed op `17` reply (HTTP 200) rather than a 4xx, since the gateway renders the body to the handset.
+
+**Configuration** (`/admin/settings/ussd` -> "C. GWO SEVO USSD Gateway"; separate `ussd_gwosevo_*` settings, never shared with the other gateway's credentials):
+
+- Enable GWO SEVO (off by default).
+- **Vendor served** - required; see the blocker below.
+- IP allowlist and/or shared secret. **The endpoint fails closed**: with neither configured it refuses every request. The guide documents no authentication, so confirm with GWO SEVO which they support: source IPs, a custom header (`X-Ussd-Secret`, `X-Api-Key` or `Authorization: Bearer`), or only a callback URL (append `?key=<secret>`; note URLs can appear in proxy logs). When both are configured, both must pass.
+
+**Sessions.** The internal `session_id` is `gwosevo:` + HMAC(msisdn + gateway id), so short or reused gateway ids cannot collide with the other gateway or with other subscribers, and one subscriber cannot continue another's call. A repeated start for a live call re-shows the main menu without reserving another paid session; a gateway id reused after the call ended gets a new row (`...#2`) and reserves a new session. Original ids are echoed, never the internal key. Logs hold only masked numbers (last 4 digits).
+
+**Vendor routing - integration blocker.** The guide does not say how the dialled code (`*380*45*102#`) reaches the backend; its examples send `ussdString: ""` on start. Per-vendor codes therefore cannot be resolved, and nothing is guessed: all GWO SEVO calls are served for the one configured vendor (through the normal subscription gate: active, unexpired, sessions remaining), an unset/unapproved vendor is refused (never the default vendor), and a start that unexpectedly carries text is refused and audited. To support multiple vendors, ask GWO SEVO either to (a) include the dialled code/extension in `ussdString` on start, or (b) provide a separate callback URL or a documented parameter per code. Then extend `GwoSevoUssdController::start` to resolve through `UssdVendorResolver::resolve()`.
+
+**Testing:** `php artisan test tests/Feature/GwoSevoUssdGatewayTest.php` (HTTP faked; plus `UssdGatewayTest` and the `*Ussd*` suites for regression). **Deployment:** deploy, set the settings above, then register the URL with GWO SEVO and test with their simulator across start / continue / invalid input / end for all three networks. No migration is required.
+
 ---
 
 ## Vendor platform
