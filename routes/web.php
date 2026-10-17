@@ -475,6 +475,11 @@ Route::post('/api/ussd', [\App\Http\Controllers\Api\UssdController::class, 'hand
     ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
     ->middleware('ussd.gateway')
     ->name('api.ussd');
+// GWO SEVO gateway (JSON). Same business logic, separate auth and wire format.
+Route::post('/api/ussd/gwosevo', [\App\Http\Controllers\Api\GwoSevoUssdController::class, 'handle'])
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
+    ->middleware('ussd.gwosevo')
+    ->name('api.ussd.gwosevo');
 // Client-side polling endpoint for inline embed/iframe payment flows
 Route::get('/payment/status/{reference}', [\App\Http\Controllers\PaymentStatusController::class, 'status'])
     ->name('payment.status');

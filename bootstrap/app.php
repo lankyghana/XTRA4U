@@ -45,6 +45,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin.only' => AdminOnly::class,
             'prune.purchase.tokens' => PrunePurchaseTokens::class,
             'ussd.gateway' => \App\Http\Middleware\EnsureUssdGatewayRequest::class,
+            'ussd.gwosevo' => \App\Http\Middleware\EnsureGwoSevoGatewayRequest::class,
             'cms.admin' => \App\Http\Middleware\EnsureCmsAdmin::class,
         ]);
     })

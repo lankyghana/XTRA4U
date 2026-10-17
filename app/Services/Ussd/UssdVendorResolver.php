@@ -29,6 +29,21 @@ class UssdVendorResolver
     {
         [$vendor, $prefixLength, $dialledExtension] = $this->locateVendor($text);
 
+        return $this->gate($vendor, $prefixLength, $dialledExtension);
+    }
+
+    /**
+     * Route to a vendor already known by means other than a dialled code (e.g. a
+     * gateway integration pinned to one vendor). Passes the same subscription
+     * gate; an unknown or unapproved vendor id fails rather than falling back.
+     */
+    public function resolveForVendor(?int $vendorId): UssdRouting
+    {
+        return $this->gate($vendorId ? $this->approvedVendor($vendorId) : null, 0, null);
+    }
+
+    private function gate(?Vendor $vendor, int $prefixLength, ?string $dialledExtension): UssdRouting
+    {
         if (! $vendor) {
             return UssdRouting::fail(UssdRouting::REASON_NO_VENDOR, $prefixLength);
         }

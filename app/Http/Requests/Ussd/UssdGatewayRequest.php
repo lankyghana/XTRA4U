@@ -22,7 +22,7 @@ class UssdGatewayRequest extends FormRequest
         return [
             // Aggregator-issued and opaque. Constrained to characters that can
             // never break out of a route segment or a log line.
-            'sessionId' => ['required', 'string', 'min:6', 'max:128', 'regex:/^[A-Za-z0-9._:-]+$/'],
+            'sessionId' => ['required', 'string', 'min:6', 'max:128', 'regex:/^[A-Za-z0-9._:-]+$/', 'not_regex:/^gwosevo:/i'],
             'phoneNumber' => ['required', 'string', 'min:9', 'max:20', 'regex:/^\+?[0-9]+$/'],
             'network' => ['nullable', 'string', 'max:20', 'alpha_dash'],
             'serviceCode' => ['nullable', 'string', 'max:32'],

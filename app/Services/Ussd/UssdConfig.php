@@ -111,6 +111,56 @@ class UssdConfig
         return $this->gatewaySecret() !== '';
     }
 
+    // ------------------------------------------------------------ GWO SEVO
+    // Provider-specific and deliberately separate from the Moolre-style keys
+    // above: the two gateways never share credentials or allowlists.
+
+    public function gwoSevoEnabled(): bool
+    {
+        return Setting::get('ussd_gwosevo_enabled', '0') === '1';
+    }
+
+    /**
+     * The vendor every GWO SEVO call is served for. GWO SEVO does not document
+     * how the dialled code reaches us, so the vendor cannot be read from the
+     * request; it is pinned by the admin instead.
+     */
+    public function gwoSevoVendorId(): ?int
+    {
+        $value = Setting::get('ussd_gwosevo_vendor_id', '');
+
+        return is_numeric($value) && (int) $value > 0 ? (int) $value : null;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function gwoSevoIpAllowlist(): array
+    {
+        $raw = (string) Setting::get('ussd_gwosevo_ip_allowlist', '');
+
+        return array_values(array_filter(array_map('trim', explode(',', $raw))));
+    }
+
+    public function gwoSevoSecret(): string
+    {
+        $stored = (string) Setting::get('ussd_gwosevo_secret', '');
+        if ($stored === '') {
+            return '';
+        }
+
+        try {
+            return Crypt::decryptString($stored);
+        } catch (DecryptException $e) {
+            return $stored;
+        }
+    }
+
+    public function hasGwoSevoSecret(): bool
+    {
+        return $this->gwoSevoSecret() !== '';
+    }
+
     private function positiveInt(string $key, int $default): int
     {
         $value = Setting::get($key, null);
