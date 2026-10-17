@@ -22,10 +22,43 @@ class UssdSettingsController extends Controller
 
         // The stored secret is encrypted and must never round-trip to the
         // browser. Expose only whether one is configured.
-        unset($settings['ussd_gateway_secret']);
+        unset($settings['ussd_gateway_secret'], $settings['ussd_gwosevo_secret']);
         $hasGatewaySecret = $this->config->hasGatewaySecret();
+        $hasGwoSevoSecret = $this->config->hasGwoSevoSecret();
 
-        return view('admin.settings.ussd', compact('settings', 'vendors', 'hasGatewaySecret'));
+        $status = $this->gatewayStatus($vendors);
+
+        return view('admin.settings.ussd', compact('settings', 'vendors', 'hasGatewaySecret', 'hasGwoSevoSecret', 'status'));
+    }
+
+    /**
+     * Read-only summary for the status panel. Booleans and labels only: no
+     * secret or allowlist value leaves this method.
+     *
+     * @param  \Illuminate\Support\Collection<int, Vendor>  $approvedVendors
+     * @return array<string, mixed>
+     */
+    private function gatewayStatus($approvedVendors): array
+    {
+        $gwoVendorId = $this->config->gwoSevoVendorId();
+        $gwoHasAuth = $this->config->gwoSevoIpAllowlist() !== [] || $this->config->hasGwoSevoSecret();
+        $gwoHasVendor = $gwoVendorId !== null && $approvedVendors->contains('id', $gwoVendorId);
+
+        $missing = [];
+        if (! $gwoHasAuth) {
+            $missing[] = 'an IP allowlist or a shared secret';
+        }
+        if (! $gwoHasVendor) {
+            $missing[] = $gwoVendorId === null ? 'a vendor to serve' : 'an approved vendor (the selected one is not approved)';
+        }
+
+        return [
+            'master' => $this->config->isEnabled(),
+            'legacy_protected' => $this->config->gatewayIpAllowlist() !== [] || $this->config->hasGatewaySecret(),
+            'gwosevo_enabled' => $this->config->gwoSevoEnabled(),
+            'gwosevo_ready' => $missing === [],
+            'gwosevo_missing' => $missing,
+        ];
     }
 
     public function update(UpdateUssdSettingsRequest $request)
@@ -35,11 +68,17 @@ class UssdSettingsController extends Controller
         // Preserved behaviour: an absent checkbox disables the channel.
         $map = [
             'ussd_enabled' => $request->has('ussd_enabled') ? '1' : '0',
-            'ussd_service_code' => $request->input('ussd_service_code', ''),
             'ussd_welcome_message' => $request->input('ussd_welcome_message'),
-            'ussd_support_number' => $request->input('ussd_support_number', ''),
-            'ussd_default_vendor_id' => $request->input('ussd_default_vendor_id', ''),
         ];
+
+        // Moolre routing and display keys are likewise written only when
+        // submitted, so a partial save (e.g. one touching only GWO SEVO) never
+        // clears the Moolre default vendor. The admin form always submits them.
+        foreach (['ussd_service_code', 'ussd_support_number', 'ussd_default_vendor_id'] as $key) {
+            if ($request->has($key)) {
+                $map[$key] = (string) $request->input($key, '');
+            }
+        }
 
         // New keys are only written when submitted, so a partial update from an
         // older form never clobbers them with defaults.
@@ -63,6 +102,7 @@ class UssdSettingsController extends Controller
         }
 
         $this->persistGatewaySecret($request);
+        $this->persistGwoSevoSettings($request, $validated);
 
         Setting::clearCache();
 
@@ -77,6 +117,36 @@ class UssdSettingsController extends Controller
 
         return redirect()->route('admin.settings.ussd')
             ->with('success', 'USSD settings updated successfully.');
+    }
+
+    /**
+     * GWO SEVO keys are written only when submitted, so a partial update from
+     * an older form never disables the gateway or wipes its credentials.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function persistGwoSevoSettings(UpdateUssdSettingsRequest $request, array $validated): void
+    {
+        if (array_key_exists('ussd_gwosevo_enabled', $validated)) {
+            Setting::set('ussd_gwosevo_enabled', $request->boolean('ussd_gwosevo_enabled') ? '1' : '0', 'ussd');
+        }
+
+        foreach (['ussd_gwosevo_vendor_id', 'ussd_gwosevo_ip_allowlist'] as $key) {
+            if (array_key_exists($key, $validated)) {
+                Setting::set($key, (string) ($validated[$key] ?? ''), 'ussd');
+            }
+        }
+
+        if ($request->boolean('ussd_gwosevo_secret_clear')) {
+            Setting::set('ussd_gwosevo_secret', '', 'ussd');
+
+            return;
+        }
+
+        $secret = $request->input('ussd_gwosevo_secret');
+        if (is_string($secret) && trim($secret) !== '') {
+            Setting::set('ussd_gwosevo_secret', Crypt::encryptString(trim($secret)), 'ussd');
+        }
     }
 
     /**

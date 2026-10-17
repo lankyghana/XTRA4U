@@ -41,6 +41,13 @@ class UpdateUssdSettingsRequest extends FormRequest
             'ussd_gateway_ip_allowlist' => ['nullable', 'string', 'max:500', $this->ipAllowlistRule()],
             'ussd_gateway_secret' => ['nullable', 'string', 'min:16', 'max:255'],
             'ussd_gateway_secret_clear' => ['sometimes', 'boolean'],
+
+            // GWO SEVO gateway - provider-specific, independent of the keys above.
+            'ussd_gwosevo_enabled' => ['sometimes', 'boolean'],
+            'ussd_gwosevo_vendor_id' => ['nullable', 'integer', 'exists:vendors,id'],
+            'ussd_gwosevo_ip_allowlist' => ['nullable', 'string', 'max:500', $this->ipAllowlistRule()],
+            'ussd_gwosevo_secret' => ['nullable', 'string', 'min:16', 'max:255'],
+            'ussd_gwosevo_secret_clear' => ['sometimes', 'boolean'],
         ];
     }
 
@@ -49,6 +56,7 @@ class UpdateUssdSettingsRequest extends FormRequest
         return [
             'ussd_base_code.regex' => 'The base code must look like *203* — a leading asterisk, digits, and optional separators.',
             'ussd_gateway_secret.min' => 'The gateway secret must be at least 16 characters.',
+            'ussd_gwosevo_secret.min' => 'The GWO SEVO secret must be at least 16 characters.',
         ];
     }
 
