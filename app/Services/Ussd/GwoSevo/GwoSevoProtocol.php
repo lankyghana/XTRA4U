@@ -10,6 +10,9 @@ use Illuminate\Http\JsonResponse;
  */
 class GwoSevoProtocol
 {
+    /** Prefix of every internal session key this gateway produces; no other gateway can. */
+    public const SESSION_PREFIX = 'gwosevo:';
+
     public const OP_START = 1;
 
     public const OP_CONTINUE = 18;
@@ -81,7 +84,7 @@ class GwoSevoProtocol
      */
     public static function internalSessionKey(string $gatewaySessionId, string $localMsisdn): string
     {
-        return 'gwosevo:'.hash_hmac('sha256', $localMsisdn.'|'.$gatewaySessionId, (string) config('app.key'));
+        return self::SESSION_PREFIX.hash_hmac('sha256', $localMsisdn.'|'.$gatewaySessionId, (string) config('app.key'));
     }
 
     /**

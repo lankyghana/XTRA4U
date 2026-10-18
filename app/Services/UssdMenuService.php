@@ -8,8 +8,12 @@ use App\Models\PaymentGatewayConfig;
 use App\Models\Product;
 use App\Models\ResultCheckerOrder;
 use App\Models\UssdSession;
+use App\Models\VendorResultCheckerSetting;
 use App\Services\Payments\CheckoutIntentGuard;
+use App\Services\Ussd\GwoSevo\GwoSevoProtocol;
 use App\Services\Ussd\UssdConfig;
+use App\Support\ServiceAvailability;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
 class UssdMenuService
@@ -140,6 +144,162 @@ class UssdMenuService
         return (bool) preg_match('/^\+?\d{9,15}$/', $value);
     }
 
+    /**
+     * GWO SEVO serves exactly one designated vendor, so its sessions sell only
+     * that vendor's own catalog. Other gateways keep the shared catalog.
+     */
+    private function usesAssignedVendorCatalog(UssdSession $session): bool
+    {
+        return str_starts_with((string) $session->session_id, GwoSevoProtocol::SESSION_PREFIX);
+    }
+
+    /**
+     * Bundle size from product metadata, or null when absent/malformed. Sizes
+     * are never inferred from the free-text product name.
+     */
+    private function bundleSize(Product $product): ?string
+    {
+        $size = $product->decoded_description['size'] ?? null;
+
+        if (! is_string($size) && ! is_int($size) && ! is_float($size)) {
+            return null;
+        }
+
+        $size = preg_replace('/\s+/', '', (string) $size) ?? '';
+
+        return preg_match('/^\d+(\.\d+)?(MB|GB|TB)$/i', $size) ? strtoupper($size) : null;
+    }
+
+    private function bundleDisplayName(UssdSession $session, Product $product): string
+    {
+        return $this->usesAssignedVendorCatalog($session)
+            ? ($this->bundleSize($product) ?? $product->name)
+            : $product->name;
+    }
+
+    private function isSellableBundle(Product $product, string $network): bool
+    {
+        $meta = $product->decoded_description;
+
+        return strcasecmp((string) ($meta['network'] ?? ''), $network) === 0
+            && strcasecmp((string) ($meta['category'] ?? 'data'), 'data') === 0
+            && $this->bundleSize($product) !== null
+            && $this->isChargeable($product->price);
+    }
+
+    /**
+     * Active data bundles owned by the session's vendor for one network.
+     * Vendor and active state are filtered in SQL; the metadata (a JSON string
+     * in `description`) is then checked on that one vendor's rows only.
+     *
+     * @return Collection<int, Product>
+     */
+    private function assignedVendorBundles(UssdSession $session, string $network): Collection
+    {
+        if (! $session->vendor_id) {
+            return collect();
+        }
+
+        return Product::query()
+            ->where('vendor_id', $session->vendor_id)
+            ->where('is_active', true)
+            ->where('description', 'like', '%'.$network.'%')
+            ->orderBy('price')
+            ->get()
+            ->filter(fn (Product $p) => $this->isSellableBundle($p, $network))
+            ->take(7)
+            ->values();
+    }
+
+    private function assignedVendorBundle(UssdSession $session, mixed $productId): ?Product
+    {
+        $network = (string) $session->getData('network_name');
+
+        if (! $session->vendor_id || ! is_numeric($productId) || $network === '') {
+            return null;
+        }
+
+        $product = Product::query()
+            ->where('vendor_id', $session->vendor_id)
+            ->where('is_active', true)
+            ->find($productId);
+
+        return $product && $this->isSellableBundle($product, $network) ? $product : null;
+    }
+
+    /**
+     * GWO SEVO: only active services the session's vendor has enabled.
+     * Other gateways: every active result checker.
+     *
+     * @return Collection<int, NetworkService>
+     */
+    private function resultCheckersFor(UssdSession $session): Collection
+    {
+        $query = NetworkService::where('service_type', 'results_checker')->where('is_active', true);
+
+        if ($this->usesAssignedVendorCatalog($session)) {
+            if (! $session->vendor_id) {
+                return collect();
+            }
+
+            $query->where('base_price', '>', 0)->whereIn('id', VendorResultCheckerSetting::query()
+                ->where('vendor_id', $session->vendor_id)
+                ->where('is_active', true)
+                ->select('service_id'));
+        }
+
+        return $query->get();
+    }
+
+    /**
+     * The assigned vendor's profit per PIN, exactly as the web storefront
+     * checkout applies it (ResultCheckerCheckoutController).
+     */
+    private function assignedVendorCheckerProfit(UssdSession $session, NetworkService $service): float
+    {
+        return (float) VendorResultCheckerSetting::query()
+            ->where('vendor_id', $session->vendor_id)
+            ->where('service_id', $service->id)
+            ->where('is_active', true)
+            ->value('profit_amount');
+    }
+
+    /** (admin tier price for the quantity + vendor profit) x quantity, as on the web. */
+    private function assignedVendorCheckerTotal(UssdSession $session, NetworkService $service, int $qty): float
+    {
+        return round(($service->getPriceForQuantity($qty) + $this->assignedVendorCheckerProfit($session, $service)) * $qty, 2);
+    }
+
+    private function resultCheckerFor(UssdSession $session, mixed $serviceId): ?NetworkService
+    {
+        if (! is_numeric($serviceId)) {
+            return null;
+        }
+
+        if ($this->usesAssignedVendorCatalog($session)) {
+            return $this->resultCheckersFor($session)->firstWhere('id', (int) $serviceId);
+        }
+
+        $service = NetworkService::find($serviceId);
+
+        return $service && $service->is_active ? $service : null;
+    }
+
+    /**
+     * A sale price that may be charged: finite and strictly positive. Mirrors
+     * the web checkout, which never creates a free or negative order.
+     */
+    private function isChargeable(mixed $amount): bool
+    {
+        return is_numeric($amount) && is_finite((float) $amount) && (float) $amount > 0;
+    }
+
+    /** Same admin switches as the web storefront (Admin > Service Availability). */
+    private function closedMessage(string $category): ?string
+    {
+        return ServiceAvailability::isClosed($category) ? ServiceAvailability::message() : null;
+    }
+
     private function handleMainMenu(UssdSession $session, string $text): string
     {
         if ($text === '') {
@@ -147,15 +307,21 @@ class UssdMenuService
         }
 
         if ($text === '1') {
+            if ($closed = $this->closedMessage('data')) {
+                return "CON {$closed}\n\n0. Back";
+            }
+
             $session->forceFill(['current_step' => 'DATA_NETWORK', 'retry_count' => 0])->save();
 
             return "CON Select Network:\n1. MTN\n2. Telecel\n3. AT\n\n0. Back";
         }
 
         if ($text === '2') {
-            $checkers = NetworkService::where('service_type', 'results_checker')
-                ->where('is_active', true)
-                ->get();
+            if ($closed = $this->closedMessage('results')) {
+                return "CON {$closed}\n\n0. Back";
+            }
+
+            $checkers = $this->resultCheckersFor($session);
 
             if ($checkers->isEmpty()) {
                 return "CON No Results Checkers available currently.\n\n0. Back";
@@ -190,16 +356,20 @@ class UssdMenuService
 
             $selectedNetwork = $networks[$text];
 
-            $products = Product::where('is_active', true)->get()->filter(function ($p) use ($selectedNetwork) {
-                $meta = $p->decoded_description;
-                $net = $meta['network'] ?? '';
-                $cat = $meta['category'] ?? 'data';
+            $products = $this->usesAssignedVendorCatalog($session)
+                ? $this->assignedVendorBundles($session, $selectedNetwork)
+                : Product::where('is_active', true)->get()->filter(function ($p) use ($selectedNetwork) {
+                    $meta = $p->decoded_description;
+                    $net = $meta['network'] ?? '';
+                    $cat = $meta['category'] ?? 'data';
 
-                return strcasecmp($net, $selectedNetwork) === 0 && strcasecmp($cat, 'data') === 0;
-            })->sortBy('price')->take(7)->values();
+                    return strcasecmp($net, $selectedNetwork) === 0 && strcasecmp($cat, 'data') === 0;
+                })->sortBy('price')->take(7)->values();
 
             if ($products->isEmpty()) {
-                return "CON No bundles available for {$selectedNetwork}.\n\n0. Back";
+                return $this->usesAssignedVendorCatalog($session)
+                    ? "CON No data bundles are currently available for this network.\n\n0. Back"
+                    : "CON No bundles available for {$selectedNetwork}.\n\n0. Back";
             }
 
             $session->setDataMany([
@@ -209,7 +379,7 @@ class UssdMenuService
 
             $menu = "CON Select {$selectedNetwork} Bundle:\n";
             foreach ($products as $index => $p) {
-                $menu .= ($index + 1).". {$p->name} - GHS {$p->price}\n";
+                $menu .= ($index + 1).'. '.$this->bundleDisplayName($session, $p)." - GHS {$p->price}\n";
             }
             $menu .= "\n0. Back";
 
@@ -226,21 +396,25 @@ class UssdMenuService
                 return $this->invalid($session, "Invalid selection.\nPlease enter a valid bundle number.\n\n0. Back");
             }
 
-            $product = Product::find($bundles[$index]);
+            $product = $this->usesAssignedVendorCatalog($session)
+                ? $this->assignedVendorBundle($session, $bundles[$index])
+                : Product::find($bundles[$index]);
 
             if (! $product) {
                 return "CON Bundle not found.\n\n0. Back";
             }
 
+            $displayName = $this->bundleDisplayName($session, $product);
+
             $session->setDataMany([
                 'product_id' => $product->id,
-                'product_name' => $product->name,
+                'product_name' => $displayName,
                 'product_price' => $product->price,
             ]);
 
             $session->forceFill(['current_step' => 'DATA_RECIPIENT', 'retry_count' => 0])->save();
 
-            return "CON You selected {$product->name}.\nEnter recipient phone number:\n\n0. Back";
+            return "CON You selected {$displayName}.\nEnter recipient phone number:\n\n0. Back";
         }
 
         if ($step === 'DATA_RECIPIENT') {
@@ -270,10 +444,32 @@ class UssdMenuService
 
     private function placeDataOrder(UssdSession $session): string
     {
-        $product = Product::with('vendor')->find($session->getData('product_id'));
         $recipientPhone = $session->getData('recipient_phone');
 
+        if ($this->usesAssignedVendorCatalog($session)) {
+            // Re-verify ownership, availability and network at the moment of
+            // purchase; the menu may be minutes old and session data is not
+            // an authority on what this vendor may sell.
+            $product = $this->assignedVendorBundle($session, $session->getData('product_id'));
+
+            if ($product && (string) $product->price !== (string) $session->getData('product_price')) {
+                return 'END The price of this bundle has changed. Please dial again.';
+            }
+        } else {
+            $product = Product::with('vendor')->find($session->getData('product_id'));
+        }
+
         if (! $product) {
+            return 'END Bundle no longer available. Please try again.';
+        }
+
+        // Re-checked at the moment of payment: an admin may have closed the
+        // category, or the price been zeroed, since the menu was shown.
+        if ($closed = $this->closedMessage(ServiceAvailability::categoryForProduct($product))) {
+            return "END {$closed}";
+        }
+
+        if (! $this->isChargeable($product->price)) {
             return 'END Bundle no longer available. Please try again.';
         }
 
@@ -387,9 +583,9 @@ class UssdMenuService
                 return $this->invalid($session, "Invalid selection.\nPlease enter a valid exam type number.\n\n0. Back");
             }
 
-            $service = NetworkService::find($checkers[$index]);
+            $service = $this->resultCheckerFor($session, $checkers[$index]);
 
-            if (! $service || ! $service->is_active) {
+            if (! $service) {
                 return "CON Selected exam type is unavailable.\n\n0. Back";
             }
 
@@ -421,14 +617,16 @@ class UssdMenuService
                 return $this->invalid($session, "Invalid phone number.\nEnter recipient phone number:\n\n0. Back");
             }
 
-            $service = NetworkService::find($session->getData('service_id'));
+            $service = $this->resultCheckerFor($session, $session->getData('service_id'));
 
             if (! $service) {
                 return 'END Selected exam type is no longer available.';
             }
 
             $qty = (int) $session->getData('quantity');
-            $totalPrice = $service->getPriceForQuantity($qty) * $qty;
+            $totalPrice = $this->usesAssignedVendorCatalog($session)
+                ? $this->assignedVendorCheckerTotal($session, $service, $qty)
+                : $service->getPriceForQuantity($qty) * $qty;
 
             $session->setDataMany([
                 'recipient_phone' => $text,
@@ -438,7 +636,9 @@ class UssdMenuService
 
             $serviceName = $session->getData('service_name');
 
-            return "CON Confirm Purchase:\nExam: {$serviceName}\nQty: {$qty}\nRecipient: {$text}\nTotal: GHS {$totalPrice}\n\n1. Confirm & Pay\n0. Back";
+            $shownTotal = $this->usesAssignedVendorCatalog($session) ? number_format($totalPrice, 2, '.', '') : $totalPrice;
+
+            return "CON Confirm Purchase:\nExam: {$serviceName}\nQty: {$qty}\nRecipient: {$text}\nTotal: GHS {$shownTotal}\n\n1. Confirm & Pay\n0. Back";
         }
 
         if ($step === 'RESULT_CONFIRM') {
@@ -454,12 +654,35 @@ class UssdMenuService
 
     private function placeResultCheckerOrder(UssdSession $session): string
     {
-        $service = NetworkService::find($session->getData('service_id'));
+        $service = $this->resultCheckerFor($session, $session->getData('service_id'));
         $qty = (int) $session->getData('quantity');
         $recipientPhone = $session->getData('recipient_phone');
         $totalPrice = $session->getData('total_price');
 
-        if (! $service || ! $service->is_active) {
+        if (! $service) {
+            return 'END Selected exam type is no longer available.';
+        }
+
+        if ($closed = $this->closedMessage('results')) {
+            return "END {$closed}";
+        }
+
+        $vendorProfit = null;
+
+        if ($this->usesAssignedVendorCatalog($session)) {
+            // Re-price at the moment of payment: the confirmed total must still
+            // be what this vendor's storefront would charge right now.
+            $currentTotal = $this->assignedVendorCheckerTotal($session, $service, $qty);
+
+            if (number_format($currentTotal, 2, '.', '') !== number_format((float) $totalPrice, 2, '.', '')) {
+                return 'END The price has changed. Please dial again.';
+            }
+
+            $totalPrice = $currentTotal;
+            $vendorProfit = $this->assignedVendorCheckerProfit($session, $service) * $qty;
+        }
+
+        if ($qty < 1 || ! $this->isChargeable($totalPrice)) {
             return 'END Selected exam type is no longer available.';
         }
 
@@ -500,6 +723,7 @@ class UssdMenuService
                     'quantity' => $qty,
                     'unit_price' => $totalPrice / $qty,
                     'total_price' => $totalPrice,
+                    ...($vendorProfit !== null ? ['vendor_profit' => $vendorProfit] : []),
                     'status' => 'pending_payment',
                     'idempotency_scope' => $k ? $scope : null,
                     'idempotency_key' => $k,
