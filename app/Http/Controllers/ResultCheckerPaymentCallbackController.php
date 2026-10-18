@@ -7,6 +7,7 @@ use App\Services\GatewayManager;
 use App\Services\ResultCheckerService;
 use App\Support\PaymentVerificationState;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -61,7 +62,18 @@ class ResultCheckerPaymentCallbackController extends Controller
         $state = PaymentVerificationState::from($verification);
 
         if ($state === PaymentVerificationState::FAILED) {
-            $order->update(['status' => 'failed']);
+            if (! $this->markFailedIfUnpaid($order)) {
+                // Paid in the meantime (e.g. the success webhook won the race):
+                // a stale failed verification must not undo it.
+                $order->refresh();
+                $redirect = $order->status === 'pending_stock'
+                    ? route('result-checkers.pending-stock', $order)
+                    : route('result-checkers.success', $order);
+
+                return $wantsJson
+                    ? response()->json(['success' => true, 'status' => 'success', 'message' => 'Payment already completed.', 'redirect' => $redirect])
+                    : redirect($redirect);
+            }
 
             if ($wantsJson) {
                 return response()->json([
@@ -170,7 +182,13 @@ class ResultCheckerPaymentCallbackController extends Controller
         $state = PaymentVerificationState::from($verification);
 
         if ($state === PaymentVerificationState::FAILED) {
-            $order->update(['status' => 'failed']);
+            if (! $this->markFailedIfUnpaid($order)) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Order already paid; failed notification ignored',
+                    'order_id' => $order->id,
+                ]);
+            }
 
             return response()->json([
                 'success' => false,
@@ -218,6 +236,32 @@ class ResultCheckerPaymentCallbackController extends Controller
             'order_id' => $order->id,
             'status' => $order->fresh()->status,
         ]);
+    }
+
+    /**
+     * Mark an order failed only while it is still genuinely unpaid.
+     *
+     * A failed verification can arrive late, duplicated, or race a successful
+     * one. The row is re-read under a lock - the same lock
+     * ResultCheckerService::handlePaymentCallback() takes before recording
+     * payment - so whichever of the two runs second sees the other's result.
+     * A paid or delivered order is never moved to `failed`.
+     *
+     * @return bool true when the order was (or already is) failed/unpaid; false when it is paid
+     */
+    private function markFailedIfUnpaid(ResultCheckerOrder $order): bool
+    {
+        return DB::transaction(function () use ($order) {
+            $locked = ResultCheckerOrder::whereKey($order->id)->lockForUpdate()->first();
+
+            if (! $locked || $locked->paid_at || in_array($locked->status, ['completed', 'pending_stock', 'processing'], true)) {
+                return false;
+            }
+
+            $locked->update(['status' => 'failed']);
+
+            return true;
+        });
     }
 
     private function resolveReference(Request $request, ?ResultCheckerOrder $order = null): ?string
