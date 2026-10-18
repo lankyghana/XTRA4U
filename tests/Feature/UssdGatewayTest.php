@@ -260,10 +260,53 @@ class UssdGatewayTest extends TestCase
         $this->ussd(['text' => $this->dial('9*9')])->assertSee('Too many invalid entries', false);
     }
 
-    public function test_subscription_exhausted_mid_call_stops_the_session(): void
+    public function test_call_that_took_the_final_session_can_still_navigate(): void
+    {
+        $this->subscription->forceFill(['used_sessions' => $this->subscription->total_sessions - 1])->save();
+
+        $this->ussd()->assertSee('Buy Data Bundle', false);
+        $this->assertSame(0, $this->subscription->fresh()->remaining_sessions);
+
+        $this->ussd(['text' => $this->dial('1')])->assertSee('Select Network', false);
+        $this->ussd(['text' => $this->dial('1*1')])->assertDontSee('temporarily unavailable', false);
+        $this->assertSame($this->subscription->total_sessions, $this->subscription->fresh()->used_sessions, 'Continuing never deducts.');
+    }
+
+    public function test_nobody_else_can_start_once_the_final_session_is_taken(): void
+    {
+        $this->subscription->forceFill(['used_sessions' => $this->subscription->total_sessions - 1])->save();
+
+        $this->ussd()->assertSee('Buy Data Bundle', false);
+        $this->ussd(['sessionId' => 'sess-other-999999'])->assertSee('temporarily unavailable', false);
+
+        $this->assertDatabaseCount('ussd_sessions', 1);
+        $this->assertSame($this->subscription->total_sessions, $this->subscription->fresh()->used_sessions);
+    }
+
+    public function test_existing_call_survives_another_caller_taking_the_final_slot(): void
+    {
+        $this->subscription->forceFill(['used_sessions' => $this->subscription->total_sessions - 2])->save();
+
+        $this->ussd(); // first caller, session reserved
+        $this->ussd(['sessionId' => 'sess-other-999999']); // second caller takes the final slot
+        $this->assertSame(0, $this->subscription->fresh()->remaining_sessions);
+
+        $this->ussd(['text' => $this->dial('1')])->assertSee('Select Network', false);
+    }
+
+    public function test_suspended_subscription_stops_an_ongoing_call(): void
     {
         $this->ussd();
-        $this->subscription->forceFill(['used_sessions' => 5000])->save();
+        $this->subscription->forceFill(['status' => UssdSubscription::STATUS_SUSPENDED])->save();
+
+        $this->ussd(['text' => $this->dial('1')])->assertSee('temporarily unavailable', false);
+        $this->assertSame(UssdSession::STATUS_ENDED, UssdSession::firstOrFail()->status);
+    }
+
+    public function test_expired_subscription_stops_an_ongoing_call(): void
+    {
+        $this->ussd();
+        $this->subscription->forceFill(['expires_at' => now()->subMinute()])->save();
 
         $this->ussd(['text' => $this->dial('1')])->assertSee('temporarily unavailable', false);
     }

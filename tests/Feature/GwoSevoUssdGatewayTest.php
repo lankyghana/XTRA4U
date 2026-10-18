@@ -369,6 +369,51 @@ class GwoSevoUssdGatewayTest extends TestCase
         $this->assertSame(UssdSession::STATUS_ENDED, UssdSession::firstOrFail()->status);
     }
 
+    public function test_call_that_took_the_final_session_can_navigate_and_nobody_else_can_start(): void
+    {
+        $this->subscription->forceFill(['used_sessions' => $this->subscription->total_sessions - 1])->save();
+
+        $this->gwo()->assertJson(['ussdServiceOp' => 2])->assertSee('Buy Data Bundle');
+        $this->assertSame(0, $this->subscription->fresh()->remaining_sessions);
+
+        $this->press('1')->assertJson(['ussdServiceOp' => 2])->assertSee('Select Network');
+        $this->press('1')->assertSee('No data bundles')->assertDontSee('temporarily unavailable');
+
+        $this->gwo(['sessionID' => '99999'])->assertJson(['ussdServiceOp' => 17])->assertSee('temporarily unavailable');
+        $this->assertSame($this->subscription->total_sessions, $this->subscription->fresh()->used_sessions);
+        $this->assertDatabaseCount('ussd_sessions', 1);
+    }
+
+    public function test_existing_call_continues_after_another_caller_takes_the_final_slot(): void
+    {
+        $this->subscription->forceFill(['used_sessions' => $this->subscription->total_sessions - 2])->save();
+
+        $this->gwo();
+        $this->gwo(['sessionID' => '77777'])->assertJson(['ussdServiceOp' => 2]);
+        $this->assertSame(0, $this->subscription->fresh()->remaining_sessions);
+
+        $this->press('1')->assertJson(['ussdServiceOp' => 2])->assertSee('Select Network');
+    }
+
+    public function test_duplicate_starts_for_the_final_session_consume_exactly_one(): void
+    {
+        $this->subscription->forceFill(['used_sessions' => $this->subscription->total_sessions - 1])->save();
+
+        $this->gwo()->assertJson(['ussdServiceOp' => 2]);
+        $this->gwo()->assertJson(['ussdServiceOp' => 2])->assertSee('Buy Data Bundle');
+
+        $this->assertSame($this->subscription->total_sessions, $this->subscription->fresh()->used_sessions);
+        $this->assertDatabaseCount('ussd_sessions', 1);
+    }
+
+    public function test_suspended_subscription_ends_an_ongoing_call(): void
+    {
+        $this->gwo();
+        $this->subscription->forceFill(['status' => UssdSubscription::STATUS_SUSPENDED])->save();
+
+        $this->press('1')->assertJson(['ussdServiceOp' => 17])->assertSee('temporarily unavailable');
+    }
+
     public function test_gateway_disabled_or_channel_disabled_is_refused(): void
     {
         $this->setting('ussd_gwosevo_enabled', '0');
@@ -499,7 +544,7 @@ class GwoSevoUssdGatewayTest extends TestCase
         Product::create([
             'vendor_id' => $this->vendor->id,
             'name' => 'MTN 1GB',
-            'description' => json_encode(['category' => 'data', 'network' => 'MTN']),
+            'description' => json_encode(['category' => 'data', 'network' => 'MTN', 'size' => '1GB']),
             'price' => 5.00,
             'is_active' => true,
         ]);

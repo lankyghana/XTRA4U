@@ -186,6 +186,18 @@ class UssdSubscription extends Model
             && $this->hasRemainingSessions();
     }
 
+    /**
+     * Whether a call that already reserved its session may keep going.
+     *
+     * The allowance is spent when a call STARTS (reserveSession), so a session
+     * that took the final slot has remaining_sessions = 0 and must still be
+     * able to finish. Only status and expiry can cut a live call short.
+     */
+    public function permitsOngoingCall(): bool
+    {
+        return $this->status === self::STATUS_ACTIVE && ! $this->isExpired();
+    }
+
     public function occupiesSlot(): bool
     {
         return in_array($this->status, self::LIVE_STATUSES, true);

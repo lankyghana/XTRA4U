@@ -83,11 +83,13 @@ class UssdCallService
             return 'END Too many requests for one session. Please dial again.';
         }
 
-        // Re-check on every request: the subscription can expire or run out of
-        // sessions mid-call.
+        // Re-check on every request: the subscription can expire or be
+        // suspended mid-call. The session allowance is deliberately NOT
+        // re-checked: it was spent when this call began, and the call that took
+        // the final slot (remaining = 0) must still be able to finish.
         $subscription = $session->subscription;
 
-        if (! $subscription || ! $subscription->isUsable()) {
+        if (! $subscription || ! $subscription->permitsOngoingCall()) {
             $this->sessionService->endSession($session);
 
             return 'END This service is temporarily unavailable. Please try again later.';
