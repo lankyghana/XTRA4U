@@ -16,6 +16,13 @@ class SendResultCheckerDeliveryNotification implements ShouldQueue
     {
         $order = $event->order->refresh();
 
+        // Paid but waiting for PIN stock: reassure the customer once.
+        if ($order->status === 'pending_stock') {
+            $this->resultCheckerService->sendPendingStockNotification($order);
+
+            return;
+        }
+
         // Only send if order is completed and SMS has not been sent yet
         if ($order->status !== 'completed' || $order->sms_sent_at) {
             return;

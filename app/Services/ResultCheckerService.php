@@ -3,9 +3,11 @@
 namespace App\Services;
 
 use App\Events\ResultCheckerOrderPaid;
+use App\Jobs\FulfillPendingOrdersJob;
 use App\Models\ResultCheckerOrder;
 use App\Models\ResultCheckerPin;
 use App\Models\Transaction;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -119,7 +121,13 @@ class ResultCheckerService
      */
     public function releasePinsForOrder(ResultCheckerOrder $order): int
     {
-        return DB::transaction(fn () => $this->doReleasePins($order));
+        $released = DB::transaction(fn () => $this->doReleasePins($order));
+
+        if ($released > 0) {
+            $this->dispatchPendingStockRecovery($order->service_id);
+        }
+
+        return $released;
     }
 
     /**
@@ -134,7 +142,7 @@ class ResultCheckerService
      */
     public function adminMarkFailed(ResultCheckerOrder $order): array
     {
-        return DB::transaction(function () use ($order) {
+        $result = DB::transaction(function () use ($order) {
             $locked = ResultCheckerOrder::lockForUpdate()->findOrFail($order->id);
 
             if ($locked->status === 'completed') {
@@ -158,6 +166,85 @@ class ResultCheckerService
 
             return ['ok' => true, 'pins_released' => $released];
         });
+
+        // PINs returned to inventory may be exactly what a paid, waiting order
+        // needs. Dispatched after commit so the job sees the released stock.
+        if (($result['pins_released'] ?? 0) > 0) {
+            $this->dispatchPendingStockRecovery($order->service_id);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Queue FulfillPendingOrdersJob only for services that can actually make
+     * progress: at least one PAID order waiting for stock AND at least one
+     * available PIN. With no stock (or nobody waiting) nothing is dispatched,
+     * so the scheduled sweep costs two cheap queries, not a job per run.
+     *
+     * The job is unique per service, so overlapping triggers (PIN upload,
+     * PIN release, the scheduler) collapse into one.
+     *
+     * @return int number of services a recovery job was dispatched for
+     */
+    public function dispatchPendingStockRecovery(?int $serviceId = null): int
+    {
+        $waiting = ResultCheckerOrder::query()
+            ->where('status', 'pending_stock')
+            ->whereNotNull('paid_at')
+            ->when($serviceId, fn ($q) => $q->where('service_id', $serviceId))
+            ->distinct()
+            ->pluck('service_id');
+
+        $dispatched = 0;
+
+        foreach ($waiting as $id) {
+            if (! ResultCheckerPin::forService($id)->where('status', 'available')->exists()) {
+                continue;
+            }
+
+            FulfillPendingOrdersJob::dispatch((int) $id);
+            $dispatched++;
+        }
+
+        return $dispatched;
+    }
+
+    /**
+     * Tell the customer their payment was received but the PIN is waiting on
+     * stock. Sent at most once per order (atomic cache claim), never contains a
+     * PIN, and deliberately does not touch sms_sent_at - that column means "PIN
+     * delivered" and adminMarkFailed() relies on it.
+     */
+    public function sendPendingStockNotification(ResultCheckerOrder $order): bool
+    {
+        if ($order->status !== 'pending_stock' || ! $order->paid_at) {
+            return false;
+        }
+
+        $claim = 'rc-pending-stock-sms:'.$order->id;
+
+        if (! Cache::add($claim, now()->toIso8601String(), now()->addDays(60))) {
+            return false;
+        }
+
+        try {
+            $order->loadMissing('service');
+            $checker = $order->service->name ?? 'Result Checker';
+            $sent = $this->smsService->sendResultCheckerPin(
+                $order->customer_phone,
+                "Payment received for your {$checker}. Stock is being replenished - your PIN will be sent to this number by SMS as soon as it is ready. Thank you for using XTRA4U."
+            );
+        } catch (\Throwable $e) {
+            Log::error('ResultCheckerService: Error sending pending-stock SMS', ['order_id' => $order->id, 'error' => $e->getMessage()]);
+            $sent = false;
+        }
+
+        if (! $sent) {
+            Cache::forget($claim);
+        }
+
+        return $sent;
     }
 
     // -------------------------------------------------------------------------

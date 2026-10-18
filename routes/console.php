@@ -95,6 +95,20 @@ Schedule::call(function () {
     Artisan::call('payments:cleanup', ['--hours' => 24]);
 })->everySixHours()->name('payments:cleanup')->withoutOverlapping();
 
+// Paid Results Checker orders waiting for PIN stock. The upload and PIN-release
+// paths dispatch recovery themselves; this is the safety net for a lost job or
+// a stock change made outside them. It queues work only for a service that has
+// both a paid waiting order and an available PIN, and the job is unique per
+// service, so an idle sweep costs two small queries and overlapping triggers
+// collapse into one run.
+Schedule::call(function () {
+    try {
+        app(\App\Services\ResultCheckerService::class)->dispatchPendingStockRecovery();
+    } catch (\Throwable $e) {
+        Log::error('Scheduled Results Checker pending-stock recovery failed', ['error' => $e->getMessage()]);
+    }
+})->everyFiveMinutes()->name('result-checkers:fulfil-pending-stock')->withoutOverlapping();
+
 // Retry any withdrawals that are stuck in processing (safe + idempotent).
 Schedule::call(function () {
     $minutes = 10;

@@ -133,7 +133,8 @@ class AdminResultCheckerPinsController extends Controller
             ResultCheckerPin::insert($payload);
         });
 
-        dispatch(new FulfillPendingOrdersJob($validated['service_id']));
+        // Only dispatches when a paid order is actually waiting for this service.
+        app(ResultCheckerService::class)->dispatchPendingStockRecovery((int) $validated['service_id']);
 
         return redirect()
             ->route('admin.result-checkers.pins.index')
