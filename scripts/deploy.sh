@@ -19,6 +19,21 @@ STAMP="$(date +%Y%m%d-%H%M%S)"
 
 mkdir -p "$CORE" "$BACKUPS"
 
+# 0. Refuse to deploy on an unpatched PHP (CVE-2026-109618 / CVE-2026-109619,
+#    unauthenticated RCE, fixed 2026-10-21 in 8.2.35 / 8.3.36 / 8.4.27 / 8.5.12).
+#    Runs before maintenance mode so a failure leaves the live site untouched.
+#    This checks the CLI binary only: the web handler (cPanel MultiPHP/PHP-FPM)
+#    must be verified separately. Override with ALLOW_UNPATCHED_PHP=1.
+if ! "$PHP_BIN" -r '
+  $min = ["8.2" => "8.2.35", "8.3" => "8.3.36", "8.4" => "8.4.27", "8.5" => "8.5.12"];
+  $b = PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;
+  exit(version_compare(PHP_VERSION, "8.6.0", ">=") || (isset($min[$b]) && version_compare(PHP_VERSION, $min[$b], ">=")) ? 0 : 1);
+'; then
+  echo "PHP $("$PHP_BIN" -r 'echo PHP_VERSION;') is vulnerable to CVE-2026-109618/109619; upgrade to 8.2.35/8.3.36/8.4.27/8.5.12+." >&2
+  [ "${ALLOW_UNPATCHED_PHP:-0}" = "1" ] || exit 1
+  echo "WARNING: ALLOW_UNPATCHED_PHP=1 set; deploying anyway." >&2
+fi
+
 artisan() { (cd "$CORE" && "$PHP_BIN" artisan "$@"); }
 
 # 1. Maintenance mode (skipped on first deploy, when there is no app yet).
