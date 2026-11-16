@@ -17,7 +17,9 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        //
+        // Developer webhooks: real DNS and the DNS-pinned transport. Tests rebind these to fakes.
+        $this->app->bind(\App\Services\DeveloperApi\Webhooks\DnsResolver::class, \App\Services\DeveloperApi\Webhooks\SystemDnsResolver::class);
+        $this->app->bind(\App\Services\DeveloperApi\Webhooks\WebhookTransport::class, \App\Services\DeveloperApi\Webhooks\PinnedWebhookTransport::class);
     }
 
     public function boot(): void

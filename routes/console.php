@@ -573,3 +573,25 @@ Schedule::call(function () {
 Schedule::call(function () {
     Artisan::call('xtra4u:prune-expired-cache');
 })->hourly()->name('cache:prune-expired')->withoutOverlapping();
+
+// ---------------------------------------------------------------------------
+// Developer API webhooks
+// ---------------------------------------------------------------------------
+// Detects developer-API order/payment state changes (orders change through many
+// paths that skip model events, so this polls the order rows), persists events,
+// fans them out to subscribed webhooks and dispatches due/retrying deliveries.
+// Idempotent at every stage; also recovers deliveries orphaned by a dead worker.
+Schedule::call(function () {
+    try {
+        Artisan::call('developer-webhooks:run');
+    } catch (\Throwable $e) {
+        Log::error('Scheduled developer webhooks run failed', ['error' => $e->getMessage()]);
+    }
+})->everyMinute()->name('developer-webhooks:run')->withoutOverlapping(5);
+
+// Developer API request-log retention.
+Schedule::call(function () {
+    \App\Models\Developer\DeveloperApiRequest::query()
+        ->where('created_at', '<', now()->subDays((int) config('developer_api.log_retention_days', 30)))
+        ->limit(50000)->delete();
+})->daily()->name('developer-api:prune-request-log')->withoutOverlapping();
