@@ -20,6 +20,10 @@ return Application::configure(basePath: dirname(__DIR__))
                 ->prefix('api/v1')
                 ->name('developer-api.')
                 ->group(base_path('routes/api_v1.php'));
+
+            // Developer portal (/developers): a normal web (session + CSRF) surface with its own guard.
+            \Illuminate\Support\Facades\Route::middleware('web')
+                ->group(base_path('routes/developers.php'));
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
@@ -56,6 +60,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'ussd.gwosevo' => \App\Http\Middleware\EnsureGwoSevoGatewayRequest::class,
             'cms.admin' => \App\Http\Middleware\EnsureCmsAdmin::class,
             // Developer API (api/v1)
+            'developer.auth' => \App\Http\Middleware\DeveloperApi\EnsureDeveloperAuthenticated::class,
             'api.context' => \App\Http\Middleware\DeveloperApi\ApiRequestContext::class,
             'api.key' => \App\Http\Middleware\DeveloperApi\AuthenticateApiKey::class,
             'api.throttle' => \App\Http\Middleware\DeveloperApi\ThrottleApiApplication::class,

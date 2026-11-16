@@ -40,6 +40,7 @@
                         . '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />',
                     'ussd' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />',
                     'support' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8M8 14h5m-9 6l3-3h11a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v14z" />',
+                    'developer-access' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />',
                     default => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />',
                 };
             }
@@ -143,6 +144,12 @@
             'href' => route('vendor.support.index'),
             'matches' => ['vendor.support.*'],
             'badge' => $supportUnread,
+        ],
+        [
+            'key' => 'developer-access',
+            'label' => 'Developer Access',
+            'href' => route('vendor.developer-access.index'),
+            'matches' => ['vendor.developer-access.*'],
         ],
         [
             'key' => 'settings',

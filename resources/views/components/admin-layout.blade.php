@@ -47,6 +47,7 @@
                     'utility-bills' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />',
                     'utility-bills-settings' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />',
                     'support' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8M8 14h5m-9 6l3-3h11a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v14z" />',
+                    'developer-access' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />',
                     default => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />',
                 };
             }
@@ -116,6 +117,7 @@
                 'admin.vendor-tier-promotions.*',
                 'admin.vendor-tier-history.*',
             ]],
+            ['key' => 'developer-access', 'label' => 'Developer Access', 'href' => route('admin.developer-access.index'), 'matches' => ['admin.developer-access.*']],
             ['key' => 'email-settings', 'label' => 'Email Settings', 'href' => route('admin.settings.email'), 'matches' => ['admin.settings.email*']],
             ['key' => 'ussd-settings', 'label' => 'USSD Settings', 'href' => route('admin.settings.ussd'), 'matches' => ['admin.settings.ussd*']],
         ],

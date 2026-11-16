@@ -401,6 +401,11 @@ Route::middleware(['vendor.approved'])
         Route::get('quick-buy', [VendorQuickBuyController::class, 'show'])->name('quick-buy.show');
         Route::post('quick-buy', [VendorQuickBuyController::class, 'store'])->name('quick-buy.store');
 
+        // Developer API: the vendor approves/declines applications that want to integrate with THIS store.
+        Route::get('developer-access', [\App\Http\Controllers\Vendor\DeveloperAccessController::class, 'index'])->name('developer-access.index');
+        Route::post('developer-access/{application}/approve', [\App\Http\Controllers\Vendor\DeveloperAccessController::class, 'approve'])->whereNumber('application')->name('developer-access.approve');
+        Route::post('developer-access/{application}/reject', [\App\Http\Controllers\Vendor\DeveloperAccessController::class, 'reject'])->whereNumber('application')->name('developer-access.reject');
+
         // Support chat (vendor <-> admin). Conversations/attachments are looked up
         // scoped to the authenticated vendor inside the controller.
         Route::prefix('support')->name('support.')->group(function () {
@@ -494,6 +499,12 @@ Route::post('/admin/logout', [AdminAuthController::class, 'logout'])->name('admi
 
 Route::middleware(['admin.only'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/', [AdminController::class, 'dashboard'])->name('dashboard');
+
+    // Developer API access review (production approval). Minimal additive surface; full section is a later milestone.
+    Route::get('developer-access', [\App\Http\Controllers\Admin\DeveloperAccessController::class, 'index'])->name('developer-access.index');
+    Route::post('developer-access/{application}/approve', [\App\Http\Controllers\Admin\DeveloperAccessController::class, 'approve'])->name('developer-access.approve');
+    Route::post('developer-access/{application}/reject', [\App\Http\Controllers\Admin\DeveloperAccessController::class, 'reject'])->name('developer-access.reject');
+    Route::post('developer-access/{application}/withdraw', [\App\Http\Controllers\Admin\DeveloperAccessController::class, 'withdraw'])->name('developer-access.withdraw');
     // Vendor contact export. Admin-only: admin.only plus the stricter cms.admin gate (explicit guards, no default-to-admin),
     // re-checked in the FormRequest.
     Route::get('vendors/export', [\App\Http\Controllers\Admin\VendorContactExportController::class, 'show'])

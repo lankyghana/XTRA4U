@@ -1,0 +1,25 @@
+<?php
+
+namespace App\Http\Requests\Developers;
+
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+
+class StoreApiKeyRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    public function rules(): array
+    {
+        return [
+            'name' => ['required', 'string', 'max:100'],
+            'environment' => ['required', 'in:sandbox,production'],
+            'scopes' => ['required', 'array', 'min:1'],
+            'scopes.*' => ['string', Rule::in(array_keys(config('developer_api.scopes')))],
+            'expires_in_days' => ['required', 'integer', 'min:1', 'max:365'],
+        ];
+    }
+}

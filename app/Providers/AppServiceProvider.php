@@ -31,6 +31,7 @@ class AppServiceProvider extends ServiceProvider
 
 		Gate::policy(SupportConversation::class, SupportConversationPolicy::class);
 		Gate::policy(SupportAttachment::class, SupportAttachmentPolicy::class);
+		Gate::policy(\App\Models\Developer\DeveloperApplication::class, \App\Policies\DeveloperApplicationPolicy::class);
 
 		// Apply database-driven SMTP configuration (fallback stays in config/services.php).
 		app(DynamicMailConfigurator::class)->apply();
