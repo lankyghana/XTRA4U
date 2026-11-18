@@ -3,28 +3,59 @@
 Scope note: this is design/operations documentation for what Milestone 3 built. The public
 developer documentation and OpenAPI spec are Milestone 7.
 
-## Auth realm
+## Who may use the API: approved vendors only
 
-The portal uses its own `developer` guard (`developers` table, `App\Models\Developer\Developer`),
-following the repo's existing guard-per-realm pattern (`web` / `vendor` / `admin`). Developers are a
-fourth realm; no Vendor, Admin or User record is reused or duplicated. Sessions, CSRF and CSP are the
-normal `web` group. Suspended developers cannot log in and lose an open session on the next request.
+The API is publicly *discoverable* (`/developers` is an information page anyone can read) but usable
+only by **registered, admin-approved XTRA4U vendors**. There is no separate developer registration,
+login, guard, user table or password system: the portal recognises the vendor signed in through the
+platform's existing `vendor` guard.
 
-## Access model
+Journey: public info page -> existing vendor application (`/vendor/request`) -> admin approval (existing
+workflow) -> sign in with the existing vendor login -> Developer Portal -> create application ->
+generate keys -> integrate.
 
 | Concept | Where | Rule |
 |---|---|---|
-| Application type | `vendor_id` null / set | Fixed at creation. Never editable. |
-| Vendor consent | `vendor_link_status` none/pending/approved/rejected | Only the bound vendor can decide. |
-| Production access | `production_status` none/requested/approved/rejected | Only an admin can approve. |
-| Key environment | `developer_api_keys.environment` | sandbox keys always authenticate; production keys work only while `hasProductionAccess()`. |
+| Eligibility | `vendors.is_approved` | The single gate. Pending, rejected and suspended vendors are all `false`. Read **live** on every API request and every protected portal action. |
+| Application owner | `developer_applications.vendor_id` | Mandatory at creation, taken from the authenticated vendor (never request input), immutable (model `saving` hook). No marketplace-wide applications. |
+| Key environment | `developer_api_keys.environment` | `sandbox` (`xt_test_`) or `production` (`xt_live_`), a per-key choice. No extra approval for either. |
 
-`hasProductionAccess()` = `environment == production && production_status == approved && status == active`.
-Withdrawing access kills production keys instantly (checked per request, not at issue time).
-A vendor-bound application cannot request production, and an admin cannot approve it, until its vendor approved.
+Retired by this model (and why): the separate developer account and its approval, the vendor-consent
+step, and the application-level "production access" review. They all duplicated the one decision the
+platform already makes (is this vendor approved?), and an application can only ever sell its own vendor's
+catalog under that vendor's own pricing, earnings and commissions, so there is no additional exposure for a
+second approval to guard.
 
-Until Milestone 4 (sandbox engine) every authenticated commerce route answers `501 SANDBOX_UNAVAILABLE`
-for sandbox keys. That is deliberate: a sandbox key never reaches real commerce.
+Every route to an application is loaded **through** `vendor_id = <signed-in vendor>`, so another vendor's
+application, key, webhook or delivery is a 404 (not even confirmed to exist). `DeveloperApplicationPolicy`
+is a second layer; the services re-check approval themselves, so no caller can bypass the portal.
+
+Sandbox (`xt_test_`) keys are served by the isolated sandbox engine added in Milestone 4
+(see `04-sandbox.md`): they never reach real commerce. (Before Milestone 4 these routes answered
+`501 SANDBOX_UNAVAILABLE`.)
+
+## When a vendor loses approval
+
+Access is denied **immediately** (live check) and the credentials are retired durably:
+
+1. API requests: `403 VENDOR_NOT_APPROVED` on the very next request, before any cleanup has run.
+2. Webhook deliveries are cancelled instead of sent (re-checked per attempt).
+3. Portal: the vendor sees a clear "approval required" page; creating applications/keys/webhooks is refused.
+4. Cleanup (`VendorApiAccess::withdraw`): every key revoked, every webhook disabled, pending deliveries
+   cancelled, one `vendor.api_access_withdrawn` audit row per application (actor = the admin, else `system`).
+   Triggered by `VendorApiAccessObserver` (vendor `updated`/`deleted`), and re-applied every minute by
+   `developer-webhooks:run` (`reconcile()`) for changes that bypass Eloquent events (raw query-builder updates).
+   The observer is failure-isolated: a cleanup error never blocks the platform's own suspension.
+
+**Revocation is permanent.** Re-approving a vendor restores portal access but does not resurrect keys or
+re-enable webhooks; the vendor issues fresh credentials (webhook URLs are re-validated on re-enable).
+This is deliberate fail-closed behaviour; a reversible "pause" would be a policy change.
+
+Legacy data: applications created under the old developer model (`developer_id` set) are **suspended** by
+migration `2026_11_18_000001` (rows, keys, webhooks and audit preserved) so they cannot inherit a vendor's
+authority. The `developers` table and the `production_*` / `vendor_link_*` / `environment` application
+columns remain in place, unused. On SQLite the migration refuses to rebuild the table inside a transaction
+(it would cascade-delete child rows) and otherwise rebuilds with FK enforcement paused and verified.
 
 ## One-time secrets
 
@@ -60,7 +91,7 @@ the intermediate events are not fabricated.
 ### Retries
 
 Attempt 1 immediately, then after 60 s, 5 min, 30 min, 2 h, 6 h (6 attempts per round). After the last
-failure the delivery is `failed`. A developer can retry a failed delivery of an active endpoint; this
+failure the delivery is `failed`. A vendor can retry a failed delivery of an active endpoint; this
 starts a fresh round and is counted in `manual_retries`. Attempt history is never reset.
 
 ### Request format
@@ -165,6 +196,7 @@ Transport (`PinnedWebhookTransport`) — defeats DNS rebinding:
 
 ## Operations
 
+- `developer-webhooks:run` also reconciles vendor approval (see "When a vendor loses approval").
 - A queue worker **must** be running (`DeliverDeveloperWebhook`), as for the rest of the platform.
 - The scheduler cron (`* * * * * php artisan schedule:run`) must be active.
 - Request logs older than `developer_api.log_retention_days` are pruned daily.
