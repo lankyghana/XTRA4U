@@ -595,3 +595,12 @@ Schedule::call(function () {
         ->where('created_at', '<', now()->subDays((int) config('developer_api.log_retention_days', 30)))
         ->limit(50000)->delete();
 })->daily()->name('developer-api:prune-request-log')->withoutOverlapping();
+
+// Developer API sandbox retention. A no-op unless DEVELOPER_API_SANDBOX_RETENTION_DAYS is set; sandbox data only.
+Schedule::call(function () {
+    try {
+        Artisan::call('developer-sandbox:prune');
+    } catch (\Throwable $e) {
+        Log::error('Scheduled developer sandbox prune failed', ['error' => $e->getMessage()]);
+    }
+})->daily()->name('developer-sandbox:prune')->withoutOverlapping();
