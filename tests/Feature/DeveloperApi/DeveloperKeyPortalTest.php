@@ -3,7 +3,15 @@
 namespace Tests\Feature\DeveloperApi;
 
 use App\Models\Developer\DeveloperApiKey;
+use App\Models\Developer\DeveloperApplication;
+use App\Models\Developer\DeveloperAuditEvent;
+use App\Models\Vendor;
+use Illuminate\Support\Facades\DB;
 
+/**
+ * API keys, managed by the vendor that owns the application, signed in through the existing
+ * `vendor` guard. Vendor approval is the only gate: there is no extra production approval.
+ */
 class DeveloperKeyPortalTest extends PortalTestCase
 {
     private function payload(array $o = []): array
@@ -13,9 +21,9 @@ class DeveloperKeyPortalTest extends PortalTestCase
         ], $o);
     }
 
-    private function create(\App\Models\Developer\Developer $dev, \App\Models\Developer\DeveloperApplication $app, array $o = [])
+    private function create(Vendor $vendor, DeveloperApplication $app, array $o = [])
     {
-        return $this->actingAsDeveloper($dev)->post("/developers/applications/{$app->id}/keys", $this->payload($o));
+        return $this->actingAsVendor($vendor)->post("/developers/applications/{$app->id}/keys", $this->payload($o));
     }
 
     private function plaintextFrom($response): string
@@ -25,16 +33,22 @@ class DeveloperKeyPortalTest extends PortalTestCase
         return $m[0];
     }
 
-    public function test_a_sandbox_key_is_generated_and_shown_exactly_once(): void
+    /** @return array{0:Vendor,1:DeveloperApplication} */
+    private function vendorAndApp(): array
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        $vendor = $this->approvedVendor();
 
-        $res = $this->create($dev, $app)->assertOk();
+        return [$vendor, $this->makeApp($vendor)];
+    }
+
+    public function test_a_key_is_generated_and_shown_exactly_once(): void
+    {
+        [$vendor, $app] = $this->vendorAndApp();
+
+        $res = $this->create($vendor, $app)->assertOk();
         $plain = $this->plaintextFrom($res);
 
         $this->assertStringStartsWith('xt_test_', $plain);
-        $res->assertHeader('Cache-Control');
         $this->assertStringContainsString('no-store', $res->headers->get('Cache-Control'));
 
         // Never in the session (a redirect/flash would persist it to the session store).
@@ -47,9 +61,8 @@ class DeveloperKeyPortalTest extends PortalTestCase
 
     public function test_only_the_hash_is_stored_and_it_is_never_rendered(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
-        $plain = $this->plaintextFrom($this->create($dev, $app));
+        [$vendor, $app] = $this->vendorAndApp();
+        $plain = $this->plaintextFrom($this->create($vendor, $app));
 
         $key = DeveloperApiKey::firstOrFail();
         $this->assertSame(hash('sha256', $plain), $key->key_hash);
@@ -62,28 +75,49 @@ class DeveloperKeyPortalTest extends PortalTestCase
         $this->assertStringContainsString($key->prefix, $page); // metadata only
     }
 
-    public function test_the_generated_key_works_against_the_api_with_only_its_scopes(): void
+    public function test_a_key_is_associated_with_the_vendor_that_generated_it(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
-        $plain = $this->plaintextFrom($this->create($dev, $app, ['scopes' => ['services:read']]));
+        [$vendor, $app] = $this->vendorAndApp();
+        [$other, $otherApp] = $this->vendorAndApp();
 
-        // Sandbox key: authenticated (not 401), but the sandbox engine is Milestone 4, so commerce is refused.
-        $this->getJson('/api/v1/services', $this->auth($plain))->assertStatus(501)->assertJsonPath('error.code', 'SANDBOX_UNAVAILABLE');
+        $this->create($vendor, $app);
+        $this->create($other, $otherApp);
 
-        // Production-approved application: the key works, but only for its scopes.
-        $live = $this->developer();
-        $liveApp = $this->sandboxApp($live, ['environment' => 'production', 'production_status' => 'approved']);
-        $livePlain = $this->plaintextFrom($this->create($live, $liveApp, ['environment' => 'production', 'scopes' => ['services:read']]));
-        $this->getJson('/api/v1/services', $this->auth($livePlain))->assertOk();
-        $this->getJson('/api/v1/products', $this->auth($livePlain))->assertStatus(403);
+        $key = DeveloperApiKey::where('application_id', $app->id)->firstOrFail();
+        $this->assertSame($vendor->id, (int) $key->application->vendor_id);
+        $otherKey = DeveloperApiKey::where('application_id', $otherApp->id)->firstOrFail();
+        $this->assertSame($other->id, (int) $otherKey->application->vendor_id);
+    }
+
+    public function test_both_environments_are_available_to_an_approved_vendor_without_extra_approval(): void
+    {
+        [$vendor, $app] = $this->vendorAndApp();
+
+        $live = $this->plaintextFrom($this->create($vendor, $app, ['environment' => 'production', 'scopes' => ['services:read']]));
+        $test = $this->plaintextFrom($this->create($vendor, $app, ['environment' => 'sandbox', 'scopes' => ['services:read']]));
+
+        $this->assertStringStartsWith('xt_live_', $live);
+        $this->assertStringStartsWith('xt_test_', $test);
+        $this->assertSame('production', DeveloperApiKey::where('key_hash', hash('sha256', $live))->value('environment'));
+
+        $this->getJson('/api/v1/services', $this->auth($live))->assertOk();
+        // Sandbox keys are served by the sandbox engine (Milestone 4) and say so in the envelope.
+        $this->getJson('/api/v1/services', $this->auth($test))->assertOk()->assertJsonPath('meta.environment', 'sandbox');
+    }
+
+    public function test_a_key_only_works_for_its_scopes(): void
+    {
+        [$vendor, $app] = $this->vendorAndApp();
+        $plain = $this->plaintextFrom($this->create($vendor, $app, ['environment' => 'production', 'scopes' => ['services:read']]));
+
+        $this->getJson('/api/v1/services', $this->auth($plain))->assertOk();
+        $this->getJson('/api/v1/products', $this->auth($plain))->assertStatus(403);
     }
 
     public function test_key_metadata_shows_status_expiry_and_scopes(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
-        $this->create($dev, $app, ['name' => 'Visible-Key-Name']);
+        [$vendor, $app] = $this->vendorAndApp();
+        $this->create($vendor, $app, ['name' => 'Visible-Key-Name']);
 
         $this->get("/developers/applications/{$app->id}")->assertOk()
             ->assertSee('Visible-Key-Name')->assertSee('services:read')->assertSee('active');
@@ -93,101 +127,79 @@ class DeveloperKeyPortalTest extends PortalTestCase
 
     public function test_key_input_is_validated(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        [$vendor, $app] = $this->vendorAndApp();
 
-        $this->create($dev, $app, ['scopes' => []])->assertSessionHasErrors('scopes');
-        $this->create($dev, $app, ['scopes' => ['admin:everything']])->assertSessionHasErrors('scopes.0');
-        $this->create($dev, $app, ['expires_in_days' => 0])->assertSessionHasErrors('expires_in_days');
-        $this->create($dev, $app, ['expires_in_days' => 9999])->assertSessionHasErrors('expires_in_days');
-        $this->create($dev, $app, ['environment' => 'staging'])->assertSessionHasErrors('environment');
-        $this->create($dev, $app, ['name' => ''])->assertSessionHasErrors('name');
+        $this->create($vendor, $app, ['scopes' => []])->assertSessionHasErrors('scopes');
+        $this->create($vendor, $app, ['scopes' => ['admin:everything']])->assertSessionHasErrors('scopes.0');
+        $this->create($vendor, $app, ['expires_in_days' => 0])->assertSessionHasErrors('expires_in_days');
+        $this->create($vendor, $app, ['expires_in_days' => 9999])->assertSessionHasErrors('expires_in_days');
+        $this->create($vendor, $app, ['environment' => 'staging'])->assertSessionHasErrors('environment');
+        $this->create($vendor, $app, ['name' => ''])->assertSessionHasErrors('name');
         $this->assertSame(0, DeveloperApiKey::count());
     }
 
-    public function test_a_production_key_cannot_be_generated_without_admin_approval(): void
+    public function test_request_input_cannot_choose_another_owner_or_status(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        [$vendor, $app] = $this->vendorAndApp();
+        $stranger = $this->approvedVendor();
 
-        $this->create($dev, $app, ['environment' => 'production'])->assertSessionHasErrors('environment');
-        $this->assertSame(0, DeveloperApiKey::count());
+        $this->create($vendor, $app, ['vendor_id' => $stranger->id, 'application_id' => 9999, 'revoked_at' => null])->assertOk();
 
-        // Requested but not yet approved: still refused.
-        $app->forceFill(['production_status' => 'requested'])->save();
-        $this->create($dev, $app, ['environment' => 'production'])->assertSessionHasErrors('environment');
-
-        // Rejected: still refused.
-        $app->forceFill(['production_status' => 'rejected'])->save();
-        $this->create($dev, $app, ['environment' => 'production'])->assertSessionHasErrors('environment');
-        $this->assertSame(0, DeveloperApiKey::count());
+        $key = DeveloperApiKey::firstOrFail();
+        $this->assertSame($app->id, (int) $key->application_id);
+        $this->assertSame($vendor->id, (int) $app->fresh()->vendor_id);
     }
 
-    public function test_request_input_cannot_fake_production_approval(): void
+    public function test_a_vendor_that_is_not_approved_cannot_generate_keys(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        $vendor = $this->approvedVendor();
+        $app = $this->makeApp($vendor);
+        DB::table('vendors')->where('id', $vendor->id)->update(['is_approved' => false]);
 
-        $this->create($dev, $app, ['environment' => 'production', 'production_status' => 'approved', 'approved' => true])
-            ->assertSessionHasErrors('environment');
+        // A real session reloads the vendor on every request; fresh() reproduces that.
+        $this->actingAsVendor($vendor->fresh());
+        $this->post("/developers/applications/{$app->id}/keys", $this->payload(['environment' => 'production']))->assertForbidden();
+        $this->post("/developers/applications/{$app->id}/keys", $this->payload(['environment' => 'sandbox']))->assertForbidden();
         $this->assertSame(0, DeveloperApiKey::count());
     }
 
-    public function test_a_production_key_is_issued_once_approved_and_is_live_format(): void
+    public function test_a_stale_session_still_cannot_mint_keys_because_the_service_checks_live(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev, ['environment' => 'production', 'production_status' => 'approved']);
+        $vendor = $this->approvedVendor();
+        $app = $this->makeApp($vendor);
+        $this->actingAsVendor($vendor);   // portal sees the old, approved in-memory vendor...
+        DB::table('vendors')->where('id', $vendor->id)->update(['is_approved' => false]);
 
-        $plain = $this->plaintextFrom($this->create($dev, $app, ['environment' => 'production']));
-
-        $this->assertStringStartsWith('xt_live_', $plain);
-        $this->assertSame('production', DeveloperApiKey::firstOrFail()->environment);
-        $this->getJson('/api/v1/services', $this->auth($plain))->assertOk();
+        // ...but the key service re-reads approval from the database.
+        $this->post("/developers/applications/{$app->id}/keys", $this->payload())->assertSessionHasErrors('environment');
+        $this->assertSame(0, DeveloperApiKey::count());
     }
 
-    public function test_an_unapproved_application_never_receives_working_production_credentials(): void
+    public function test_the_service_refuses_keys_for_an_unapproved_vendor_even_if_the_portal_is_bypassed(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        $vendor = $this->approvedVendor();
+        $app = $this->makeApp($vendor);
+        DB::table('vendors')->where('id', $vendor->id)->update(['is_approved' => false]);
 
-        // Even a key that somehow exists dies when access is not approved.
-        [, $plain] = $this->makeKey($this->makeApp('production'));
-        $other = $this->makeApp('production');
-        $other->forceFill(['environment' => 'sandbox', 'production_status' => 'rejected'])->save();
-        [, $stale] = $this->forceProductionKey($other);
-
-        $this->getJson('/api/v1/services', $this->auth($stale))->assertStatus(403);
-        $this->assertNotSame('', $plain);
-        $this->assertSame('none', $app->fresh()->production_status);
-    }
-
-    /** Mint a production key while approved, then withdraw approval. */
-    private function forceProductionKey(\App\Models\Developer\DeveloperApplication $app): array
-    {
-        $app->forceFill(['environment' => 'production', 'production_status' => 'approved'])->save();
-        $r = $this->makeKey($app);
-        $app->forceFill(['environment' => 'sandbox', 'production_status' => 'rejected'])->save();
-
-        return $r;
+        $this->expectException(\App\Support\DeveloperApi\ApiException::class);
+        app(\App\Services\DeveloperApi\ApiKeyService::class)->create($app->fresh(), 'x', ['services:read'], null, null, 'production');
     }
 
     public function test_the_per_application_active_key_cap_is_enforced(): void
     {
         config(['developer_api.keys.max_active_per_application' => 2]);
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        [$vendor, $app] = $this->vendorAndApp();
 
-        $this->create($dev, $app)->assertOk();
-        $this->create($dev, $app)->assertOk();
-        $this->create($dev, $app)->assertStatus(302);
+        $this->create($vendor, $app)->assertOk();
+        $this->create($vendor, $app)->assertOk();
+        $this->create($vendor, $app)->assertStatus(302);
         $this->assertSame(2, DeveloperApiKey::count());
     }
 
     public function test_rotation_issues_a_new_key_revokes_the_old_one_and_keeps_environment_and_scopes(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
-        $oldPlain = $this->plaintextFrom($this->create($dev, $app, ['scopes' => ['services:read']]));
+        [$vendor, $app] = $this->vendorAndApp();
+        $oldPlain = $this->plaintextFrom($this->create($vendor, $app, ['environment' => 'production', 'scopes' => ['services:read']]));
         $old = DeveloperApiKey::firstOrFail();
 
         $res = $this->post("/developers/applications/{$app->id}/keys/{$old->id}/rotate")->assertOk();
@@ -197,33 +209,31 @@ class DeveloperKeyPortalTest extends PortalTestCase
         $this->assertNotSame($oldPlain, $newPlain);
         $this->assertNotNull($old->fresh()->revoked_at);
         $new = DeveloperApiKey::where('id', '!=', $old->id)->firstOrFail();
-        $this->assertSame('sandbox', $new->environment);
+        $this->assertSame('production', $new->environment);
         $this->assertSame(['services:read'], $new->scopes);
         $this->assertSame(hash('sha256', $newPlain), $new->key_hash);
 
         $this->getJson('/api/v1/services', $this->auth($oldPlain))->assertStatus(401);
-        $this->getJson('/api/v1/services', $this->auth($newPlain))->assertStatus(501); // authenticated sandbox key
+        $this->getJson('/api/v1/services', $this->auth($newPlain))->assertOk();
     }
 
     public function test_a_revoked_key_cannot_be_rotated(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        [$vendor, $app] = $this->vendorAndApp();
         [$key] = $this->makeKey($app);
 
-        $this->actingAsDeveloper($dev)->post("/developers/applications/{$app->id}/keys/{$key->id}/revoke")->assertRedirect();
+        $this->actingAsVendor($vendor)->post("/developers/applications/{$app->id}/keys/{$key->id}/revoke")->assertRedirect();
         $this->post("/developers/applications/{$app->id}/keys/{$key->id}/rotate")->assertSessionHasErrors('key');
         $this->assertSame(1, DeveloperApiKey::count());
     }
 
     public function test_revocation_takes_effect_immediately(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        [$vendor, $app] = $this->vendorAndApp();
         [$key, $plain] = $this->makeKey($app);
-        $this->getJson('/api/v1/services', $this->auth($plain))->assertStatus(501); // authenticated sandbox key
+        $this->getJson('/api/v1/services', $this->auth($plain))->assertOk();
 
-        $this->actingAsDeveloper($dev)->post("/developers/applications/{$app->id}/keys/{$key->id}/revoke")->assertRedirect();
+        $this->actingAsVendor($vendor)->post("/developers/applications/{$app->id}/keys/{$key->id}/revoke")->assertRedirect();
 
         $this->assertNotNull($key->fresh()->revoked_at);
         $this->getJson('/api/v1/services', $this->auth($plain))->assertStatus(401);
@@ -231,35 +241,50 @@ class DeveloperKeyPortalTest extends PortalTestCase
 
     public function test_expired_keys_are_rejected_and_listed_as_expired(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        [$vendor, $app] = $this->vendorAndApp();
         [$key, $plain] = $this->makeKey($app, null, now()->addDay());
         $key->forceFill(['expires_at' => now()->subMinute()])->save();
 
         $this->getJson('/api/v1/services', $this->auth($plain))->assertStatus(401);
         $this->assertSame('expired', $key->fresh()->status());
-        $this->actingAsDeveloper($dev)->get("/developers/applications/{$app->id}")->assertOk()->assertSee('expired');
+        $this->actingAsVendor($vendor)->get("/developers/applications/{$app->id}")->assertOk()->assertSee('expired');
     }
 
-    public function test_a_key_id_from_another_application_of_the_same_developer_is_not_addressable(): void
+    public function test_a_key_id_from_another_application_of_the_same_vendor_is_not_addressable(): void
     {
-        $dev = $this->developer();
-        $a = $this->sandboxApp($dev);
-        $b = $this->sandboxApp($dev);
+        $vendor = $this->approvedVendor();
+        $a = $this->makeApp($vendor);
+        $b = $this->makeApp($vendor);
         [$keyOfB] = $this->makeKey($b);
 
-        $this->actingAsDeveloper($dev)->post("/developers/applications/{$a->id}/keys/{$keyOfB->id}/revoke")->assertNotFound();
+        $this->actingAsVendor($vendor)->post("/developers/applications/{$a->id}/keys/{$keyOfB->id}/revoke")->assertNotFound();
         $this->post("/developers/applications/{$a->id}/keys/{$keyOfB->id}/rotate")->assertNotFound();
         $this->assertNull($keyOfB->fresh()->revoked_at);
     }
 
+    // ── cross-vendor isolation ──────────────────────────────────────────────
+
+    public function test_another_vendor_cannot_create_rotate_or_revoke_keys_on_my_application(): void
+    {
+        [$mine, $myApp] = $this->vendorAndApp();
+        [$key, $plain] = $this->makeKey($myApp);
+        $intruder = $this->approvedVendor();
+
+        $this->actingAsVendor($intruder)->post("/developers/applications/{$myApp->id}/keys", $this->payload())->assertNotFound();
+        $this->post("/developers/applications/{$myApp->id}/keys/{$key->id}/rotate")->assertNotFound();
+        $this->post("/developers/applications/{$myApp->id}/keys/{$key->id}/revoke")->assertNotFound();
+
+        $this->assertNull($key->fresh()->revoked_at);
+        $this->assertSame(1, DeveloperApiKey::count());
+        $this->getJson('/api/v1/services', $this->auth($plain))->assertOk();
+    }
+
     public function test_key_actions_are_written_to_the_audit_trail_without_secrets(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
-        $plain = $this->plaintextFrom($this->create($dev, $app));
+        [$vendor, $app] = $this->vendorAndApp();
+        $plain = $this->plaintextFrom($this->create($vendor, $app));
 
-        $rows = \App\Models\Developer\DeveloperAuditEvent::all();
+        $rows = DeveloperAuditEvent::all();
         $this->assertTrue($rows->contains('action', 'api_key.created'));
         $this->assertStringNotContainsString($plain, json_encode($rows->toArray()));
         $this->assertStringNotContainsString(hash('sha256', $plain), json_encode($rows->toArray()));

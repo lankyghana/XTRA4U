@@ -94,55 +94,92 @@ class ApiAuthenticationTest extends DeveloperApiTestCase
             ->assertStatus(403)->assertJsonPath('error.code', 'APPLICATION_INACTIVE');
     }
 
-    public function test_suspended_developer_blocks_all_of_their_applications(): void
-    {
-        $app = $this->makeApp();
-        [, $plain] = $this->makeKey($app);
-        $app->developer->forceFill(['status' => 'suspended'])->save();
+    // ----- The vendor's approval is the gate: checked LIVE on every protected request -----
 
-        $this->getJson('/api/v1/services', $this->auth($plain))
-            ->assertStatus(403)->assertJsonPath('error.code', 'APPLICATION_INACTIVE');
-    }
-
-    public function test_production_key_stops_working_when_production_access_is_withdrawn(): void
+    public function test_unapproved_vendor_is_denied_on_the_very_next_request_without_any_cleanup_running(): void
     {
-        $app = $this->makeApp('production');
+        $vendor = $this->vendor();
+        $app = $this->makeApp($vendor);
         [, $plain] = $this->makeKey($app);
         $this->getJson('/api/v1/services', $this->auth($plain))->assertOk();
 
-        $app->forceFill(['environment' => 'sandbox', 'production_status' => 'rejected'])->save();
+        // Raw query-builder write: no model events, no observer. Only the live check can catch this.
+        DB::table('vendors')->where('id', $vendor->id)->update(['is_approved' => false]);
 
         $this->getJson('/api/v1/services', $this->auth($plain))
-            ->assertStatus(403)->assertJsonPath('error.code', 'ENVIRONMENT_MISMATCH');
+            ->assertStatus(403)->assertJsonPath('error.code', 'VENDOR_NOT_APPROVED');
     }
 
-    public function test_production_key_requires_approved_status_not_just_the_environment_column(): void
+    public function test_every_protected_endpoint_denies_an_unapproved_vendor(): void
     {
-        $app = $this->makeApp('production');
-        [, $plain] = $this->makeKey($app);
-        $app->forceFill(['production_status' => 'requested'])->save();
+        $vendor = $this->vendor();
+        [, $plain] = $this->makeKey($this->makeApp($vendor));
+        DB::table('vendors')->where('id', $vendor->id)->update(['is_approved' => false]);
 
+        $ord = 'ord_'.str_repeat('a', 26);
+        foreach ([
+            ['GET', '/api/v1/services'], ['GET', '/api/v1/networks'], ['GET', '/api/v1/products'],
+            ['GET', '/api/v1/products/own_1'], ['POST', '/api/v1/quotes'], ['POST', '/api/v1/orders'],
+            ['GET', "/api/v1/orders/{$ord}"], ['POST', "/api/v1/orders/{$ord}/payments"], ['GET', "/api/v1/orders/{$ord}/status"],
+            ['GET', '/api/v1/transactions/REF-123456'],
+        ] as [$method, $uri]) {
+            $this->json($method, $uri, [], $this->auth($plain))
+                ->assertStatus(403)
+                ->assertJsonPath('error.code', 'VENDOR_NOT_APPROVED');
+        }
+    }
+
+    public function test_reapproval_does_not_resurrect_a_key_that_was_withdrawn(): void
+    {
+        $vendor = $this->vendor();
+        [$key, $plain] = $this->makeKey($this->makeApp($vendor));
+
+        $vendor->update(['is_approved' => false]);   // observer revokes
+        $vendor->update(['is_approved' => true]);
+
+        $this->assertNotNull($key->fresh()->revoked_at);
         $this->getJson('/api/v1/services', $this->auth($plain))
-            ->assertStatus(403)->assertJsonPath('error.code', 'ENVIRONMENT_MISMATCH');
+            ->assertStatus(401)->assertJsonPath('error.code', 'API_KEY_REVOKED');
     }
 
-    public function test_sandbox_key_survives_promotion_but_can_never_reach_production_services(): void
+    public function test_deleted_vendor_is_denied(): void
     {
-        $app = $this->makeApp('sandbox');
-        [, $sandboxKey] = $this->makeKey($app);
-        $app->forceFill(['environment' => 'production', 'production_status' => 'approved'])->save();
+        $vendor = $this->vendor();
+        [, $plain] = $this->makeKey($this->makeApp($vendor));
+        DB::table('vendors')->where('id', $vendor->id)->delete();
 
-        $this->getJson('/api/v1/health')->assertOk();
-        $this->getJson('/api/v1/products', $this->auth($sandboxKey))
-            ->assertStatus(501)->assertJsonPath('error.code', 'SANDBOX_UNAVAILABLE');
+        $this->getJson('/api/v1/services', $this->auth($plain))->assertStatus(403);
     }
 
-    public function test_production_keys_cannot_be_minted_for_an_unapproved_application(): void
+    public function test_keys_cannot_be_minted_for_an_unapproved_vendor_in_either_environment(): void
     {
-        $app = $this->makeApp('sandbox');
+        $vendor = $this->vendor();
+        $app = $this->makeApp($vendor);
+        DB::table('vendors')->where('id', $vendor->id)->update(['is_approved' => false]);
 
-        $this->expectException(\App\Support\DeveloperApi\ApiException::class);
-        app(ApiKeyService::class)->create($app, 'x', ['services:read'], null, null, 'production');
+        foreach (['sandbox', 'production'] as $env) {
+            try {
+                app(ApiKeyService::class)->create($app->fresh(), 'x', ['services:read'], null, null, $env);
+                $this->fail("A {$env} key was minted for an unapproved vendor.");
+            } catch (\App\Support\DeveloperApi\ApiException $e) {
+                $this->assertSame('VENDOR_NOT_APPROVED', $e->errorCode);
+            }
+        }
+
+        $this->assertSame(0, DB::table('developer_api_keys')->count());
+    }
+
+    public function test_production_and_sandbox_keys_need_no_separate_application_approval(): void
+    {
+        $app = $this->makeApp();
+
+        [, $live] = $this->makeKey($app, null, null, 'production');
+        [, $test] = $this->makeKey($app, null, null, 'sandbox');
+
+        $this->getJson('/api/v1/services', $this->auth($live))->assertOk();
+        // Sandbox keys are served by the sandbox engine (Milestone 4) and say so in the envelope.
+        $this->getJson('/api/v1/services', $this->auth($test))
+            ->assertOk()->assertJsonPath('meta.environment', 'sandbox');
     }
 
     public function test_secret_is_never_stored_and_only_the_hash_is(): void
@@ -163,8 +200,8 @@ class ApiAuthenticationTest extends DeveloperApiTestCase
 
     public function test_sandbox_keys_are_marked_test_and_production_keys_live(): void
     {
-        [, $sandbox] = $this->makeKey($this->makeApp('sandbox'));
-        [, $live] = $this->makeKey($this->makeApp('production'));
+        [, $sandbox] = $this->makeKey($this->makeApp(), null, null, 'sandbox');
+        [, $live] = $this->makeKey($this->makeApp());
 
         $this->assertStringStartsWith('xt_test_', $sandbox);
         $this->assertStringStartsWith('xt_live_', $live);
@@ -190,7 +227,7 @@ class ApiAuthenticationTest extends DeveloperApiTestCase
 
     public function test_rate_limit_is_enforced_per_application_with_headers(): void
     {
-        $app = $this->makeApp('production', null, 'approved', ['rate_limit_per_minute' => 3]);
+        $app = $this->makeApp(null, ['rate_limit_per_minute' => 3]);
         [, $plain] = $this->makeKey($app);
         RateLimiter::clear('api-rate:'.$app->id);
 
@@ -218,7 +255,7 @@ class ApiAuthenticationTest extends DeveloperApiTestCase
 
     public function test_rotating_keys_does_not_reset_the_application_quota(): void
     {
-        $app = $this->makeApp('production', null, 'approved', ['rate_limit_per_minute' => 1]);
+        $app = $this->makeApp(null, ['rate_limit_per_minute' => 1]);
         [$k1, $p1] = $this->makeKey($app);
         RateLimiter::clear('api-rate:'.$app->id);
 
@@ -271,12 +308,14 @@ class ApiAuthenticationTest extends DeveloperApiTestCase
 
     public function test_sandbox_keys_cannot_reach_production_services(): void
     {
-        [, $plain] = $this->makeKey($this->makeApp('sandbox'));
+        [, $plain] = $this->makeKey($this->makeApp(), null, null, 'sandbox');
 
+        // Served by the sandbox engine, not production: the envelope says so.
         $this->getJson('/api/v1/products', $this->auth($plain))
-            ->assertStatus(501)->assertJsonPath('error.code', 'SANDBOX_UNAVAILABLE');
+            ->assertOk()->assertJsonPath('meta.environment', 'sandbox');
+        // An (invalid) order request is validated by the sandbox flow and creates nothing in production.
         $this->postJson('/api/v1/orders', [], $this->auth($plain) + ['Idempotency-Key' => 'k1'])
-            ->assertStatus(501);
+            ->assertStatus(422);
 
         $this->assertSame(0, \App\Models\Order::count());
     }

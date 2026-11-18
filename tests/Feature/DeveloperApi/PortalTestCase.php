@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\DeveloperApi;
 
-use App\Models\Developer\Developer;
+use App\Models\Vendor;
 use App\Models\Developer\DeveloperApplication;
 use App\Models\Developer\DeveloperWebhook;
 use App\Models\User;
@@ -27,23 +27,22 @@ abstract class PortalTestCase extends DeveloperApiTestCase
         Http::preventStrayRequests();
     }
 
-    protected function developer(array $attrs = []): Developer
+    /** An approved vendor, the only kind that may use the Developer Portal. */
+    protected function approvedVendor(array $attrs = []): Vendor
     {
-        // fresh(): load DB defaults (status=active) exactly as a real request would.
-        return Developer::create(array_merge([
-            'name' => 'Dev '.uniqid(), 'email' => uniqid().'@example.test', 'password' => 'secret-pass-123',
-        ], $attrs))->fresh();
+        return $this->vendor(array_merge(['is_approved' => true], $attrs))->fresh();
     }
 
-    protected function sandboxApp(Developer $developer, array $overrides = []): DeveloperApplication
+    /** Pending, rejected and suspended vendors are all just `is_approved = false`. */
+    protected function unapprovedVendor(array $attrs = []): Vendor
     {
-        $app = new DeveloperApplication(['developer_id' => $developer->id, 'name' => 'Portal App']);
-        $app->forceFill(array_merge([
-            'environment' => 'sandbox', 'production_status' => 'none', 'status' => 'active',
-            'vendor_id' => null, 'vendor_link_status' => 'none',
-        ], $overrides))->save();
+        return $this->vendor(array_merge(['is_approved' => false], $attrs))->fresh();
+    }
 
-        return $app;
+    /** Sign in through the EXISTING vendor guard: there is no separate developer login. */
+    protected function actingAsVendor(Vendor $vendor): static
+    {
+        return $this->actingAs($vendor, 'vendor');
     }
 
     /** Http::fake() calls accumulate (first matching stub wins), so re-faking mid-test needs a fresh factory. */
@@ -63,11 +62,6 @@ abstract class PortalTestCase extends DeveloperApiTestCase
     protected function asAdmin(): static
     {
         return $this->actingAs($this->admin(), 'web');
-    }
-
-    protected function actingAsDeveloper(Developer $developer): static
-    {
-        return $this->actingAs($developer, 'developer');
     }
 
     /** @return array{0:DeveloperWebhook,1:string} */

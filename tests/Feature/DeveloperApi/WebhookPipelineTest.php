@@ -22,9 +22,9 @@ class WebhookPipelineTest extends PortalTestCase
     /** A production app with a key, one product, and an API-created order. @return array{0:DeveloperApplication,1:Order,2:string} */
     private function apiOrder(?DeveloperApplication $app = null, string $key = 'k1'): array
     {
-        $app ??= $this->makeApp('production');
-        $vendor = $this->vendor();
-        $product = $this->product($vendor, 10);
+        // The application sells its OWN vendor's product, the only thing the API lets it order.
+        $app ??= $this->makeApp();
+        $product = $this->product($app->vendor, 10);
         [, $plain] = $this->makeKey($app);
 
         $quote = $this->postJson('/api/v1/quotes', ['product_id' => "own_{$product->id}", 'recipient_phone' => '0244000000'], $this->auth($plain))->json('data.reference');
@@ -313,7 +313,7 @@ class WebhookPipelineTest extends PortalTestCase
     public function test_events_fan_out_only_to_subscribed_active_endpoints_of_the_same_application(): void
     {
         [$app, $order] = $this->apiOrder();
-        $otherApp = $this->makeApp('production');
+        $otherApp = $this->makeApp();
 
         [$subscribed] = $this->makeWebhook($app, 'https://hooks.example.com/a', ['order.created']);
         [$notSubscribed] = $this->makeWebhook($app, 'https://hooks.example.com/b', ['order.completed']);

@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\DeveloperApi;
 
-use App\Models\Developer\Developer;
 use App\Models\Developer\DeveloperApplication;
 use App\Models\Developer\DeveloperPlan;
 use App\Models\PaymentGatewayConfig;
@@ -25,29 +24,34 @@ abstract class DeveloperApiTestCase extends TestCase
         RateLimiter::clear('api-rate:1');
     }
 
-    protected function makeApp(string $env = 'production', ?Vendor $vendor = null, string $vendorLink = 'approved', array $overrides = []): DeveloperApplication
+    /**
+     * An application always belongs to ONE vendor. With no vendor given, a fresh APPROVED one is created.
+     * The owner is set through forceFill exactly as DeveloperApplicationService does: it is never mass assignable.
+     */
+    protected function makeApp(?Vendor $vendor = null, array $overrides = []): DeveloperApplication
     {
-        $developer = Developer::create([
-            'name' => 'Dev '.uniqid(), 'email' => uniqid().'@example.test', 'password' => 'secret-pass-123',
-        ]);
+        $vendor ??= $this->vendor();
 
-        $app = new DeveloperApplication(['developer_id' => $developer->id, 'name' => 'Test App']);
+        $app = new DeveloperApplication(['name' => 'Test App']);
         $app->forceFill(array_merge([
-            'environment' => $env,
-            'production_status' => $env === 'production' ? 'approved' : 'none',
+            'vendor_id' => $vendor->id,
             'status' => DeveloperApplication::STATUS_ACTIVE,
-            'vendor_id' => $vendor?->id,
-            'vendor_link_status' => $vendor ? $vendorLink : 'none',
         ], $overrides))->save();
 
         return $app;
     }
 
-    /** @return array{0:\App\Models\Developer\DeveloperApiKey,1:string} key + plaintext */
-    protected function makeKey(DeveloperApplication $app, ?array $scopes = null, $expiresAt = null): array
+    /**
+     * @param  ?string  $environment  'production' (default, xt_live_) or 'sandbox' (xt_test_)
+     * @return array{0:\App\Models\Developer\DeveloperApiKey,1:string} key + plaintext
+     */
+    protected function makeKey(DeveloperApplication $app, ?array $scopes = null, $expiresAt = null, string $environment = 'production'): array
     {
-        $scopes ??= array_keys(config('developer_api.scopes'));
-        $r = app(ApiKeyService::class)->create($app, 'Test key', $scopes, $expiresAt);
+        // Default = every scope this environment may hold (sandbox-only scopes are never valid on a production key).
+        $scopes ??= $environment === 'sandbox'
+            ? array_keys(config('developer_api.scopes'))
+            : array_values(array_diff(array_keys(config('developer_api.scopes')), config('developer_api.sandbox_only_scopes')));
+        $r = app(ApiKeyService::class)->create($app, 'Test key', $scopes, $expiresAt, null, $environment);
 
         return [$r['key'], $r['plaintext']];
     }

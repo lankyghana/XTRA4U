@@ -13,7 +13,7 @@ class ApiOrderFlowTest extends DeveloperApiTestCase
     {
         $vendor = $this->vendor();
         $product = $this->product($vendor, $price);
-        $app = $this->makeApp();
+        $app = $this->makeApp($vendor);
         [, $plain] = $this->makeKey($app);
 
         return [$vendor, $product, $app, $plain];
@@ -60,7 +60,7 @@ class ApiOrderFlowTest extends DeveloperApiTestCase
         $owner = $this->vendor();
         $reseller = $this->vendor();
         $l = $this->listing($this->product($owner, 10), $reseller, 3);
-        [, $plain] = $this->makeKey($this->makeApp());
+        [, $plain] = $this->makeKey($this->makeApp($reseller));
 
         $this->quote($plain, "rsl_{$l->id}")->assertCreated()->assertJsonPath('data.price', 13);
     }
@@ -113,7 +113,7 @@ class ApiOrderFlowTest extends DeveloperApiTestCase
         $owner = $this->vendor();
         $reseller = $this->vendor();
         $l = $this->listing($this->product($owner, 10), $reseller, 3);
-        [, $plain] = $this->makeKey($this->makeApp());
+        [, $plain] = $this->makeKey($this->makeApp($reseller));
         $ref = $this->quote($plain, "rsl_{$l->id}")->json('data.reference');
 
         $this->order($plain, $ref)->assertCreated();
@@ -164,8 +164,9 @@ class ApiOrderFlowTest extends DeveloperApiTestCase
 
     public function test_idempotency_keys_are_scoped_per_application(): void
     {
-        [, $product, , $plainA] = $this->setupSale();
-        [, $plainB] = $this->makeKey($this->makeApp());
+        [$vendor, $product, , $plainA] = $this->setupSale();
+        // A second application of the SAME vendor can quote the same product; keys are still per application.
+        [, $plainB] = $this->makeKey($this->makeApp($vendor));
         $qa = $this->quote($plainA, "own_{$product->id}")->json('data.reference');
         $qb = $this->quote($plainB, "own_{$product->id}")->json('data.reference');
 
@@ -223,7 +224,7 @@ class ApiOrderFlowTest extends DeveloperApiTestCase
         $mine = $this->vendor();
         $other = $this->vendor();
         $theirs = $this->product($other, 5);
-        [, $plain] = $this->makeKey($this->makeApp('production', $mine));
+        [, $plain] = $this->makeKey($this->makeApp($mine));
 
         $this->quote($plain, "own_{$theirs->id}")->assertStatus(404)->assertJsonPath('error.code', 'OFFER_UNAVAILABLE');
         $this->assertSame(0, Order::count());

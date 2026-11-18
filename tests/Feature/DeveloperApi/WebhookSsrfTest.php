@@ -246,7 +246,7 @@ class WebhookSsrfTest extends PortalTestCase
 
     public function test_registration_through_the_service_rejects_unsafe_urls(): void
     {
-        $app = $this->sandboxApp($this->developer());
+        $app = $this->makeApp();
 
         foreach (['https://127.0.0.1/x', 'http://hooks.example.com/x', 'https://localhost/x', 'https://169.254.169.254/x'] as $url) {
             try {
@@ -261,12 +261,12 @@ class WebhookSsrfTest extends PortalTestCase
 
     public function test_registration_through_the_portal_rejects_unsafe_urls(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        $vendor = $this->approvedVendor();
+        $app = $this->makeApp($vendor);
         $this->dns->set('rebind.example.net', '10.0.0.7');
 
         foreach (['https://127.0.0.1/x', 'https://rebind.example.net/x', 'http://hooks.example.com/x', 'https://[::1]/x'] as $url) {
-            $this->actingAsDeveloper($dev)->post("/developers/applications/{$app->id}/webhooks", ['url' => $url, 'events' => ['order.created']])
+            $this->actingAsVendor($vendor)->post("/developers/applications/{$app->id}/webhooks", ['url' => $url, 'events' => ['order.created']])
                 ->assertSessionHasErrors('url');
         }
         $this->assertSame(0, DeveloperWebhook::count());
@@ -274,11 +274,11 @@ class WebhookSsrfTest extends PortalTestCase
 
     public function test_updating_a_url_to_an_unsafe_one_is_rejected_and_the_old_url_is_kept(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        $vendor = $this->approvedVendor();
+        $app = $this->makeApp($vendor);
         [$hook] = $this->makeWebhook($app);
 
-        $this->actingAsDeveloper($dev)->put("/developers/applications/{$app->id}/webhooks/{$hook->id}", [
+        $this->actingAsVendor($vendor)->put("/developers/applications/{$app->id}/webhooks/{$hook->id}", [
             'url' => 'https://169.254.169.254/latest', 'events' => ['order.created'],
         ])->assertSessionHasErrors('url');
 
@@ -287,14 +287,14 @@ class WebhookSsrfTest extends PortalTestCase
 
     public function test_re_enabling_a_webhook_re_validates_its_destination(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        $vendor = $this->approvedVendor();
+        $app = $this->makeApp($vendor);
         [$hook] = $this->makeWebhook($app);
         $hook->forceFill(['is_active' => false])->save();
 
         $this->dns->set('hooks.example.com', '10.0.0.9'); // DNS changed while it was disabled
 
-        $this->actingAsDeveloper($dev)->post("/developers/applications/{$app->id}/webhooks/{$hook->id}/toggle")->assertSessionHasErrors('url');
+        $this->actingAsVendor($vendor)->post("/developers/applications/{$app->id}/webhooks/{$hook->id}/toggle")->assertSessionHasErrors('url');
         $this->assertFalse($hook->fresh()->is_active);
     }
 
@@ -316,7 +316,7 @@ class WebhookSsrfTest extends PortalTestCase
 
     public function test_dns_rebinding_between_registration_and_delivery_blocks_the_request(): void
     {
-        $app = $this->makeApp('production');
+        $app = $this->makeApp();
         [$hook] = $this->makeWebhook($app); // validated while public
         $delivery = $this->seedDelivery($hook);
 
@@ -335,7 +335,7 @@ class WebhookSsrfTest extends PortalTestCase
 
     public function test_dns_flipping_to_a_mixed_answer_at_delivery_time_is_blocked(): void
     {
-        $app = $this->makeApp('production');
+        $app = $this->makeApp();
         [$hook] = $this->makeWebhook($app);
         $delivery = $this->seedDelivery($hook);
 
@@ -350,7 +350,7 @@ class WebhookSsrfTest extends PortalTestCase
 
     public function test_dns_failure_at_delivery_time_fails_closed(): void
     {
-        $app = $this->makeApp('production');
+        $app = $this->makeApp();
         [$hook] = $this->makeWebhook($app);
         $delivery = $this->seedDelivery($hook);
 
@@ -365,7 +365,7 @@ class WebhookSsrfTest extends PortalTestCase
 
     public function test_validation_runs_again_for_every_single_attempt(): void
     {
-        $app = $this->makeApp('production');
+        $app = $this->makeApp();
         [$hook] = $this->makeWebhook($app);
         $delivery = $this->seedDelivery($hook);
         Http::fake(['*' => Http::response('', 500)]);
@@ -383,7 +383,7 @@ class WebhookSsrfTest extends PortalTestCase
 
     public function test_a_disabled_or_deleted_endpoint_receives_nothing(): void
     {
-        $app = $this->makeApp('production');
+        $app = $this->makeApp();
         [$hook] = $this->makeWebhook($app);
         $delivery = $this->seedDelivery($hook);
         $hook->forceFill(['is_active' => false])->save();

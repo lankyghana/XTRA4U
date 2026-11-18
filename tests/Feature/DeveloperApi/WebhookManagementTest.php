@@ -11,9 +11,9 @@ use Illuminate\Support\Facades\Queue;
 
 class WebhookManagementTest extends PortalTestCase
 {
-    private function store($dev, $app, array $o = [])
+    private function store($vendor, $app, array $o = [])
     {
-        return $this->actingAsDeveloper($dev)->post("/developers/applications/{$app->id}/webhooks", array_merge([
+        return $this->actingAsVendor($vendor)->post("/developers/applications/{$app->id}/webhooks", array_merge([
             'url' => 'https://hooks.example.com/in', 'description' => 'prod hook', 'events' => ['order.created', 'payment.succeeded'],
         ], $o));
     }
@@ -43,10 +43,10 @@ class WebhookManagementTest extends PortalTestCase
 
     public function test_registering_an_endpoint_shows_the_secret_once_and_stores_it_encrypted(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        $vendor = $this->approvedVendor();
+        $app = $this->makeApp($vendor);
 
-        $res = $this->store($dev, $app)->assertOk();
+        $res = $this->store($vendor, $app)->assertOk();
         $secret = $this->secretFrom($res);
 
         $this->assertStringContainsString('no-store', $res->headers->get('Cache-Control'));
@@ -66,21 +66,21 @@ class WebhookManagementTest extends PortalTestCase
 
     public function test_the_secret_page_carries_a_verification_example(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        $vendor = $this->approvedVendor();
+        $app = $this->makeApp($vendor);
 
-        $this->store($dev, $app)->assertSee('X-XTRA4U-Signature')->assertSee('HMAC-SHA256');
+        $this->store($vendor, $app)->assertSee('X-XTRA4U-Signature')->assertSee('HMAC-SHA256');
     }
 
     public function test_events_must_be_real_supported_states(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        $vendor = $this->approvedVendor();
+        $app = $this->makeApp($vendor);
 
-        $this->store($dev, $app, ['events' => []])->assertSessionHasErrors('events');
-        $this->store($dev, $app, ['events' => ['order.refunded']])->assertSessionHasErrors('events.0');
-        $this->store($dev, $app, ['events' => ['airtime.sent']])->assertSessionHasErrors('events.0');
-        $this->store($dev, $app, ['events' => ['order.created', 'afa.registered']])->assertSessionHasErrors('events.1');
+        $this->store($vendor, $app, ['events' => []])->assertSessionHasErrors('events');
+        $this->store($vendor, $app, ['events' => ['order.refunded']])->assertSessionHasErrors('events.0');
+        $this->store($vendor, $app, ['events' => ['airtime.sent']])->assertSessionHasErrors('events.0');
+        $this->store($vendor, $app, ['events' => ['order.created', 'afa.registered']])->assertSessionHasErrors('events.1');
         $this->assertSame(0, DeveloperWebhook::count());
 
         $this->assertEqualsCanonicalizing(
@@ -91,10 +91,10 @@ class WebhookManagementTest extends PortalTestCase
 
     public function test_duplicate_event_selections_are_collapsed(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        $vendor = $this->approvedVendor();
+        $app = $this->makeApp($vendor);
 
-        $this->store($dev, $app, ['events' => ['order.created', 'order.created', 'payment.failed']])->assertOk();
+        $this->store($vendor, $app, ['events' => ['order.created', 'order.created', 'payment.failed']])->assertOk();
 
         $this->assertSame(['order.created', 'payment.failed'], DeveloperWebhook::firstOrFail()->events);
     }
@@ -102,22 +102,22 @@ class WebhookManagementTest extends PortalTestCase
     public function test_the_per_application_endpoint_cap_is_enforced(): void
     {
         config(['developer_api.webhooks.max_per_application' => 2]);
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        $vendor = $this->approvedVendor();
+        $app = $this->makeApp($vendor);
 
-        $this->store($dev, $app)->assertOk();
-        $this->store($dev, $app)->assertOk();
-        $this->store($dev, $app)->assertSessionHasErrors('url');
+        $this->store($vendor, $app)->assertOk();
+        $this->store($vendor, $app)->assertOk();
+        $this->store($vendor, $app)->assertSessionHasErrors('url');
         $this->assertSame(2, DeveloperWebhook::count());
     }
 
     public function test_privileged_fields_cannot_be_mass_assigned_through_the_form(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
-        $other = $this->sandboxApp($this->developer());
+        $vendor = $this->approvedVendor();
+        $app = $this->makeApp($vendor);
+        $other = $this->makeApp();
 
-        $this->store($dev, $app, ['application_id' => $other->id, 'secret' => 'whsec_chosenbyattacker', 'is_active' => false, 'consecutive_failures' => 99])->assertOk();
+        $this->store($vendor, $app, ['application_id' => $other->id, 'secret' => 'whsec_chosenbyattacker', 'is_active' => false, 'consecutive_failures' => 99])->assertOk();
 
         $hook = DeveloperWebhook::firstOrFail();
         $this->assertSame($app->id, (int) $hook->application_id);
@@ -130,12 +130,12 @@ class WebhookManagementTest extends PortalTestCase
 
     public function test_update_changes_url_events_and_description_but_never_the_secret(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        $vendor = $this->approvedVendor();
+        $app = $this->makeApp($vendor);
         [$hook, $secret] = $this->makeWebhook($app);
         $this->dns->set('other.example.org', '8.8.8.8');
 
-        $this->actingAsDeveloper($dev)->put("/developers/applications/{$app->id}/webhooks/{$hook->id}", [
+        $this->actingAsVendor($vendor)->put("/developers/applications/{$app->id}/webhooks/{$hook->id}", [
             'url' => 'https://other.example.org/new', 'description' => 'moved', 'events' => ['order.failed'], 'secret' => 'whsec_x',
         ])->assertRedirect();
 
@@ -148,11 +148,11 @@ class WebhookManagementTest extends PortalTestCase
 
     public function test_toggle_disables_and_re_enables(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        $vendor = $this->approvedVendor();
+        $app = $this->makeApp($vendor);
         [$hook] = $this->makeWebhook($app);
 
-        $this->actingAsDeveloper($dev)->post("/developers/applications/{$app->id}/webhooks/{$hook->id}/toggle")->assertRedirect();
+        $this->actingAsVendor($vendor)->post("/developers/applications/{$app->id}/webhooks/{$hook->id}/toggle")->assertRedirect();
         $this->assertFalse($hook->fresh()->is_active);
         $this->post("/developers/applications/{$app->id}/webhooks/{$hook->id}/toggle")->assertRedirect();
         $this->assertTrue($hook->fresh()->is_active);
@@ -160,11 +160,11 @@ class WebhookManagementTest extends PortalTestCase
 
     public function test_rotating_the_secret_shows_the_new_one_once_and_discards_the_old(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        $vendor = $this->approvedVendor();
+        $app = $this->makeApp($vendor);
         [$hook, $old] = $this->makeWebhook($app);
 
-        $res = $this->actingAsDeveloper($dev)->post("/developers/applications/{$app->id}/webhooks/{$hook->id}/rotate-secret")->assertOk();
+        $res = $this->actingAsVendor($vendor)->post("/developers/applications/{$app->id}/webhooks/{$hook->id}/rotate-secret")->assertOk();
         $new = $this->secretFrom($res);
 
         $this->assertNotSame($old, $new);
@@ -176,14 +176,14 @@ class WebhookManagementTest extends PortalTestCase
 
     public function test_deleting_soft_deletes_cancels_open_deliveries_and_keeps_history(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        $vendor = $this->approvedVendor();
+        $app = $this->makeApp($vendor);
         [$hook] = $this->makeWebhook($app);
         $pending = $this->delivery($hook, 'pending');
         $failed = $this->delivery($hook, 'failed');
         $done = $this->delivery($hook, 'succeeded');
 
-        $this->actingAsDeveloper($dev)->delete("/developers/applications/{$app->id}/webhooks/{$hook->id}")->assertRedirect();
+        $this->actingAsVendor($vendor)->delete("/developers/applications/{$app->id}/webhooks/{$hook->id}")->assertRedirect();
 
         $this->assertSoftDeleted($hook);
         $this->assertSame('cancelled', $pending->fresh()->status);
@@ -196,24 +196,24 @@ class WebhookManagementTest extends PortalTestCase
 
     public function test_delivery_history_shows_status_and_response_codes(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        $vendor = $this->approvedVendor();
+        $app = $this->makeApp($vendor);
         [$hook] = $this->makeWebhook($app);
         $this->delivery($hook, 'failed');
 
-        $this->actingAsDeveloper($dev)->get("/developers/applications/{$app->id}/webhooks/{$hook->id}/deliveries")
+        $this->actingAsVendor($vendor)->get("/developers/applications/{$app->id}/webhooks/{$hook->id}/deliveries")
             ->assertOk()->assertSee('failed')->assertSee('HTTP 500')->assertSee('order.created');
     }
 
     public function test_a_failed_delivery_can_be_retried_once_queued_as_pending(): void
     {
         Queue::fake();
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        $vendor = $this->approvedVendor();
+        $app = $this->makeApp($vendor);
         [$hook] = $this->makeWebhook($app);
         $d = $this->delivery($hook, 'failed');
 
-        $this->actingAsDeveloper($dev)->post("/developers/applications/{$app->id}/webhooks/{$hook->id}/deliveries/{$d->id}/retry")->assertRedirect();
+        $this->actingAsVendor($vendor)->post("/developers/applications/{$app->id}/webhooks/{$hook->id}/deliveries/{$d->id}/retry")->assertRedirect();
 
         $d->refresh();
         $this->assertSame('pending', $d->status);
@@ -230,13 +230,13 @@ class WebhookManagementTest extends PortalTestCase
     public function test_only_failed_deliveries_of_active_endpoints_are_retryable(): void
     {
         Queue::fake();
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        $vendor = $this->approvedVendor();
+        $app = $this->makeApp($vendor);
         [$hook] = $this->makeWebhook($app);
 
         foreach (['succeeded', 'pending', 'delivering', 'cancelled'] as $status) {
             $d = $this->delivery($hook, $status);
-            $this->actingAsDeveloper($dev)->post("/developers/applications/{$app->id}/webhooks/{$hook->id}/deliveries/{$d->id}/retry")->assertSessionHasErrors('delivery');
+            $this->actingAsVendor($vendor)->post("/developers/applications/{$app->id}/webhooks/{$hook->id}/deliveries/{$d->id}/retry")->assertSessionHasErrors('delivery');
             $this->assertSame($status, $d->fresh()->status);
         }
 
@@ -250,28 +250,28 @@ class WebhookManagementTest extends PortalTestCase
     public function test_a_delivery_of_another_webhook_cannot_be_retried_through_this_one(): void
     {
         Queue::fake();
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
+        $vendor = $this->approvedVendor();
+        $app = $this->makeApp($vendor);
         [$a] = $this->makeWebhook($app);
         [$b] = $this->makeWebhook($app);
         $d = $this->delivery($b, 'failed');
 
-        $this->actingAsDeveloper($dev)->post("/developers/applications/{$app->id}/webhooks/{$a->id}/deliveries/{$d->id}/retry")->assertNotFound();
+        $this->actingAsVendor($vendor)->post("/developers/applications/{$app->id}/webhooks/{$a->id}/deliveries/{$d->id}/retry")->assertNotFound();
         $this->assertSame('failed', $d->fresh()->status);
     }
 
     // ── isolation ───────────────────────────────────────────────────────────
 
-    public function test_another_developer_cannot_read_retry_rotate_or_delete(): void
+    public function test_another_vendor_cannot_read_retry_rotate_or_delete(): void
     {
         Queue::fake();
-        $owner = $this->developer();
-        $intruder = $this->developer();
-        $app = $this->sandboxApp($owner);
+        $owner = $this->approvedVendor();
+        $intruder = $this->approvedVendor();
+        $app = $this->makeApp($owner);
         [$hook, $secret] = $this->makeWebhook($app);
         $d = $this->delivery($hook, 'failed');
 
-        $this->actingAsDeveloper($intruder);
+        $this->actingAsVendor($intruder);
         $base = "/developers/applications/{$app->id}/webhooks/{$hook->id}";
         $this->get($base.'/deliveries')->assertNotFound();
         $this->post($base.'/deliveries/'.$d->id.'/retry')->assertNotFound();
@@ -288,24 +288,78 @@ class WebhookManagementTest extends PortalTestCase
 
     public function test_the_webhook_of_a_sibling_application_is_not_addressable_through_another_application(): void
     {
-        $dev = $this->developer();
-        $a = $this->sandboxApp($dev);
-        $b = $this->sandboxApp($dev);
+        $vendor = $this->approvedVendor();
+        $a = $this->makeApp($vendor);
+        $b = $this->makeApp($vendor);
         [$hookOfB] = $this->makeWebhook($b);
 
-        $this->actingAsDeveloper($dev)->get("/developers/applications/{$a->id}/webhooks/{$hookOfB->id}/deliveries")->assertNotFound();
+        $this->actingAsVendor($vendor)->get("/developers/applications/{$a->id}/webhooks/{$hookOfB->id}/deliveries")->assertNotFound();
         $this->post("/developers/applications/{$a->id}/webhooks/{$hookOfB->id}/rotate-secret")->assertNotFound();
         $this->delete("/developers/applications/{$a->id}/webhooks/{$hookOfB->id}")->assertNotFound();
     }
 
     public function test_webhook_actions_are_audited_without_secrets(): void
     {
-        $dev = $this->developer();
-        $app = $this->sandboxApp($dev);
-        $secret = $this->secretFrom($this->store($dev, $app));
+        $vendor = $this->approvedVendor();
+        $app = $this->makeApp($vendor);
+        $secret = $this->secretFrom($this->store($vendor, $app));
 
         $rows = \App\Models\Developer\DeveloperAuditEvent::all();
         $this->assertTrue($rows->contains('action', 'webhook.created'));
         $this->assertStringNotContainsString($secret, json_encode($rows->toArray()));
+    }
+
+    // ── vendor approval gates every webhook action ──────────────────────────
+
+    public function test_an_unapproved_vendor_cannot_manage_webhooks(): void
+    {
+        Queue::fake();
+        $vendor = $this->approvedVendor();
+        $app = $this->makeApp($vendor);
+        [$hook] = $this->makeWebhook($app);
+        $d = $this->delivery($hook, 'failed');
+        DB::table('vendors')->where('id', $vendor->id)->update(['is_approved' => false]);
+
+        $this->actingAsVendor($vendor->fresh());
+        $base = "/developers/applications/{$app->id}/webhooks";
+        $this->get($base)->assertForbidden();
+        $this->post($base, ['url' => 'https://hooks.example.com/in', 'events' => ['order.created']])->assertForbidden();
+        $this->put("{$base}/{$hook->id}", ['url' => 'https://hooks.example.com/x', 'events' => ['order.created']])->assertForbidden();
+        $this->post("{$base}/{$hook->id}/toggle")->assertForbidden();
+        $this->post("{$base}/{$hook->id}/rotate-secret")->assertForbidden();
+        $this->post("{$base}/{$hook->id}/deliveries/{$d->id}/retry")->assertForbidden();
+        $this->delete("{$base}/{$hook->id}")->assertForbidden();
+
+        $this->assertSame(1, DeveloperWebhook::count());
+        $this->assertSame('failed', $d->fresh()->status);
+        Queue::assertNothingPushed();
+    }
+
+    public function test_the_service_itself_refuses_webhook_changes_for_an_unapproved_vendor(): void
+    {
+        $vendor = $this->approvedVendor();
+        $app = $this->makeApp($vendor);
+        DB::table('vendors')->where('id', $vendor->id)->update(['is_approved' => false]);
+
+        try {
+            app(\App\Services\DeveloperApi\Webhooks\WebhookService::class)
+                ->create($app->fresh(), 'test', 'https://hooks.example.com/in', ['order.created'], null);
+            $this->fail('A webhook was registered for an unapproved vendor.');
+        } catch (\Throwable $e) {
+            $this->assertSame(0, DeveloperWebhook::count());
+        }
+    }
+
+    public function test_each_vendor_sees_only_their_own_endpoints_and_deliveries(): void
+    {
+        $a = $this->approvedVendor();
+        $b = $this->approvedVendor();
+        [$hookA] = $this->makeWebhook($this->makeApp($a), 'https://hooks.example.com/a-only');
+        $appB = $this->makeApp($b);
+        [$hookB] = $this->makeWebhook($appB, 'https://other.example.org/b-only');
+
+        $this->actingAsVendor($b)->get("/developers/applications/{$appB->id}/webhooks")
+            ->assertOk()->assertSee('b-only')->assertDontSee('a-only');
+        $this->get("/developers/applications/{$hookA->application_id}/webhooks")->assertNotFound();
     }
 }
