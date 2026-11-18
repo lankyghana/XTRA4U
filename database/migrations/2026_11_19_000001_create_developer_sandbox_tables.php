@@ -114,6 +114,8 @@ return new class extends Migration
         }
         DB::table('developer_webhooks')->where('environment', 'sandbox')->delete();
 
+        $this->deleteSandboxQuotes();
+
         Schema::table('developer_events', function (Blueprint $table) {
             $table->dropUnique('developer_events_env_order_type_unique');
             $table->unique(['order_id', 'type']);
@@ -127,5 +129,36 @@ return new class extends Migration
         Schema::dropIfExists('developer_sandbox_order_events');
         Schema::dropIfExists('developer_sandbox_payments');
         Schema::dropIfExists('developer_sandbox_orders');
+    }
+
+    /**
+     * api_quotes is SHARED with production (one table, told apart by `environment`), so sandbox quotes are not
+     * removed by dropping the sandbox tables. They are sandbox-only data (a sandbox order's `order_id` points at
+     * a table that no longer exists after this rollback), so they go too; production quotes never do.
+     *
+     * A row is deleted only when TWO independent facts agree it is a sandbox quote:
+     *   1. environment = 'sandbox' — written by QuoteService from the authenticated key, never from input; and
+     *   2. reference = 'sbx_qt_' + a 26-character lowercase ULID — the exact format QuoteService mints for sandbox.
+     * A row that satisfies only one of them (e.g. a production quote, whoever owns it, or an unexpected
+     * 'sandbox' row with a foreign reference) is left untouched. Every delete re-asserts environment = 'sandbox'.
+     */
+    private function deleteSandboxQuotes(): void
+    {
+        $ids = [];
+        DB::table('api_quotes')
+            ->where('environment', 'sandbox')
+            ->orderBy('id')
+            ->select(['id', 'reference'])
+            ->chunkById(500, function ($rows) use (&$ids) {
+                foreach ($rows as $row) {
+                    if (preg_match('/\Asbx_qt_[0-9a-z]{26}\z/', (string) $row->reference) === 1) {
+                        $ids[] = $row->id;
+                    }
+                }
+            });
+
+        foreach (array_chunk($ids, 500) as $chunk) {
+            DB::table('api_quotes')->where('environment', 'sandbox')->whereIn('id', $chunk)->delete();
+        }
     }
 };
