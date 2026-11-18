@@ -42,7 +42,10 @@ Shared tables gain environment awareness: `api_quotes.environment` (already exis
 quotes), `developer_webhooks.environment` (new, default `production`, immutable per endpoint) and the
 `developer_events` unique key becomes `(environment, order_id, type)` so a sandbox and a production order
 may share a number. The migration is reversible: `down()` deletes only sandbox events/deliveries/attempts/
-webhooks and leaves production rows untouched.
+webhooks and sandbox quotes, and leaves production rows untouched. A quote counts as a sandbox quote only
+when **both** `environment = 'sandbox'` and its reference is exactly the minted format (`sbx_qt_` + 26
+lowercase ULID characters) say so; production quotes (`qt_…`), including the same vendor's and application's,
+and any row that matches only one of the two tests are never deleted.
 
 ## Endpoints (all `/api/v1`, test key)
 
