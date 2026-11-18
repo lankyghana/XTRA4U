@@ -43,6 +43,13 @@ class DeveloperApiKey extends Model
 
     public function hasScope(string $scope): bool
     {
+        // Defence in depth: a sandbox-only scope never counts on a key that is not a sandbox key,
+        // whatever its stored scope list says.
+        if (in_array($scope, (array) config('developer_api.sandbox_only_scopes', []), true)
+            && $this->environment !== DeveloperApplication::ENV_SANDBOX) {
+            return false;
+        }
+
         return in_array($scope, (array) $this->scopes, true);
     }
 }

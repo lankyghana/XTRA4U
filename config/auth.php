@@ -48,11 +48,6 @@ return [
             'driver' => 'session',
             'provider' => 'admins',
         ],
-        // External API consumers (/developers). Same session-guard pattern as vendor/admin.
-        'developer' => [
-            'driver' => 'session',
-            'provider' => 'developers',
-        ],
     ],
 
     /*
@@ -84,10 +79,6 @@ return [
         'admins' => [
             'driver' => 'eloquent',
             'model' => App\Models\Admin::class,
-        ],
-        'developers' => [
-            'driver' => 'eloquent',
-            'model' => App\Models\Developer\Developer::class,
         ],
 
         // 'users' => [

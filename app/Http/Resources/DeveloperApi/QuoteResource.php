@@ -12,7 +12,9 @@ class QuoteResource extends JsonResource
     {
         $offer = $this->snapshot['offer'] ?? [];
 
-        return [
+        $sandbox = $this->environment === 'sandbox' ? ['environment' => 'sandbox', 'simulated' => true] : [];
+
+        return $sandbox + [
             'reference' => $this->reference,
             'product_id' => $this->offer_id,
             'product_name' => $offer['name'] ?? null,

@@ -3,7 +3,7 @@
 @section('content')
 <p class="text-sm mb-2"><a class="underline" href="{{ route('developers.webhooks.index', $app) }}">← Webhooks</a></p>
 <h1 class="text-2xl font-semibold mb-1">Deliveries</h1>
-<p class="text-sm text-gray-500 mb-6 break-all">{{ $webhook->url }}</p>
+<p class="text-sm text-gray-500 mb-6 break-all"><span class="rounded-full px-2 py-0.5 text-xs {{ $webhook->environment === 'sandbox' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800' }}">{{ $webhook->environment === 'sandbox' ? 'SANDBOX' : 'LIVE' }}</span> {{ $webhook->url }}</p>
 
 <section class="bg-white rounded-xl border border-gray-200">
     @forelse($deliveries as $d)

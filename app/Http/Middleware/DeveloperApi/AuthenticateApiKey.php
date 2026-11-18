@@ -14,9 +14,8 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * Authenticates the API key and binds the request to its application.
  *
- * Fails closed: any doubt (unknown key, revoked, expired, suspended
- * application or developer, key/application environment disagreement) is a
- * refusal. Failed attempts are rate limited per IP so keys cannot be guessed.
+ * Fails closed: any doubt (unknown key, revoked, expired, inactive application,
+ * owning vendor not approved) is a refusal. Failed attempts are rate limited per IP so keys cannot be guessed.
  */
 class AuthenticateApiKey
 {
@@ -77,21 +76,25 @@ class AuthenticateApiKey
 
         $app = $key->application;
 
-        if (! $app || ! $app->isUsable()) {
+        if (! $app) {
             throw new ApiException(ApiError::APPLICATION_INACTIVE, 'This application is not active.', 403);
         }
 
-        // Sandbox keys always work (they can only reach the sandbox). A PRODUCTION key works only
-        // while the application still holds approved production access: demotion or suspension
-        // of production access kills those keys instantly, regardless of their expiry.
-        $valid = match ($key->environment) {
-            'sandbox' => true,
-            'production' => $app->hasProductionAccess(),
-            default => false,
-        };
+        // THE gate: the vendor that owns this application must be approved RIGHT NOW. It is read from the
+        // vendor row on every request (never cached, never trusted from when the key was issued), so a
+        // suspension, withdrawn approval or deleted vendor stops the very next request.
+        if (! $app->ownerIsApproved()) {
+            throw new ApiException(ApiError::VENDOR_NOT_APPROVED, 'The vendor account that owns this application is not approved.', 403);
+        }
 
-        if (! $valid) {
-            throw new ApiException(ApiError::ENVIRONMENT_MISMATCH, 'This API key is not valid for this application\'s current access level.', 403);
+        if ($app->status !== \App\Models\Developer\DeveloperApplication::STATUS_ACTIVE) {
+            throw new ApiException(ApiError::APPLICATION_INACTIVE, 'This application is not active.', 403);
+        }
+
+        // Both environments are available to an approved vendor's keys; the key decides which one it
+        // reaches. An unknown value (corrupt row) is refused rather than guessed.
+        if (! in_array($key->environment, ['sandbox', 'production'], true)) {
+            throw new ApiException(ApiError::ENVIRONMENT_MISMATCH, 'This API key is not valid.', 403);
         }
     }
 

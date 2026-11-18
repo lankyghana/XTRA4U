@@ -16,6 +16,7 @@ class StoreWebhookRequest extends FormRequest
     {
         return [
             'url' => ['required', 'string', 'max:2048'],
+            'environment' => ['nullable', 'string', Rule::in(['sandbox', 'production'])],
             'description' => ['nullable', 'string', 'max:191'],
             'events' => ['required', 'array', 'min:1'],
             'events.*' => ['string', Rule::in(config('developer_api.webhooks.events'))],

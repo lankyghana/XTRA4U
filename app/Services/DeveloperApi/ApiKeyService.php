@@ -4,6 +4,7 @@ namespace App\Services\DeveloperApi;
 
 use App\Models\Developer\DeveloperApiKey;
 use App\Models\Developer\DeveloperApplication;
+use App\Support\DeveloperApi\ApiError;
 use App\Support\DeveloperApi\ApiException;
 use Carbon\CarbonInterface;
 use Illuminate\Database\QueryException;
@@ -21,6 +22,8 @@ use Illuminate\Support\Str;
  */
 class ApiKeyService
 {
+    public function __construct(private readonly VendorApiAccess $access) {}
+
     public const FORMAT = '/^xt_(test|live)_([a-z0-9]{8})_([A-Za-z0-9]{40})$/';
 
     /**
@@ -30,19 +33,26 @@ class ApiKeyService
     public function create(DeveloperApplication $app, string $name, array $scopes, ?CarbonInterface $expiresAt = null, ?int $rotatedFromId = null, ?string $environment = null): array
     {
         $scopes = $this->validateScopes($scopes);
-        $environment ??= $app->environment;
+        $environment ??= DeveloperApplication::ENV_SANDBOX; // least privilege unless production is asked for
 
-        if ($app->status !== DeveloperApplication::STATUS_ACTIVE) {
-            throw ApiException::unprocessable('APPLICATION_INACTIVE', 'Keys can only be issued for an active application.');
+        // Sandbox-only scopes (sandbox:simulate) can never be granted to a production key.
+        $sandboxOnly = array_values(array_intersect($scopes, (array) config('developer_api.sandbox_only_scopes', [])));
+        if ($environment !== DeveloperApplication::ENV_SANDBOX && $sandboxOnly !== []) {
+            throw ApiException::unprocessable('INVALID_SCOPES', 'Sandbox-only scopes cannot be granted to a production key.', ['sandbox_only' => $sandboxOnly]);
+        }
+
+        // The ONLY gate for credentials of either environment: the owning vendor is approved and the
+        // application is active. Pending, rejected, suspended or deleted vendors can never mint a key.
+        if ($reason = $this->access->denialReason($app)) {
+            throw new ApiException(
+                $app->ownerIsApproved() ? ApiError::APPLICATION_INACTIVE : ApiError::VENDOR_NOT_APPROVED,
+                $reason,
+                403
+            );
         }
 
         if (! in_array($environment, [DeveloperApplication::ENV_SANDBOX, DeveloperApplication::ENV_PRODUCTION], true)) {
             throw ApiException::unprocessable('INVALID_ENVIRONMENT', 'Unknown key environment.');
-        }
-
-        // Production credentials only ever exist for an application an admin has approved.
-        if ($environment === DeveloperApplication::ENV_PRODUCTION && ! $app->hasProductionAccess()) {
-            throw ApiException::unprocessable('PRODUCTION_NOT_APPROVED', 'Production access has not been approved for this application.');
         }
 
         $active = $app->apiKeys()->whereNull('revoked_at')
@@ -129,7 +139,7 @@ class ApiKeyService
             return null;
         }
 
-        $key = DeveloperApiKey::query()->with('application.developer', 'application.plan')->where('prefix', $m[2])->first();
+        $key = DeveloperApiKey::query()->with('application.vendor', 'application.plan')->where('prefix', $m[2])->first();
 
         if (! $key || ! hash_equals((string) $key->key_hash, $this->hash($presented))) {
             return null;

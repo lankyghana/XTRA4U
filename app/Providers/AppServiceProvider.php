@@ -33,6 +33,10 @@ class AppServiceProvider extends ServiceProvider
 		Gate::policy(SupportAttachment::class, SupportAttachmentPolicy::class);
 		Gate::policy(\App\Models\Developer\DeveloperApplication::class, \App\Policies\DeveloperApplicationPolicy::class);
 
+		// Developer API access follows the existing vendor approval: revokes keys and disables
+		// webhooks when a vendor loses approval or is deleted. Does not alter the approval workflow.
+		\App\Models\Vendor::observe(\App\Observers\VendorApiAccessObserver::class);
+
 		// Apply database-driven SMTP configuration (fallback stays in config/services.php).
 		app(DynamicMailConfigurator::class)->apply();
 

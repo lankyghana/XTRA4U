@@ -17,7 +17,7 @@ class WebhookController extends DeveloperController
 
         return view('developers.webhooks.index', [
             'app' => $app,
-            'webhooks' => $app->hasMany(\App\Models\Developer\DeveloperWebhook::class, 'application_id')->latest('id')->get(),
+            'webhooks' => $app->webhooks()->latest('id')->get(),
             'events' => config('developer_api.webhooks.events'),
         ]);
     }
@@ -28,7 +28,7 @@ class WebhookController extends DeveloperController
         $app = $this->application($application);
         $data = $request->validated();
 
-        $created = $this->webhooks->create($app, $this->actor(), $data['url'], $data['events'], $data['description'] ?? null);
+        $created = $this->webhooks->create($app, $this->actor(), $data['url'], $data['events'], $data['description'] ?? null, $data['environment'] ?? 'production');
 
         return $this->noStore(response()->view('developers.webhooks.secret', [
             'app' => $app, 'webhook' => $created['webhook'], 'secret' => $created['secret'], 'verb' => 'created',
@@ -100,6 +100,6 @@ class WebhookController extends DeveloperController
     {
         $app = $this->application($application);
 
-        return $app->hasMany(\App\Models\Developer\DeveloperWebhook::class, 'application_id')->whereKey($webhook)->firstOrFail();
+        return $app->webhooks()->whereKey($webhook)->firstOrFail();
     }
 }

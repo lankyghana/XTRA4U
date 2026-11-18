@@ -15,11 +15,19 @@ class CreateOrderRequest extends FormRequest
 
     public function rules(): array
     {
-        return [
+        $rules = [
             'quote_reference' => ['required', 'string', 'max:40'],
             'payer_phone' => ['nullable', 'string', 'max:20'],
             'payer_network' => ['nullable', 'string', 'in:MTN,TELECEL,AIRTELTIGO'],
         ];
+
+        // Your own reference for the order. Sandbox-only: live requests keep ignoring unknown fields exactly
+        // as before (the environment comes from the API key, never from the request).
+        if ($this->attributes->get('api.environment') === 'sandbox') {
+            $rules['client_reference'] = ['nullable', 'string', 'max:100', 'regex:/^[A-Za-z0-9._:\/ -]+$/'];
+        }
+
+        return $rules;
     }
 
     public function idempotencyKey(): string

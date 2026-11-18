@@ -3,34 +3,39 @@
 namespace App\Http\Controllers\Developers;
 
 use App\Http\Controllers\Controller;
-use App\Models\Developer\Developer;
 use App\Models\Developer\DeveloperApplication;
-use Illuminate\Http\Request;
+use App\Models\Vendor;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 
-/** Shared helpers: who is the developer, and load an application ONLY through their own relationship. */
+/**
+ * Shared helpers. The "developer" is simply the signed-in, approved vendor (existing `vendor` guard).
+ * Applications are loaded ONLY through `vendor_id = <that vendor>`, never by id alone.
+ */
 abstract class DeveloperController extends Controller
 {
-    protected function developer(): Developer
+    protected function vendor(): Vendor
     {
-        /** @var Developer $developer */
-        $developer = Auth::guard('developer')->user();
+        /** @var Vendor $vendor */
+        $vendor = Auth::guard('vendor')->user();
 
-        return $developer;
+        return $vendor;
     }
 
     protected function actor(): string
     {
-        return 'developer:'.$this->developer()->id;
+        return 'vendor:'.$this->vendor()->id;
     }
 
-    /** 404 for anything not owned (never confirms that another developer's application exists). */
+    /** 404 for anything not owned (never confirms that another vendor's application exists). */
     protected function application(int|string $id): DeveloperApplication
     {
-        $app = $this->developer()->applications()->whereKey($id)->firstOrFail();
+        $app = DeveloperApplication::query()
+            ->where('vendor_id', $this->vendor()->id)
+            ->whereKey($id)
+            ->firstOrFail();
 
-        Gate::forUser($this->developer())->authorize('manage', $app);
+        Gate::forUser($this->vendor())->authorize('manage', $app);
 
         return $app;
     }
@@ -42,10 +47,5 @@ abstract class DeveloperController extends Controller
             'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
             'Pragma' => 'no-cache',
         ]);
-    }
-
-    protected function redirectBack(Request $request, string $route, array $params = [])
-    {
-        return redirect()->route($route, $params);
     }
 }

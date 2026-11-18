@@ -19,8 +19,14 @@ class QuoteService
 {
     public function __construct(private readonly PublicCatalogService $catalog) {}
 
-    public function create(DeveloperApplication $app, string $offerId, string $recipientPhone): ApiQuote
+    /**
+     * @param  string  $environment  taken from the authenticated API key by the caller, never from request input.
+     *                               A quote is stored with it and can only ever be read back in that environment.
+     */
+    public function create(DeveloperApplication $app, string $offerId, string $recipientPhone, string $environment = 'production'): ApiQuote
     {
+        $environment = self::assertEnvironment($environment);
+
         $phone = GhanaPhoneNumber::toLocal($recipientPhone);
         if (! GhanaPhoneNumber::isValidLocal($phone)) {
             throw ApiException::unprocessable(ApiError::VALIDATION_FAILED, 'The recipient phone number is not a valid Ghana mobile number.', [
@@ -42,9 +48,9 @@ class QuoteService
         }
 
         return ApiQuote::create([
-            'reference' => 'qt_'.Str::lower((string) Str::ulid()),
+            'reference' => ($environment === 'sandbox' ? 'sbx_qt_' : 'qt_').Str::lower((string) Str::ulid()),
             'application_id' => $app->id,
-            'environment' => $app->environment,
+            'environment' => $environment,
             'offer_id' => $offerId,
             'product_id' => $resolved['product']->id,
             'reseller_product_id' => $resolved['reseller']?->id,
@@ -58,13 +64,22 @@ class QuoteService
         ]);
     }
 
-    /** A quote is only ever visible to the application that created it. */
-    public function findForApplication(DeveloperApplication $app, string $reference): ?ApiQuote
+    /** A quote is only ever visible to the application that created it, in the environment it was created in. */
+    public function findForApplication(DeveloperApplication $app, string $reference, string $environment = 'production'): ?ApiQuote
     {
         return ApiQuote::query()
             ->where('reference', $reference)
             ->where('application_id', $app->id)
-            ->where('environment', $app->environment)
+            ->where('environment', self::assertEnvironment($environment))
             ->first();
+    }
+
+    private static function assertEnvironment(string $environment): string
+    {
+        if (! in_array($environment, ['sandbox', 'production'], true)) {
+            throw new ApiException(ApiError::ENVIRONMENT_MISMATCH, 'The API environment could not be determined for this request.', 403);
+        }
+
+        return $environment;
     }
 }

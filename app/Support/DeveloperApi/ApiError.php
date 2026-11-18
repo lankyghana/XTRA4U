@@ -13,6 +13,8 @@ final class ApiError
 
     public const APPLICATION_INACTIVE = 'APPLICATION_INACTIVE';
 
+    public const VENDOR_NOT_APPROVED = 'VENDOR_NOT_APPROVED';
+
     public const ENVIRONMENT_MISMATCH = 'ENVIRONMENT_MISMATCH';
 
     public const MISSING_SCOPE = 'MISSING_SCOPE';
@@ -52,4 +54,8 @@ final class ApiError
     public const ORDER_NOT_PAYABLE = 'ORDER_NOT_PAYABLE';
 
     public const SANDBOX_UNAVAILABLE = 'SANDBOX_UNAVAILABLE';
+
+    public const PAYMENT_NOT_INITIATED = 'PAYMENT_NOT_INITIATED';
+
+    public const SIMULATION_NOT_ALLOWED = 'SIMULATION_NOT_ALLOWED';
 }

@@ -7,7 +7,16 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use LogicException;
 
+/**
+ * An API application belongs to exactly ONE XTRA4U vendor (`vendor_id`) for its whole life.
+ * It can only ever see and sell that vendor's own catalog, and it works only while that vendor
+ * account is approved. There are no marketplace-wide applications.
+ *
+ * Legacy columns kept for data preservation but no longer read: developer_id (the retired
+ * separate developer account), production_*, vendor_link_*.
+ */
 class DeveloperApplication extends Model
 {
     use SoftDeletes;
@@ -18,39 +27,35 @@ class DeveloperApplication extends Model
 
     public const STATUS_ACTIVE = 'active';
 
-    public const STATUS_PENDING_APPROVAL = 'pending_approval';
-
     public const STATUS_SUSPENDED = 'suspended';
 
     public const STATUS_REVOKED = 'revoked';
 
-    public const VENDOR_NONE = 'none';
-
-    public const VENDOR_PENDING = 'pending';
-
-    public const VENDOR_APPROVED = 'approved';
-
     protected $table = 'developer_applications';
 
     /**
-     * environment, status, vendor link and limits are deliberately NOT mass
-     * assignable: they change only through explicit, authorised service calls
-     * (admin approval, vendor consent), never from request input.
+     * Only descriptive fields are mass assignable. The owner (vendor_id), status, plan and limits are
+     * set explicitly by services from authenticated context, never from request input.
      */
-    protected $fillable = ['developer_id', 'name', 'description'];
+    protected $fillable = ['name', 'description'];
 
     protected $casts = [
-        'production_approved_at' => 'datetime',
-        'production_requested_at' => 'datetime',
-        'production_reviewed_at' => 'datetime',
-        'vendor_link_requested_at' => 'datetime',
-        'vendor_link_reviewed_at' => 'datetime',
         'suspended_at' => 'datetime',
     ];
 
-    public function developer(): BelongsTo
+    protected static function booted(): void
     {
-        return $this->belongsTo(Developer::class, 'developer_id');
+        static::saving(function (DeveloperApplication $app): void {
+            // Ownership is mandatory at creation...
+            if (! $app->exists && $app->vendor_id === null) {
+                throw new LogicException('An API application must belong to a vendor.');
+            }
+
+            // ...and can never be changed afterwards (no transfer, no re-assignment, no adoption).
+            if ($app->exists && $app->isDirty('vendor_id')) {
+                throw new LogicException('The vendor that owns an API application cannot be changed.');
+            }
+        });
     }
 
     public function plan(): BelongsTo
@@ -68,50 +73,26 @@ class DeveloperApplication extends Model
         return $this->hasMany(DeveloperApiKey::class, 'application_id');
     }
 
-    public const PRODUCTION_NONE = 'none';
-
-    public const PRODUCTION_REQUESTED = 'requested';
-
-    public const PRODUCTION_APPROVED = 'approved';
-
-    public const PRODUCTION_REJECTED = 'rejected';
-
-    public const VENDOR_REJECTED = 'rejected';
-
-    /** Production credentials may exist/work only when an admin approved BOTH the status and the environment. */
-    public function hasProductionAccess(): bool
+    public function webhooks(): HasMany
     {
-        return $this->environment === self::ENV_PRODUCTION
-            && $this->production_status === self::PRODUCTION_APPROVED
-            && $this->status === self::STATUS_ACTIVE;
+        return $this->hasMany(DeveloperWebhook::class, 'application_id');
     }
 
-    public function isProduction(): bool
+    /** The owning vendor exists and is currently approved. Read live from the vendor row. */
+    public function ownerIsApproved(): bool
     {
-        return $this->environment === self::ENV_PRODUCTION;
-    }
+        $vendor = $this->vendor;
 
-    /** May this application call the API at all right now? */
-    public function isUsable(): bool
-    {
-        return $this->status === self::STATUS_ACTIVE
-            && $this->developer
-            && $this->developer->isActive();
+        return $vendor !== null && $vendor->is_approved === true;
     }
 
     /**
-     * A vendor-bound application is restricted to ONE vendor's offers, and only
-     * once that link has been approved. Until then it must see nothing rather
-     * than silently fall back to the whole marketplace.
+     * May this application be used right now, by the API or the portal?
+     * Needs BOTH an active application and an approved owner. Fails closed.
      */
-    public function isVendorBound(): bool
+    public function isUsable(): bool
     {
-        return $this->vendor_id !== null;
-    }
-
-    public function vendorScopeIsActive(): bool
-    {
-        return $this->isVendorBound() && $this->vendor_link_status === self::VENDOR_APPROVED;
+        return $this->status === self::STATUS_ACTIVE && $this->ownerIsApproved();
     }
 
     public function effectiveRateLimitPerMinute(): int

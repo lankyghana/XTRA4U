@@ -7,6 +7,7 @@ use App\Models\Developer\DeveloperApplication;
 use App\Models\Developer\DeveloperWebhook;
 use App\Models\Developer\DeveloperWebhookDelivery;
 use App\Services\DeveloperApi\DeveloperAuditLogger;
+use App\Services\DeveloperApi\VendorApiAccess;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -20,14 +21,23 @@ class WebhookService
     public function __construct(
         private readonly WebhookUrlValidator $validator,
         private readonly DeveloperAuditLogger $audit,
+        private readonly VendorApiAccess $access,
     ) {}
 
     /** @return array{webhook: DeveloperWebhook, secret: string} */
-    public function create(DeveloperApplication $app, string $actor, string $url, array $events, ?string $description): array
+    public function create(DeveloperApplication $app, string $actor, string $url, array $events, ?string $description, string $environment = DeveloperWebhook::ENV_PRODUCTION): array
     {
+        $this->assertCanManage($app);
+
+        // An endpoint belongs to exactly ONE environment for its whole life: sandbox events can only ever be
+        // delivered to sandbox endpoints and production events only to production endpoints.
+        if (! in_array($environment, [DeveloperWebhook::ENV_SANDBOX, DeveloperWebhook::ENV_PRODUCTION], true)) {
+            throw ValidationException::withMessages(['environment' => 'Choose sandbox or production.']);
+        }
+
         $max = (int) config('developer_api.webhooks.max_per_application', 5);
-        if (DeveloperWebhook::query()->where('application_id', $app->id)->count() >= $max) {
-            throw ValidationException::withMessages(['url' => "An application can have at most {$max} webhook endpoints."]);
+        if (DeveloperWebhook::query()->where('application_id', $app->id)->where('environment', $environment)->count() >= $max) {
+            throw ValidationException::withMessages(['url' => "An application can have at most {$max} {$environment} webhook endpoints."]);
         }
 
         $this->assertSafe($url);
@@ -37,6 +47,7 @@ class WebhookService
         $webhook = new DeveloperWebhook;
         $webhook->forceFill([
             'application_id' => $app->id,
+            'environment' => $environment,
             'url' => trim($url),
             'description' => $description,
             'events' => $events,
@@ -45,13 +56,15 @@ class WebhookService
             'is_active' => true,
         ])->save();
 
-        $this->audit->log($actor, 'webhook.created', $app->id, ['webhook_id' => $webhook->id, 'host' => $webhook->displayHost()]);
+        $this->audit->log($actor, 'webhook.created', $app->id, ['webhook_id' => $webhook->id, 'host' => $webhook->displayHost(), 'environment' => $environment]);
 
         return ['webhook' => $webhook, 'secret' => $secret];
     }
 
     public function update(DeveloperWebhook $webhook, string $actor, array $data): DeveloperWebhook
     {
+        $this->assertCanManage($webhook->application);
+
         if (isset($data['url']) && trim($data['url']) !== $webhook->url) {
             $this->assertSafe($data['url']);
             $webhook->url = trim($data['url']);
@@ -71,8 +84,9 @@ class WebhookService
 
     public function setActive(DeveloperWebhook $webhook, string $actor, bool $active): void
     {
-        // Re-enabling re-checks the destination: it may have changed since it was disabled.
+        // Re-enabling re-checks the owner's approval and the destination (it may have changed since).
         if ($active) {
+            $this->assertCanManage($webhook->application);
             $this->assertSafe($webhook->url);
         }
 
@@ -83,6 +97,8 @@ class WebhookService
     /** @return string the NEW secret, shown once. The old secret stops being used immediately. */
     public function rotateSecret(DeveloperWebhook $webhook, string $actor): string
     {
+        $this->assertCanManage($webhook->application);
+
         $secret = WebhookSigner::generateSecret();
         $webhook->forceFill(['secret' => $secret, 'secret_rotated_at' => now()])->save();
         $this->audit->log($actor, 'webhook.secret_rotated', $webhook->application_id, ['webhook_id' => $webhook->id]);
@@ -109,6 +125,7 @@ class WebhookService
         if ((int) $delivery->webhook_id !== (int) $webhook->id) {
             abort(404);
         }
+        $this->assertCanManage($webhook->application);
         if (! $webhook->is_active || $delivery->status !== DeveloperWebhookDelivery::FAILED) {
             throw ValidationException::withMessages(['delivery' => 'Only failed deliveries of an active endpoint can be retried.']);
         }
@@ -126,6 +143,16 @@ class WebhookService
         if ($updated === 1) {
             $this->audit->log($actor, 'webhook.delivery_retried', $webhook->application_id, ['delivery_id' => $delivery->id]);
             DeliverDeveloperWebhook::dispatch($delivery->id);
+        }
+    }
+
+    /** Webhook management is a protected developer action: the owning vendor must be approved. */
+    private function assertCanManage(?DeveloperApplication $app): void
+    {
+        $reason = $app ? $this->access->denialReason($app) : 'This application no longer exists.';
+
+        if ($reason !== null) {
+            throw ValidationException::withMessages(['url' => $reason]);
         }
     }
 

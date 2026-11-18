@@ -147,9 +147,9 @@
         ],
         [
             'key' => 'developer-access',
-            'label' => 'Developer Access',
-            'href' => route('vendor.developer-access.index'),
-            'matches' => ['vendor.developer-access.*'],
+            'label' => 'Developer API',
+            'href' => route('developers.dashboard'),
+            'matches' => ['developers.*'],
         ],
         [
             'key' => 'settings',

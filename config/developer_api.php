@@ -13,7 +13,12 @@ return [
         'payments:initiate' => 'Initiate payment for an order',
         'webhooks:manage' => 'Manage webhook endpoints',
         'ai:chat' => 'Use the XTRA4U AI assistant',
+        'sandbox:simulate' => 'Simulate order/payment outcomes in the sandbox (test keys only)',
     ],
+
+    // Scopes that exist ONLY in the sandbox. ApiKeyService refuses to put them on a production key, and
+    // DeveloperApiKey::hasScope() ignores them on any non-sandbox key even if one were written to the DB by hand.
+    'sandbox_only_scopes' => ['sandbox:simulate'],
 
     // Product categories (see config/storefront.php) the public API exposes.
     // Result checkers, AFA registration and utility bills have their own flows and
@@ -38,7 +43,7 @@ return [
     ],
 
     'applications' => [
-        'max_per_developer' => 10,
+        'max_per_vendor' => 10,
     ],
 
     'webhooks' => [
@@ -59,6 +64,15 @@ return [
         // The sweeper watches orders created within this many days (a failed order may still be paid later).
         'detect_window_days' => 14,
         'sweep_batch' => 200,
+    ],
+
+    // Sandbox (xt_test_ keys). Everything here is simulated and stored in dedicated developer_sandbox_* tables.
+    'sandbox' => [
+        // Automatic cleanup is OFF unless a retention is configured explicitly (null = keep everything).
+        'retention_days' => env('DEVELOPER_API_SANDBOX_RETENTION_DAYS') ? (int) env('DEVELOPER_API_SANDBOX_RETENTION_DAYS') : null,
+        // Safety floor: cleanup never deletes anything younger than this, whatever is configured or passed.
+        'min_retention_days' => 7,
+        'prune_batch' => 500,
     ],
 
     // Throttle for live gateway verification triggered by order-status reads.

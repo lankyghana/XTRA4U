@@ -13,7 +13,7 @@
                 <span class="text-xs rounded-full {{ $a->status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }} px-2 py-0.5">{{ $a->status }}</span>
             </div>
             <div class="text-xs text-gray-500 mt-1">
-                {{ $a->vendor_id ? 'Vendor-bound' : 'Marketplace' }} · {{ $a->environment }} · production access: {{ $a->production_status }} · {{ $a->active_keys_count }} active key(s)
+                {{ $a->active_keys_count }} active key(s) · created {{ $a->created_at->toDateString() }}
             </div>
         </a>
     @empty

@@ -5,10 +5,12 @@
 
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
     <div class="bg-white rounded-xl border border-gray-200 p-4"><div class="text-xs text-gray-500">Applications</div><div class="text-2xl font-semibold" data-stat="applications">{{ $d['application_count'] }}</div></div>
-    <div class="bg-white rounded-xl border border-gray-200 p-4"><div class="text-xs text-gray-500">Active API keys</div><div class="text-2xl font-semibold" data-stat="active-keys">{{ $d['active_keys'] }}</div></div>
-    <div class="bg-white rounded-xl border border-gray-200 p-4"><div class="text-xs text-gray-500">Requests (24h)</div><div class="text-2xl font-semibold" data-stat="requests-24h">{{ number_format($d['usage']['24h']['total']) }}</div></div>
+    <div class="bg-white rounded-xl border border-gray-200 p-4"><div class="text-xs text-gray-500">Active API keys</div><div class="text-2xl font-semibold" data-stat="active-keys">{{ $d['active_keys'] }}</div><div class="text-xs text-gray-500 mt-1">{{ $d['active_keys_by_environment']['production'] }} live &middot; {{ $d['active_keys_by_environment']['sandbox'] }} test</div></div>
+    <div class="bg-white rounded-xl border border-gray-200 p-4"><div class="text-xs text-gray-500">Requests (24h)</div><div class="text-2xl font-semibold" data-stat="requests-24h">{{ number_format($d['usage']['24h']['total']) }}</div><div class="text-xs text-gray-500 mt-1">{{ number_format($d['usage_by_environment']['production']) }} live &middot; {{ number_format($d['usage_by_environment']['sandbox']) }} test</div></div>
     <div class="bg-white rounded-xl border border-gray-200 p-4"><div class="text-xs text-gray-500">Failed (24h)</div><div class="text-2xl font-semibold" data-stat="failed-24h">{{ number_format($d['usage']['24h']['failed']) }}</div></div>
 </div>
+
+@include('developers.partials.sandbox-activity', ['sandbox' => $d['sandbox']])
 
 <section class="bg-white rounded-xl border border-gray-200 mb-8">
     <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
@@ -19,9 +21,6 @@
         <a href="{{ route('developers.applications.show', $a) }}" class="flex items-center justify-between px-4 py-3 border-b border-gray-100 hover:bg-gray-50">
             <span class="font-medium">{{ $a->name }}</span>
             <span class="text-xs flex gap-2">
-                <span class="rounded-full bg-gray-100 px-2 py-0.5">{{ $a->environment }}</span>
-                <span class="rounded-full bg-gray-100 px-2 py-0.5">production: {{ $a->production_status }}</span>
-                @if($a->vendor_id)<span class="rounded-full bg-gray-100 px-2 py-0.5">vendor: {{ $a->vendor_link_status }}</span>@endif
                 <span class="rounded-full {{ $a->status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }} px-2 py-0.5">{{ $a->status }}</span>
             </span>
         </a>
@@ -72,7 +71,7 @@
 </div>
 
 <section class="bg-white rounded-xl border border-gray-200">
-    <h2 class="font-semibold px-4 py-3 border-b border-gray-200">Webhooks</h2>
+    <h2 class="font-semibold px-4 py-3 border-b border-gray-200">Webhooks <span class="text-xs font-normal text-gray-500">(live endpoints; sandbox deliveries are shown under Sandbox activity)</span></h2>
     <div class="px-4 py-3 text-sm">
         {{ $d['webhooks']['active_endpoints'] }} active of {{ $d['webhooks']['endpoints'] }} endpoints ·
         last 7 days: <b>{{ $d['webhooks']['deliveries_7d']['succeeded'] }}</b> delivered,

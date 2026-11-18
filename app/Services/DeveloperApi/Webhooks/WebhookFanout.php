@@ -16,8 +16,9 @@ use Illuminate\Support\Str;
  * marked fanned-out in the same transaction that creates its deliveries, so a
  * crash simply causes a clean re-run.
  *
- * Isolation: webhooks are selected by the event's own application_id, so an
- * event can never be routed to another application's endpoint.
+ * Isolation: webhooks are selected by the event's own application_id AND environment, so an
+ * event can never be routed to another application's endpoint, and a sandbox event can never reach a
+ * production endpoint (or the reverse).
  */
 class WebhookFanout
 {
@@ -45,6 +46,7 @@ class WebhookFanout
         DB::transaction(function () use ($event, &$created) {
             $webhooks = DeveloperWebhook::query()
                 ->where('application_id', $event->application_id)
+                ->where('environment', $event->environment)
                 ->where('is_active', true)
                 ->get()
                 ->filter(fn (DeveloperWebhook $w) => $w->subscribesTo($event->type));

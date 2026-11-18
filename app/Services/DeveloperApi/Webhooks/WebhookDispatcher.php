@@ -46,12 +46,21 @@ class WebhookDispatcher
             return; // not due, already succeeded/failed, or another worker has it
         }
 
-        $delivery = DeveloperWebhookDelivery::query()->with(['event', 'webhook'])->findOrFail($deliveryId);
+        $delivery = DeveloperWebhookDelivery::query()->with(['event', 'webhook.application.vendor'])->findOrFail($deliveryId);
         $webhook = $delivery->webhook;
 
-        // A deleted or disabled endpoint never receives anything.
-        if (! $webhook || $webhook->trashed() || ! $webhook->is_active) {
+        // A deleted or disabled endpoint never receives anything, and neither does one whose owning
+        // vendor is no longer approved (read live: suspension stops delivery before any cleanup runs).
+        if (! $webhook || $webhook->trashed() || ! $webhook->is_active || ! $webhook->application?->isUsable()) {
             $delivery->forceFill(['status' => DeveloperWebhookDelivery::CANCELLED, 'claimed_at' => null])->save();
+
+            return;
+        }
+
+        // Defence in depth: fan-out already matches environments, but a sandbox event must NEVER be sent to a
+        // production endpoint (or the reverse) even if a delivery row were ever created wrongly.
+        if ($webhook->environment !== $delivery->event->environment) {
+            $delivery->forceFill(['status' => DeveloperWebhookDelivery::CANCELLED, 'claimed_at' => null, 'last_error' => 'environment_mismatch'])->save();
 
             return;
         }
@@ -71,6 +80,7 @@ class WebhookDispatcher
                 'X-XTRA4U-Event-Type' => $delivery->event->type,
                 'X-XTRA4U-Delivery-Id' => $delivery->delivery_uid,
                 'X-XTRA4U-Delivery-Attempt' => (string) $attemptNo,
+            ] + ($delivery->event->environment === 'sandbox' ? ['X-XTRA4U-Environment' => 'sandbox'] : []) + [
                 WebhookSigner::HEADER => WebhookSigner::header($webhook->secret, $timestamp, $body),
             ], $body);
         } catch (UnsafeWebhookDestination $e) {
@@ -136,11 +146,15 @@ class WebhookDispatcher
     {
         $event = $delivery->event;
 
+        // Production bodies are unchanged byte-for-byte. Sandbox events additionally declare themselves.
+        $sandbox = $event->environment === 'sandbox' ? ['environment' => 'sandbox', 'simulated' => true] : [];
+
         return json_encode([
             'id' => $event->event_id,
             'type' => $event->type,
             'api_version' => config('developer_api.version'),
             'created' => $event->occurred_at->getTimestamp(),
+        ] + $sandbox + [
             'data' => $event->payload,
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
     }

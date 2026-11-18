@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\DeveloperApi\VendorApiAccess;
 use App\Services\DeveloperApi\Webhooks\OrderEventDetector;
 use App\Services\DeveloperApi\Webhooks\WebhookDispatcher;
 use App\Services\DeveloperApi\Webhooks\WebhookFanout;
@@ -18,13 +19,16 @@ class DeveloperWebhooksRun extends Command
 
     protected $description = 'Detect developer API order events, fan them out to webhooks and dispatch due deliveries';
 
-    public function handle(OrderEventDetector $detector, WebhookFanout $fanout, WebhookDispatcher $dispatcher): int
+    public function handle(OrderEventDetector $detector, WebhookFanout $fanout, WebhookDispatcher $dispatcher, VendorApiAccess $access): int
     {
+        // First: make sure no vendor that lost approval (by any route) still holds live keys/webhooks.
+        $withdrawn = $access->reconcile();
+
         $events = $detector->sweep();
         $deliveries = $fanout->run();
         $queued = $dispatcher->dispatchDue();
 
-        $this->info("events={$events} deliveries_created={$deliveries} dispatched={$queued}");
+        $this->info("events={$events} deliveries_created={$deliveries} dispatched={$queued} vendors_withdrawn={$withdrawn}");
 
         return self::SUCCESS;
     }

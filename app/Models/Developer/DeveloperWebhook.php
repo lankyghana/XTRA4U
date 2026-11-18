@@ -11,6 +11,10 @@ class DeveloperWebhook extends Model
 {
     use SoftDeletes;
 
+    public const ENV_SANDBOX = 'sandbox';
+
+    public const ENV_PRODUCTION = 'production';
+
     protected $table = 'developer_webhooks';
 
     protected $guarded = [];

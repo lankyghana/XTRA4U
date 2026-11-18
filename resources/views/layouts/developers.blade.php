@@ -10,21 +10,25 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="min-h-full text-gray-900">
-@php($dev = auth('developer')->user())
+@php
+    $vendor = auth('vendor')->user();
+    $approved = $vendor && $vendor->is_approved === true;
+@endphp
 <header class="bg-white border-b border-gray-200">
     <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
         <a href="{{ route('developers.landing') }}" class="font-semibold text-lg">XTRA4U <span class="text-gray-500 font-normal">Developers</span></a>
-        <nav class="flex items-center gap-4 text-sm">
-            @if($dev)
+        <nav class="flex items-center gap-4 text-sm flex-wrap">
+            @if($approved)
                 <a href="{{ route('developers.dashboard') }}" class="hover:underline">Dashboard</a>
                 <a href="{{ route('developers.applications.index') }}" class="hover:underline">Applications</a>
-                <span class="text-gray-400">{{ $dev->email }}</span>
-                <form method="POST" action="{{ route('developers.logout') }}">@csrf
+                <a href="{{ route('vendor.dashboard') }}" class="hover:underline">Vendor dashboard</a>
+                <span class="text-gray-400">{{ $vendor->name }}</span>
+                <form method="POST" action="{{ route('vendor.logout') }}">@csrf
                     <button type="submit" class="text-gray-700 hover:underline">Sign out</button>
                 </form>
             @else
-                <a href="{{ route('developers.login') }}" class="hover:underline">Sign in</a>
-                <a href="{{ route('developers.register') }}" class="rounded-lg bg-[#00942C] text-white px-3 py-1.5">Create account</a>
+                <a href="{{ route('vendor.login.form') }}" class="hover:underline">Vendor sign in</a>
+                <a href="{{ route('vendor.request.form') }}" class="rounded-lg bg-[#00942C] text-white px-3 py-1.5">Become a vendor</a>
             @endif
         </nav>
     </div>

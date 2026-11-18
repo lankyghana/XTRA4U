@@ -21,7 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 ->name('developer-api.')
                 ->group(base_path('routes/api_v1.php'));
 
-            // Developer portal (/developers): a normal web (session + CSRF) surface with its own guard.
+            // Developer portal (/developers): a normal web (session + CSRF) surface. It reuses the existing `vendor` guard.
             \Illuminate\Support\Facades\Route::middleware('web')
                 ->group(base_path('routes/developers.php'));
         },
@@ -60,12 +60,13 @@ return Application::configure(basePath: dirname(__DIR__))
             'ussd.gwosevo' => \App\Http\Middleware\EnsureGwoSevoGatewayRequest::class,
             'cms.admin' => \App\Http\Middleware\EnsureCmsAdmin::class,
             // Developer API (api/v1)
-            'developer.auth' => \App\Http\Middleware\DeveloperApi\EnsureDeveloperAuthenticated::class,
+            'developer.access' => \App\Http\Middleware\DeveloperApi\EnsureVendorDeveloperAccess::class,
             'api.context' => \App\Http\Middleware\DeveloperApi\ApiRequestContext::class,
             'api.key' => \App\Http\Middleware\DeveloperApi\AuthenticateApiKey::class,
             'api.throttle' => \App\Http\Middleware\DeveloperApi\ThrottleApiApplication::class,
             'api.scope' => \App\Http\Middleware\DeveloperApi\RequireApiScope::class,
-            'api.production' => \App\Http\Middleware\DeveloperApi\RequireProductionEnvironment::class,
+            'api.env' => \App\Http\Middleware\DeveloperApi\RequireKnownEnvironment::class,
+            'api.sandbox' => \App\Http\Middleware\DeveloperApi\RequireSandboxEnvironment::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

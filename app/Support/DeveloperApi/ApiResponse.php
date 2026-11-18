@@ -21,8 +21,14 @@ final class ApiResponse
             'success' => true,
             'message' => $message,
             'data' => $data ?? new \stdClass,
-            'meta' => ['request_id' => self::requestId()] + $meta,
+            'meta' => ['request_id' => self::requestId()] + self::environmentMeta() + $meta,
         ], $status, $headers);
+    }
+
+    /** Sandbox responses say so in the envelope; production responses are unchanged. */
+    private static function environmentMeta(): array
+    {
+        return request()->attributes->get('api.environment') === 'sandbox' ? ['environment' => 'sandbox'] : [];
     }
 
     public static function error(string $code, string $message, int $status, array $details = [], array $headers = []): JsonResponse
@@ -36,7 +42,7 @@ final class ApiResponse
                 'code' => $code,
                 'details' => $details === [] ? new \stdClass : $details,
             ],
-            'meta' => ['request_id' => self::requestId()],
+            'meta' => ['request_id' => self::requestId()] + self::environmentMeta(),
         ], $status, $headers);
     }
 }

@@ -150,9 +150,13 @@ class PublicCatalogService
 
     // ---------------------------------------------------------------- queries
 
+    /**
+     * Fail closed: an application with no owner, or whose owner is not approved, sees nothing.
+     * There is no marketplace-wide view: every query below is constrained to the owning vendor.
+     */
     private function catalogIsBlocked(DeveloperApplication $app): bool
     {
-        return $app->isVendorBound() && ! $app->vendorScopeIsActive();
+        return $app->vendor_id === null || ! $app->ownerIsApproved();
     }
 
     /** @return Builder<Product> */
@@ -161,11 +165,8 @@ class PublicCatalogService
         $q = Product::query()
             ->where('is_active', true)
             ->whereHas('vendor', fn ($v) => $v->where('is_approved', true))
-            ->with('vendor:id,name,vendor_code');
-
-        if ($app->vendorScopeIsActive()) {
-            $q->where('vendor_id', $app->vendor_id);
-        }
+            ->with('vendor:id,name,vendor_code')
+            ->where('vendor_id', $app->vendor_id);
 
         return $q;
     }
@@ -177,11 +178,8 @@ class PublicCatalogService
             ->where('is_active', true)
             ->whereHas('product', fn ($p) => $p->where('is_active', true)->where('is_resellable', true))
             ->whereHas('resellerVendor', fn ($v) => $v->where('is_approved', true))
-            ->with(['product', 'resellerVendor:id,name,vendor_code']);
-
-        if ($app->vendorScopeIsActive()) {
-            $q->where('reseller_vendor_id', $app->vendor_id);
-        }
+            ->with(['product', 'resellerVendor:id,name,vendor_code'])
+            ->where('reseller_vendor_id', $app->vendor_id);
 
         return $q;
     }

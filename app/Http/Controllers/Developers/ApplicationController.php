@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Developers;
 use App\Http\Requests\Developers\StoreApplicationRequest;
 use App\Http\Requests\Developers\UpdateApplicationRequest;
 use App\Models\Developer\DeveloperApiRequest;
+use App\Models\Developer\DeveloperApplication;
 use App\Services\DeveloperApi\DeveloperApplicationService;
 
 class ApplicationController extends DeveloperController
@@ -14,7 +15,7 @@ class ApplicationController extends DeveloperController
     public function index()
     {
         return view('developers.applications.index', [
-            'applications' => $this->developer()->applications()->withCount([
+            'applications' => DeveloperApplication::query()->where('vendor_id', $this->vendor()->id)->withCount([
                 'apiKeys as active_keys_count' => fn ($q) => $q->whereNull('revoked_at')->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now())),
             ])->latest()->get(),
         ]);
@@ -27,9 +28,9 @@ class ApplicationController extends DeveloperController
 
     public function store(StoreApplicationRequest $request)
     {
-        $app = $this->apps->create($this->developer(), $request->validated());
+        $app = $this->apps->create($this->vendor(), $request->validated());
 
-        return redirect()->route('developers.applications.show', $app)->with('status', 'Application created. It starts in the sandbox.');
+        return redirect()->route('developers.applications.show', $app)->with('status', 'Application created. It belongs to your store and can only use your own products.');
     }
 
     public function show(int $application)
@@ -41,24 +42,28 @@ class ApplicationController extends DeveloperController
             'app' => $app,
             'keys' => $app->apiKeys()->latest('id')->get(),
             'scopes' => config('developer_api.scopes'),
+            'webhookCount' => $app->webhooks()->count(),
+            'sandbox' => app(\App\Services\DeveloperApi\DeveloperDashboardService::class)->sandbox([$app->id]),
             'recentRequests' => DeveloperApiRequest::query()->where('application_id', $app->id)->latest('id')->limit(15)->get(),
+        ]);
+    }
+
+    public function requests(int $application)
+    {
+        $app = $this->application($application);
+
+        return view('developers.applications.requests', [
+            'app' => $app,
+            'requests' => DeveloperApiRequest::query()->where('application_id', $app->id)->latest('id')->paginate(50),
         ]);
     }
 
     public function update(UpdateApplicationRequest $request, int $application)
     {
         $app = $this->application($application);
-        $this->apps->update($app, $this->developer(), $request->validated());
+        $this->apps->update($app, $this->vendor(), $request->validated());
 
         return back()->with('status', 'Application updated.');
-    }
-
-    public function requestProduction(int $application)
-    {
-        $app = $this->application($application);
-        $this->apps->requestProduction($app, $this->developer());
-
-        return back()->with('status', 'Production access requested. An administrator will review it.');
     }
 
     public function destroy(int $application)

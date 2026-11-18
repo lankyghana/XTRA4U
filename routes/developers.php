@@ -2,28 +2,22 @@
 
 use App\Http\Controllers\Developers\ApiKeyController;
 use App\Http\Controllers\Developers\ApplicationController;
-use App\Http\Controllers\Developers\AuthController;
 use App\Http\Controllers\Developers\DashboardController;
+use App\Http\Controllers\Developers\LandingController;
 use App\Http\Controllers\Developers\WebhookController;
 use Illuminate\Support\Facades\Route;
 
 /*
-| Developer portal. Loaded in the `web` middleware group (session, CSRF, CSP) from bootstrap/app.php.
-| Own `developer` guard — a separate realm from customers, vendors and admins.
+| Developer Portal. Loaded in the `web` middleware group (session, CSRF, CSP) from bootstrap/app.php.
+|
+| There is NO developer registration or login. The portal recognises the vendor signed in through the
+| platform's existing `vendor` guard (existing registration, existing login, existing admin approval).
+| `/developers` itself is a public information page; everything else needs an APPROVED vendor.
 */
 Route::prefix('developers')->name('developers.')->group(function () {
-    Route::get('/', [AuthController::class, 'landing'])->name('landing');
+    Route::get('/', LandingController::class)->name('landing');
 
-    Route::middleware('guest:developer')->group(function () {
-        Route::get('register', [AuthController::class, 'showRegister'])->name('register');
-        Route::post('register', [AuthController::class, 'register'])->middleware('throttle:5,1')->name('register.submit');
-        Route::get('login', [AuthController::class, 'showLogin'])->name('login');
-        Route::post('login', [AuthController::class, 'login'])->middleware('throttle:10,1')->name('login.submit');
-    });
-
-    Route::post('logout', [AuthController::class, 'logout'])->name('logout');
-
-    Route::middleware('developer.auth')->group(function () {
+    Route::middleware('developer.access')->group(function () {
         Route::get('dashboard', DashboardController::class)->name('dashboard');
 
         Route::get('applications', [ApplicationController::class, 'index'])->name('applications.index');
@@ -34,7 +28,7 @@ Route::prefix('developers')->name('developers.')->group(function () {
             Route::get('/', [ApplicationController::class, 'show'])->name('applications.show');
             Route::put('/', [ApplicationController::class, 'update'])->name('applications.update');
             Route::delete('/', [ApplicationController::class, 'destroy'])->name('applications.destroy');
-            Route::post('production-request', [ApplicationController::class, 'requestProduction'])->name('applications.production-request');
+            Route::get('requests', [ApplicationController::class, 'requests'])->name('applications.requests');
 
             Route::post('keys', [ApiKeyController::class, 'store'])->middleware('throttle:20,1')->name('keys.store');
             Route::post('keys/{key}/rotate', [ApiKeyController::class, 'rotate'])->whereNumber('key')->middleware('throttle:20,1')->name('keys.rotate');

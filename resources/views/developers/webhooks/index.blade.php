@@ -10,7 +10,7 @@
             <div class="flex items-center justify-between gap-3 flex-wrap">
                 <div>
                     <div class="font-medium break-all">{{ $w->url }}</div>
-                    <div class="text-xs text-gray-500">{{ $w->is_active ? 'Active' : 'Disabled' }} · {{ implode(', ', (array) $w->events) }} · failures in a row: {{ $w->consecutive_failures }}@if($w->last_delivery_at) · last delivery {{ $w->last_delivery_at->diffForHumans() }}@endif</div>
+                    <div class="text-xs text-gray-500"><span class="rounded-full px-2 py-0.5 {{ $w->environment === 'sandbox' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800' }}">{{ $w->environment === 'sandbox' ? 'SANDBOX' : 'LIVE' }}</span> {{ $w->is_active ? 'Active' : 'Disabled' }} · {{ implode(', ', (array) $w->events) }} · failures in a row: {{ $w->consecutive_failures }}@if($w->last_delivery_at) · last delivery {{ $w->last_delivery_at->diffForHumans() }}@endif</div>
                 </div>
                 <div class="flex gap-2 flex-wrap">
                     <a href="{{ route('developers.webhooks.deliveries', [$app, $w->id]) }}" class="rounded border border-gray-300 px-3 py-1 text-xs">Deliveries</a>
@@ -41,6 +41,12 @@
     <form method="POST" action="{{ route('developers.webhooks.store', $app) }}" class="space-y-3">@csrf
         <label class="block text-sm">HTTPS URL
             <input name="url" value="{{ old('url') }}" required maxlength="2048" placeholder="https://example.com/xtra4u/webhook" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"></label>
+        <label class="block text-sm">Environment
+            <select name="environment" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2">
+                <option value="sandbox" @selected(old('environment', 'sandbox') === 'sandbox')>Sandbox: receives only simulated test-key events</option>
+                <option value="production" @selected(old('environment') === 'production')>Live: receives only real order events</option>
+            </select></label>
+        <p class="text-xs text-gray-500 -mt-1">An endpoint belongs to one environment for life. Sandbox events are never sent to live endpoints, and live events are never sent to sandbox endpoints.</p>
         <label class="block text-sm">Description <input name="description" value="{{ old('description') }}" maxlength="191" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"></label>
         <fieldset>
             <legend class="text-sm">Events</legend>

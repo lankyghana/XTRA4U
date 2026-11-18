@@ -8,6 +8,6 @@ class DashboardController extends DeveloperController
 {
     public function __invoke(DeveloperDashboardService $dashboard)
     {
-        return view('developers.dashboard', ['d' => $dashboard->forDeveloper($this->developer())]);
+        return view('developers.dashboard', ['d' => $dashboard->forVendor($this->vendor())]);
     }
 }
