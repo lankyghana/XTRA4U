@@ -2,6 +2,8 @@
 
 Status: implemented. Builds on `docs/ai/00-audit-and-architecture-plan.md` (unchanged) and `docs/ai/01-foundation.md`.
 
+> **Update (M5.4):** this document describes the M5.3 state, in which no tool was registered and every allowlist was empty. M5.4 (`docs/ai/03-developer-assistant.md`) registers exactly four read-only Developer Assistant tools and lists them on the `developer` surface only; `vendor` and `customer` allowlists are still empty. The sentences below that say "no business tool" / "allowlist ships empty" are accurate for M5.3 and for the vendor and customer surfaces, not for the developer surface.
+
 **What this is:** the provider-independent, read-only, surface-aware machinery to *define, discover, validate, authorize and execute* AI tools. **What it is not:** an assistant. No business tool exists, no tool is allow-listed on any surface, no route/UI/conversation storage exists, no provider adapter exists, and nothing in the marketplace calls it. With the shipped configuration every tool call is answered `unknown_tool`.
 
 ---
