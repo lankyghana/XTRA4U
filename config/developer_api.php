@@ -16,6 +16,12 @@ return [
         'sandbox:simulate' => 'Simulate order/payment outcomes in the sandbox (test keys only)',
     ],
 
+    // Scopes that are declared above but have NO working endpoint yet. They cannot be granted to any NEWLY
+    // created key (portal form, request validation and ApiKeyService all use ApiKeyService::availableScopes()).
+    // Keys that already carry one keep it untouched: it is simply inert, because no route requires it.
+    // Remove an entry here in the same change that ships its endpoint.
+    'unavailable_scopes' => ['ai:chat'],
+
     // Scopes that exist ONLY in the sandbox. ApiKeyService refuses to put them on a production key, and
     // DeveloperApiKey::hasScope() ignores them on any non-sandbox key even if one were written to the DB by hand.
     'sandbox_only_scopes' => ['sandbox:simulate'],

@@ -49,7 +49,14 @@ class ApiKeyController extends DeveloperController
         try {
             $issued = $this->keys->rotate($old);
         } catch (ApiException $e) {
-            throw ValidationException::withMessages(['key' => $e->getMessage()]);
+            // A refused rotation never revokes anything (the whole operation is one transaction). Say so, whatever
+            // the reason, so nobody assumes the key was retired or has to guess whether it still works.
+            $message = $e->getMessage();
+            if (! str_contains($message, 'remains active')) {
+                $message .= ' The original key has not been changed and remains active; revoke it explicitly if you want to retire it.';
+            }
+
+            throw ValidationException::withMessages(['key' => $message]);
         }
 
         $this->audit->log($this->actor(), 'api_key.rotated', $app->id, ['key_prefix' => $issued['key']->prefix, 'replaced_prefix' => $old->prefix]);

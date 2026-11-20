@@ -41,7 +41,7 @@ class ApplicationController extends DeveloperController
         return view('developers.applications.show', [
             'app' => $app,
             'keys' => $app->apiKeys()->latest('id')->get(),
-            'scopes' => config('developer_api.scopes'),
+            'scopes' => \App\Services\DeveloperApi\ApiKeyService::availableScopes(),
             'webhookCount' => $app->webhooks()->count(),
             'sandbox' => app(\App\Services\DeveloperApi\DeveloperDashboardService::class)->sandbox([$app->id]),
             'recentRequests' => DeveloperApiRequest::query()->where('application_id', $app->id)->latest('id')->limit(15)->get(),

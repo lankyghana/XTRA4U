@@ -19,7 +19,7 @@ class StoreApiKeyRequest extends FormRequest
             'name' => ['required', 'string', 'max:100'],
             'environment' => ['required', 'in:sandbox,production'],
             'scopes' => ['required', 'array', 'min:1'],
-            'scopes.*' => ['string', Rule::in(array_keys(config('developer_api.scopes')))],
+            'scopes.*' => ['string', Rule::in(array_keys(\App\Services\DeveloperApi\ApiKeyService::availableScopes()))],
             'expires_in_days' => ['required', 'integer', 'min:1', 'max:365'],
         ];
     }

@@ -110,7 +110,25 @@ class ApiKeyService
             $old = DeveloperApiKey::query()->lockForUpdate()->findOrFail($old->id);
             $app = $old->application;
 
-            $new = $this->create($app, $old->name, (array) $old->scopes, $old->expires_at, $old->id, $old->environment);
+            // A rotated key is a NEW key, so it cannot carry a scope that is not currently grantable
+            // (`developer_api.unavailable_scopes`, e.g. `ai:chat`, which has no endpoint). ONLY those scopes are
+            // dropped; any other scope is carried unchanged and still validated by create(). The old key keeps its
+            // stored scopes until it is revoked.
+            $unavailable = (array) config('developer_api.unavailable_scopes', []);
+            $carried = array_values(array_diff((array) $old->scopes, $unavailable));
+
+            if ($carried === []) {
+                // Nothing to put on a replacement. Refuse BEFORE touching anything: the old key is not revoked,
+                // not changed, and no new key exists.
+                throw ApiException::unprocessable(
+                    'ROTATION_NOT_POSSIBLE',
+                    'This key cannot be rotated because none of its scopes can be granted to a new key. '
+                    .'The original key has not been changed and remains active. Create a new key with the scopes you need, '
+                    .'and revoke the original explicitly if you want to retire it.'
+                );
+            }
+
+            $new = $this->create($app, $old->name, $carried, $old->expires_at, $old->id, $old->environment);
 
             if (! $old->isRevoked()) {
                 $old->forceFill(['revoked_at' => now()])->save();
@@ -154,12 +172,26 @@ class ApiKeyService
     }
 
     /**
+     * Scopes that may be granted to a newly created key: every declared scope except those that have
+     * no working endpoint yet (`developer_api.unavailable_scopes`). Value = human description.
+     *
+     * @return array<string,string>
+     */
+    public static function availableScopes(): array
+    {
+        return array_diff_key(
+            (array) config('developer_api.scopes', []),
+            array_flip((array) config('developer_api.unavailable_scopes', []))
+        );
+    }
+
+    /**
      * @param  list<string>  $scopes
      * @return list<string>
      */
     public function validateScopes(array $scopes): array
     {
-        $allowed = array_keys(config('developer_api.scopes', []));
+        $allowed = array_keys(self::availableScopes());
         $scopes = array_values(array_unique($scopes));
         $unknown = array_values(array_diff($scopes, $allowed));
 

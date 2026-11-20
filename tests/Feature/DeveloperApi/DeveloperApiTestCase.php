@@ -47,10 +47,12 @@ abstract class DeveloperApiTestCase extends TestCase
      */
     protected function makeKey(DeveloperApplication $app, ?array $scopes = null, $expiresAt = null, string $environment = 'production'): array
     {
-        // Default = every scope this environment may hold (sandbox-only scopes are never valid on a production key).
+        // Default = every scope this environment may hold. Sandbox-only scopes are never valid on a production key,
+        // and scopes without a working endpoint (`unavailable_scopes`, e.g. ai:chat) cannot be granted to new keys.
+        $grantable = array_keys(ApiKeyService::availableScopes());
         $scopes ??= $environment === 'sandbox'
-            ? array_keys(config('developer_api.scopes'))
-            : array_values(array_diff(array_keys(config('developer_api.scopes')), config('developer_api.sandbox_only_scopes')));
+            ? $grantable
+            : array_values(array_diff($grantable, config('developer_api.sandbox_only_scopes')));
         $r = app(ApiKeyService::class)->create($app, 'Test key', $scopes, $expiresAt, null, $environment);
 
         return [$r['key'], $r['plaintext']];
