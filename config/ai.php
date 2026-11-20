@@ -106,6 +106,45 @@ return [
         'cooldown_seconds' => 60,
     ],
 
+    /*
+    | AI tool system (M5.3). See docs/ai/02-tool-system.md.
+    |
+    | `allowlist` is the ONLY thing that makes a registered tool callable on a surface, and it ships EMPTY: no tool is
+    | available anywhere until a later milestone lists it here (and the tool itself must also declare that surface).
+    | These are code-level settings on purpose: they are not read from .env, the database, or any request.
+    */
+    'tools' => [
+        'allowlist' => [
+            'customer' => [],
+            'vendor' => [],
+            'developer' => [],
+        ],
+
+        'limits' => [
+            'max_calls_per_turn' => 4,      // tool calls honoured in one assistant turn (rejected ones count too)
+            'max_arguments' => 8,           // keys in one call's arguments
+            'max_argument_bytes' => 2048,   // JSON size of one call's arguments
+            'max_string_length' => 500,     // hard ceiling for any single string argument
+            'max_result_bytes' => 8192,     // JSON size of one result (over = refused, never silently cut)
+            'max_result_items' => 50,       // elements in any one list/map of a result
+            'max_result_depth' => 5,        // nesting depth of a result
+            'max_result_string_length' => 1000, // longer strings are truncated and the result is flagged
+            'max_execution_seconds' => 5,   // per call; enforced after the fact (PHP cannot interrupt a running tool)
+            'max_turn_seconds' => 15,       // total tool time per turn; later calls are refused once spent
+        ],
+
+        // Argument names that may never be declared by a tool nor sent by a model, compared after stripping
+        // everything but letters/digits and lower-casing ("vendor-id", "vendorId" and "VENDOR_ID" are the same).
+        // Identity, ownership and authorization come from the trusted ToolContext only.
+        'prohibited_argument_names' => [
+            'userid', 'vendorid', 'customerid', 'actorid', 'accountid', 'tenantid', 'ownerid', 'applicationid',
+            'appid', 'sessionid', 'guestid', 'adminid', 'resellerid',
+            'user', 'vendor', 'customer', 'actor', 'account', 'tenant', 'owner', 'role', 'roles',
+            'isadmin', 'isapproved', 'approved', 'authenticated', 'permission', 'permissions', 'scope', 'scopes',
+            'capability', 'capabilities', 'surface', 'actortype', 'context', 'toolcontext', 'guard', 'impersonate',
+        ],
+    ],
+
     'logging' => [
         // null = the application's default log channel. Only redacted metadata is ever logged (never prompts/responses).
         'channel' => env('AI_LOG_CHANNEL'),
