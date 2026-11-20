@@ -155,17 +155,25 @@ class ToolArchitectureTest extends TestCase
         $this->assertSame(['AiTool.php'], $contracts, 'there is one tool contract and it is read-only; no write-capable variant exists');
     }
 
-    public function test_m53_ships_no_business_tools(): void
+    public function test_only_the_developer_assistant_implements_tools(): void
     {
         $implementations = [];
         $it = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(app_path()));
         foreach ($it as $f) {
             if ($f->isFile() && $f->getExtension() === 'php' && preg_match('/implements\s+[^{]*\bAiTool\b/', (string) file_get_contents($f->getPathname()))) {
-                $implementations[] = $f->getPathname();
+                $implementations[] = str_replace('\\', '/', substr($f->getPathname(), strlen(app_path()) + 1));
             }
         }
+        sort($implementations);
 
-        $this->assertSame([], $implementations, 'no class under app/ implements AiTool in M5.3 (the fake tool lives in tests/)');
+        // M5.3 shipped none. M5.4 adds exactly the four Developer Assistant tools (see DeveloperAssistant/RegressionAndArchitectureTest
+        // for their own structural limits); the tool INFRASTRUCTURE directory itself still contains no tool.
+        $this->assertSame([
+            'Services/Ai/Developer/Tools/GetMyAppTool.php',
+            'Services/Ai/Developer/Tools/ListMyAppsTool.php',
+            'Services/Ai/Developer/Tools/ReadDeveloperDocTool.php',
+            'Services/Ai/Developer/Tools/SearchDeveloperDocsTool.php',
+        ], $implementations);
     }
 
     public function test_m53_adds_no_routes_migrations_controllers_or_views(): void

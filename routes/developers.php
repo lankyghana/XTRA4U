@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Developers\ApiKeyController;
 use App\Http\Controllers\Developers\ApplicationController;
+use App\Http\Controllers\Developers\AssistantController;
 use App\Http\Controllers\Developers\DashboardController;
 use App\Http\Controllers\Developers\LandingController;
 use App\Http\Controllers\Developers\WebhookController;
@@ -19,6 +20,11 @@ Route::prefix('developers')->name('developers.')->group(function () {
 
     Route::middleware('developer.access')->group(function () {
         Route::get('dashboard', DashboardController::class)->name('dashboard');
+
+        // Developer Assistant (M5.4): read-only, stateless, JSON-only. Same vendor guard and live approval check as
+        // everything else here; POST is CSRF-protected (web group) and throttled per vendor. No history endpoint exists.
+        Route::get('assistant', [AssistantController::class, 'show'])->name('assistant');
+        Route::post('assistant/messages', [AssistantController::class, 'message'])->middleware('throttle:developer-assistant')->name('assistant.message');
 
         Route::get('applications', [ApplicationController::class, 'index'])->name('applications.index');
         Route::get('applications/create', [ApplicationController::class, 'create'])->name('applications.create');

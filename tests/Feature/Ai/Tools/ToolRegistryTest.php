@@ -52,9 +52,12 @@ class ToolRegistryTest extends ToolTestCase
         $this->assertSame(['customer_only'], $names, 'tools of another surface are never exposed');
     }
 
-    public function test_the_shipped_empty_allowlist_denies_every_tool(): void
+    public function test_the_shipped_allowlist_denies_every_tool_that_is_not_listed(): void
     {
-        $this->assertSame(['customer' => [], 'vendor' => [], 'developer' => []], config('ai.tools.allowlist'));
+        // M5.3 shipped all three empty. M5.4 lists exactly the Developer Assistant's four tools on `developer`;
+        // customer and vendor stay empty, and an unlisted tool is still denied everywhere.
+        $this->assertSame(['customer' => [], 'vendor' => []], \Illuminate\Support\Arr::only(config('ai.tools.allowlist'), ['customer', 'vendor']));
+        $this->assertSame(\App\Services\Ai\Developer\DeveloperAssistant::TOOLS, config('ai.tools.allowlist.developer'));
 
         $this->registry->register(new FakeTool('test_lookup', [AiSurface::Vendor, AiSurface::Customer, AiSurface::Developer]));
 
@@ -101,12 +104,12 @@ class ToolRegistryTest extends ToolTestCase
         $this->registry->register(new FakeTool('second_tool'));
     }
 
-    public function test_the_application_registry_is_sealed_after_boot_and_ships_no_tools(): void
+    public function test_the_application_registry_is_sealed_after_boot_and_holds_only_the_developer_tools(): void
     {
         $app = $this->app->make(ToolRegistry::class);
 
         $this->assertTrue($app->isSealed());
-        $this->assertSame([], $app->names(), 'M5.3 registers no business tools');
+        $this->assertSame(\App\Services\Ai\Developer\DeveloperAssistant::TOOLS, $app->names(), 'M5.4 registers exactly the four developer tools');
         $this->assertSame($app, $this->app->make(ToolRegistry::class), 'one shared registry');
 
         $this->expectException(AiToolRegistrationException::class);

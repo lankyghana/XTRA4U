@@ -21,6 +21,9 @@
             @if($approved)
                 <a href="{{ route('developers.dashboard') }}" class="hover:underline">Dashboard</a>
                 <a href="{{ route('developers.applications.index') }}" class="hover:underline">Applications</a>
+                @if(app(\App\Services\Ai\Developer\DeveloperAssistant::class)->isAvailable())
+                    <a href="{{ route('developers.assistant') }}" class="hover:underline">Assistant</a>
+                @endif
                 <a href="{{ route('vendor.dashboard') }}" class="hover:underline">Vendor dashboard</a>
                 <span class="text-gray-400">{{ $vendor->name }}</span>
                 <form method="POST" action="{{ route('vendor.logout') }}">@csrf
