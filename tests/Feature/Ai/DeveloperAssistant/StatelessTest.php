@@ -112,7 +112,8 @@ class StatelessTest extends DeveloperAssistantTestCase
     {
         $found = [];
         foreach (Route::getRoutes() as $route) {
-            if (str_contains($route->uri(), 'assistant')) {
+            // The Developer Assistant's routes only (M5.5's vendor assistant routes are covered by VendorAssistant/StatelessTest).
+            if (str_contains($route->uri(), 'assistant') && str_starts_with($route->uri(), 'developers')) {
                 $found[] = implode('|', array_diff($route->methods(), ['HEAD'])).' '.$route->uri();
             }
         }

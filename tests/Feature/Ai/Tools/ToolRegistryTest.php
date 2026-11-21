@@ -54,9 +54,9 @@ class ToolRegistryTest extends ToolTestCase
 
     public function test_the_shipped_allowlist_denies_every_tool_that_is_not_listed(): void
     {
-        // M5.3 shipped all three empty. M5.4 lists exactly the Developer Assistant's four tools on `developer`;
-        // customer and vendor stay empty, and an unlisted tool is still denied everywhere.
-        $this->assertSame(['customer' => [], 'vendor' => []], \Illuminate\Support\Arr::only(config('ai.tools.allowlist'), ['customer', 'vendor']));
+        // M5.3 shipped all three empty. M5.4 lists exactly the Developer Assistant's four tools on `developer` and M5.5
+        // the Vendor Assistant's six on `vendor`; customer stays empty, and an unlisted tool is still denied everywhere.
+        $this->assertSame(['customer' => [], 'vendor' => \App\Services\Ai\VendorAssistant\VendorAssistant::TOOLS], \Illuminate\Support\Arr::only(config('ai.tools.allowlist'), ['customer', 'vendor']));
         $this->assertSame(\App\Services\Ai\Developer\DeveloperAssistant::TOOLS, config('ai.tools.allowlist.developer'));
 
         $this->registry->register(new FakeTool('test_lookup', [AiSurface::Vendor, AiSurface::Customer, AiSurface::Developer]));
@@ -104,12 +104,16 @@ class ToolRegistryTest extends ToolTestCase
         $this->registry->register(new FakeTool('second_tool'));
     }
 
-    public function test_the_application_registry_is_sealed_after_boot_and_holds_only_the_developer_tools(): void
+    public function test_the_application_registry_is_sealed_after_boot_and_holds_only_the_developer_and_vendor_tools(): void
     {
         $app = $this->app->make(ToolRegistry::class);
 
         $this->assertTrue($app->isSealed());
-        $this->assertSame(\App\Services\Ai\Developer\DeveloperAssistant::TOOLS, $app->names(), 'M5.4 registers exactly the four developer tools');
+        $this->assertEqualsCanonicalizing(
+            array_merge(\App\Services\Ai\Developer\DeveloperAssistant::TOOLS, \App\Services\Ai\VendorAssistant\VendorAssistant::TOOLS),
+            $app->names(),
+            'M5.4 registers the four developer tools and M5.5 the six vendor tools, nothing else'
+        );
         $this->assertSame($app, $this->app->make(ToolRegistry::class), 'one shared registry');
 
         $this->expectException(AiToolRegistrationException::class);

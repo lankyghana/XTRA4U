@@ -49,7 +49,8 @@ class SurfaceAndFeatureControlTest extends DeveloperAssistantTestCase
         $this->assertSame('mock', $defaults['provider'], 'no live provider is configured');
         $this->assertNull($defaults['default_model']);
         $this->assertNull($defaults['providers']['openai']['api_key'] ?? null, 'no provider credential ships');
-        $this->assertSame([], $defaults['tools']['allowlist']['vendor']);
+        // M5.5 allow-lists the Vendor Assistant's six tools on `vendor` (inert while its surface is off).
+        $this->assertSame(\App\Services\Ai\VendorAssistant\VendorAssistant::TOOLS, $defaults['tools']['allowlist']['vendor']);
         $this->assertSame([], $defaults['tools']['allowlist']['customer']);
     }
 
@@ -152,7 +153,9 @@ class SurfaceAndFeatureControlTest extends DeveloperAssistantTestCase
     {
         $registry = app(ToolRegistry::class);
 
-        $this->assertSame([], $registry->definitionsFor(AiSurface::Vendor));
+        // (M5.5: the vendor surface now offers its OWN tools, but never a developer one.)
+        $offered = array_map(fn ($d) => $d["name"], $registry->definitionsFor(AiSurface::Vendor));
+        $this->assertSame([], array_values(array_intersect($offered, DeveloperAssistant::TOOLS)));
         $this->assertSame([], $registry->definitionsFor(AiSurface::Customer));
 
         // Even if someone mistakenly allow-lists the developer tools on the other surfaces, the tools do not declare them.
@@ -174,12 +177,12 @@ class SurfaceAndFeatureControlTest extends DeveloperAssistantTestCase
         }
     }
 
-    public function test_the_registry_is_sealed_and_holds_exactly_the_four_developer_tools(): void
+    public function test_the_registry_is_sealed_and_holds_exactly_the_developer_and_vendor_tools(): void
     {
         $registry = app(ToolRegistry::class);
 
         $this->assertTrue($registry->isSealed());
-        $this->assertSame(DeveloperAssistant::TOOLS, $registry->names());
+        $this->assertEqualsCanonicalizing(array_merge(DeveloperAssistant::TOOLS, \App\Services\Ai\VendorAssistant\VendorAssistant::TOOLS), $registry->names());
         $this->assertSame(DeveloperAssistant::TOOLS, config('ai.tools.allowlist.developer'));
 
         foreach (DeveloperAssistant::TOOLS as $name) {

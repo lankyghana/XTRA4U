@@ -93,16 +93,21 @@ class RegressionAndArchitectureTest extends DeveloperAssistantTestCase
             $this->assertFalse($defaults['surfaces'][$surface]['enabled'], "{$surface} must ship disabled");
         }
         $this->assertSame(DeveloperAssistant::TOOLS, $defaults['tools']['allowlist']['developer']);
-        $this->assertSame([], $defaults['tools']['allowlist']['vendor']);
+        // M5.5 allow-lists the Vendor Assistant's six tools on `vendor` (inert while its surface is off).
+        $this->assertSame(\App\Services\Ai\VendorAssistant\VendorAssistant::TOOLS, $defaults['tools']['allowlist']['vendor']);
         $this->assertSame([], $defaults['tools']['allowlist']['customer']);
     }
 
-    public function test_only_the_four_documented_tools_exist_and_they_are_developer_only(): void
+    public function test_the_four_documented_developer_tools_exist_and_they_are_developer_only(): void
     {
         $registry = app(ToolRegistry::class);
 
         $this->assertTrue($registry->isSealed());
-        $this->assertEqualsCanonicalizing(DeveloperAssistant::TOOLS, $registry->names());
+        // M5.5 adds the six vendor tools; the four developer tools are unchanged and still developer-only.
+        $this->assertEqualsCanonicalizing(array_merge(DeveloperAssistant::TOOLS, \App\Services\Ai\VendorAssistant\VendorAssistant::TOOLS), $registry->names());
+        foreach (DeveloperAssistant::TOOLS as $name) {
+            $this->assertSame([\App\Services\Ai\Data\AiSurface::Developer], $registry->get($name)->surfaces());
+        }
         $this->assertSame([
             'developer_search_docs', 'developer_read_doc', 'developer_list_my_apps', 'developer_get_my_app',
         ], DeveloperAssistant::TOOLS);

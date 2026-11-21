@@ -155,7 +155,7 @@ class ToolArchitectureTest extends TestCase
         $this->assertSame(['AiTool.php'], $contracts, 'there is one tool contract and it is read-only; no write-capable variant exists');
     }
 
-    public function test_only_the_developer_assistant_implements_tools(): void
+    public function test_only_the_developer_and_vendor_assistants_implement_tools(): void
     {
         $implementations = [];
         $it = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(app_path()));
@@ -173,6 +173,13 @@ class ToolArchitectureTest extends TestCase
             'Services/Ai/Developer/Tools/ListMyAppsTool.php',
             'Services/Ai/Developer/Tools/ReadDeveloperDocTool.php',
             'Services/Ai/Developer/Tools/SearchDeveloperDocsTool.php',
+            // M5.5: exactly the six Vendor Assistant tools (see VendorAssistant/RegressionAndArchitectureTest for their limits).
+            'Services/Ai/VendorAssistant/Tools/GetDashboardSummaryTool.php',
+            'Services/Ai/VendorAssistant/Tools/GetEarningsSummaryTool.php',
+            'Services/Ai/VendorAssistant/Tools/GetMyOrderTool.php',
+            'Services/Ai/VendorAssistant/Tools/GetMyStoreInfoTool.php',
+            'Services/Ai/VendorAssistant/Tools/ListMyProductsTool.php',
+            'Services/Ai/VendorAssistant/Tools/SearchMyOrdersTool.php',
         ], $implementations);
     }
 
