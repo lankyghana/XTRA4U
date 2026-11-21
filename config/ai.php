@@ -110,14 +110,21 @@ return [
     | AI tool system (M5.3). See docs/ai/02-tool-system.md.
     |
     | `allowlist` is the ONLY thing that makes a registered tool callable on a surface (and the tool itself must also
-    | declare that surface). `customer` and `vendor` ship EMPTY. M5.4 lists the Developer Assistant's four read-only
-    | tools on `developer`; that is inert while the engine and the developer surface stay disabled (the defaults above).
+    | declare that surface). `customer` ships EMPTY. M5.4 lists the Developer Assistant's four read-only tools on
+    | `developer` and M5.5 the Vendor Assistant's six on `vendor`; all are inert while the engine and the respective surface stay disabled (the defaults above).
     | These are code-level settings on purpose: they are not read from .env, the database, or any request.
     */
     'tools' => [
         'allowlist' => [
             'customer' => [],
-            'vendor' => [],
+            'vendor' => [
+                'vendor_get_dashboard_summary',
+                'vendor_search_my_orders',
+                'vendor_get_my_order',
+                'vendor_list_my_products',
+                'vendor_get_earnings_summary',
+                'vendor_get_my_store_info',
+            ],
             'developer' => [
                 'developer_search_docs',
                 'developer_read_doc',

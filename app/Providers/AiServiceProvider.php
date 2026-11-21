@@ -11,6 +11,12 @@ use App\Services\Ai\Developer\Tools\SearchDeveloperDocsTool;
 use App\Services\Ai\Providers\MockAiProvider;
 use App\Services\Ai\Tools\ReadOnlyGuard;
 use App\Services\Ai\Tools\ToolRegistry;
+use App\Services\Ai\VendorAssistant\Tools\GetDashboardSummaryTool;
+use App\Services\Ai\VendorAssistant\Tools\GetEarningsSummaryTool;
+use App\Services\Ai\VendorAssistant\Tools\GetMyOrderTool;
+use App\Services\Ai\VendorAssistant\Tools\GetMyStoreInfoTool;
+use App\Services\Ai\VendorAssistant\Tools\ListMyProductsTool;
+use App\Services\Ai\VendorAssistant\Tools\SearchMyOrdersTool;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -19,9 +25,10 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 /**
- * AI engine foundation (M5.2), tool system (M5.3) and the Developer Assistant's tools (M5.4). Registers only what needs
- * shared state; everything else is auto-resolved. The engine does nothing at all while `ai.enabled` is false, and the
- * Developer Assistant's routes answer "unavailable" while `ai.surfaces.developer.enabled` is false (the default).
+ * AI engine foundation (M5.2), tool system (M5.3), the Developer Assistant's tools (M5.4) and the Vendor Assistant's
+ * tools (M5.5). Registers only what needs shared state; everything else is auto-resolved. The engine does nothing at
+ * all while `ai.enabled` is false, and each assistant's routes answer "unavailable" while its surface flag
+ * (`ai.surfaces.developer.enabled` / `ai.surfaces.vendor.enabled`) is false (the default).
  */
 class AiServiceProvider extends ServiceProvider
 {
@@ -50,17 +57,29 @@ class AiServiceProvider extends ServiceProvider
             return Limit::perMinute(10)->by($vendor instanceof Vendor ? 'dev-assistant:vendor:'.$vendor->id : 'dev-assistant:ip:'.$request->ip());
         });
 
+        // Same idea for the Vendor Assistant (inside the vendor dashboard, behind `vendor.approved`).
+        RateLimiter::for('vendor-assistant', function (Request $request) {
+            $vendor = Auth::guard('vendor')->user();
+
+            return Limit::perMinute(10)->by($vendor instanceof Vendor ? 'vendor-assistant:vendor:'.$vendor->id : 'vendor-assistant:ip:'.$request->ip());
+        });
+
         // THE place tools are registered - trusted code only, objects only (never class names from config, the
-        // database or a request). M5.4 registers the Developer Assistant's four read-only tools. Registering a tool
-        // does not make it callable: it must also be listed in config('ai.tools.allowlist.developer').
+        // database or a request). M5.4 registers the Developer Assistant's four read-only tools and M5.5 the Vendor
+        // Assistant's six. Registering a tool does not make it callable: it must also be listed in
+        // config('ai.tools.allowlist.<surface>') and declare that surface.
         try {
-            foreach ([SearchDeveloperDocsTool::class, ReadDeveloperDocTool::class, ListMyAppsTool::class, GetMyAppTool::class] as $tool) {
+            foreach ([
+                SearchDeveloperDocsTool::class, ReadDeveloperDocTool::class, ListMyAppsTool::class, GetMyAppTool::class,
+                GetDashboardSummaryTool::class, SearchMyOrdersTool::class, GetMyOrderTool::class,
+                ListMyProductsTool::class, GetEarningsSummaryTool::class, GetMyStoreInfoTool::class,
+            ] as $tool) {
                 $registry->register($this->app->make($tool));
             }
         } catch (\Throwable $e) {
             // A configuration problem must never stop the marketplace from booting. Fail closed instead: whatever
             // was not registered is simply unavailable, and the assistant reports itself unavailable.
-            Log::error('AI developer tools could not be registered.', ['exception' => $e::class]);
+            Log::error('AI assistant tools could not be registered.', ['exception' => $e::class]);
         } finally {
             // From now on the registry is closed for the lifetime of the process.
             $registry->seal();
