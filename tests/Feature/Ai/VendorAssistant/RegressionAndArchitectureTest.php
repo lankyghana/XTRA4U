@@ -42,7 +42,8 @@ class RegressionAndArchitectureTest extends VendorAssistantTestCase
         }
         $this->assertSame(DeveloperAssistant::TOOLS, $defaults['tools']['allowlist']['developer']);
         $this->assertSame(VendorAssistant::TOOLS, $defaults['tools']['allowlist']['vendor']);
-        $this->assertSame([], $defaults['tools']['allowlist']['customer']);
+        // M5.6 allow-lists the Customer Assistant's four public-catalogue tools on `customer` (inert while its surface is off).
+        $this->assertSame(\App\Services\Ai\CustomerAssistant\CustomerAssistant::TOOLS, $defaults['tools']['allowlist']['customer']);
     }
 
     public function test_the_registry_holds_exactly_the_developer_and_vendor_tools_and_no_customer_tool(): void
@@ -50,14 +51,17 @@ class RegressionAndArchitectureTest extends VendorAssistantTestCase
         $registry = app(ToolRegistry::class);
 
         $this->assertTrue($registry->isSealed());
-        $this->assertEqualsCanonicalizing(array_merge(DeveloperAssistant::TOOLS, VendorAssistant::TOOLS), $registry->names());
+        $this->assertEqualsCanonicalizing(array_merge(DeveloperAssistant::TOOLS, VendorAssistant::TOOLS, \App\Services\Ai\CustomerAssistant\CustomerAssistant::TOOLS), $registry->names());
         foreach (DeveloperAssistant::TOOLS as $name) {
             $this->assertSame([AiSurface::Developer], $registry->get($name)->surfaces());
         }
         foreach (VendorAssistant::TOOLS as $name) {
             $this->assertSame([AiSurface::Vendor], $registry->get($name)->surfaces());
         }
-        $this->assertSame([], $registry->definitionsFor(AiSurface::Customer));
+        foreach (\App\Services\Ai\CustomerAssistant\CustomerAssistant::TOOLS as $name) {
+            $this->assertSame([AiSurface::Customer], $registry->get($name)->surfaces());
+        }
+        $this->assertSame(\App\Services\Ai\CustomerAssistant\CustomerAssistant::TOOLS, array_column($registry->definitionsFor(AiSurface::Customer), 'name'));
     }
 
     public function test_the_six_vendor_tools_are_exactly_the_documented_set(): void

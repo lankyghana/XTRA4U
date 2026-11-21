@@ -55,8 +55,8 @@ class ToolRegistryTest extends ToolTestCase
     public function test_the_shipped_allowlist_denies_every_tool_that_is_not_listed(): void
     {
         // M5.3 shipped all three empty. M5.4 lists exactly the Developer Assistant's four tools on `developer` and M5.5
-        // the Vendor Assistant's six on `vendor`; customer stays empty, and an unlisted tool is still denied everywhere.
-        $this->assertSame(['customer' => [], 'vendor' => \App\Services\Ai\VendorAssistant\VendorAssistant::TOOLS], \Illuminate\Support\Arr::only(config('ai.tools.allowlist'), ['customer', 'vendor']));
+        // the Vendor Assistant's six on `vendor`; M5.6 lists the Customer Assistant's four on `customer`, and an unlisted tool is still denied everywhere.
+        $this->assertSame(['customer' => \App\Services\Ai\CustomerAssistant\CustomerAssistant::TOOLS, 'vendor' => \App\Services\Ai\VendorAssistant\VendorAssistant::TOOLS], \Illuminate\Support\Arr::only(config('ai.tools.allowlist'), ['customer', 'vendor']));
         $this->assertSame(\App\Services\Ai\Developer\DeveloperAssistant::TOOLS, config('ai.tools.allowlist.developer'));
 
         $this->registry->register(new FakeTool('test_lookup', [AiSurface::Vendor, AiSurface::Customer, AiSurface::Developer]));
@@ -110,9 +110,9 @@ class ToolRegistryTest extends ToolTestCase
 
         $this->assertTrue($app->isSealed());
         $this->assertEqualsCanonicalizing(
-            array_merge(\App\Services\Ai\Developer\DeveloperAssistant::TOOLS, \App\Services\Ai\VendorAssistant\VendorAssistant::TOOLS),
+            array_merge(\App\Services\Ai\Developer\DeveloperAssistant::TOOLS, \App\Services\Ai\VendorAssistant\VendorAssistant::TOOLS, \App\Services\Ai\CustomerAssistant\CustomerAssistant::TOOLS),
             $app->names(),
-            'M5.4 registers the four developer tools and M5.5 the six vendor tools, nothing else'
+            'M5.4 registers the four developer tools, M5.5 the six vendor tools and M5.6 the four customer tools, nothing else'
         );
         $this->assertSame($app, $this->app->make(ToolRegistry::class), 'one shared registry');
 

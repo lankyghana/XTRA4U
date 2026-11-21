@@ -33,7 +33,7 @@ class SurfaceAndFeatureControlTest extends VendorAssistantTestCase
         $this->assertNull($defaults['default_model']);
         $this->assertNull($defaults['providers']['openai']['api_key'] ?? null, 'no provider credential ships');
         $this->assertSame(VendorAssistant::TOOLS, $defaults['tools']['allowlist']['vendor']);
-        $this->assertSame([], $defaults['tools']['allowlist']['customer']);
+        $this->assertSame(\App\Services\Ai\CustomerAssistant\CustomerAssistant::TOOLS, $defaults['tools']['allowlist']['customer']);
     }
 
     public function test_vendor_tools_are_available_on_the_vendor_surface(): void
@@ -56,7 +56,9 @@ class SurfaceAndFeatureControlTest extends VendorAssistantTestCase
         $registry = app(ToolRegistry::class);
         $developerOffered = array_map(fn ($d) => $d['name'], $registry->definitionsFor(AiSurface::Developer));
         $this->assertSame([], array_values(array_intersect($developerOffered, VendorAssistant::TOOLS)));
-        $this->assertSame([], $registry->definitionsFor(AiSurface::Customer));
+        // (M5.6: the customer surface offers its OWN four tools, but never a vendor one.)
+        $customerOffered = array_map(fn ($d) => $d['name'], $registry->definitionsFor(AiSurface::Customer));
+        $this->assertSame([], array_values(array_intersect($customerOffered, VendorAssistant::TOOLS)));
 
         // Even if someone mistakenly allow-lists the vendor tools on the other surfaces, the tools do not declare them.
         config(['ai.tools.allowlist.developer' => array_merge(DeveloperAssistant::TOOLS, VendorAssistant::TOOLS), 'ai.tools.allowlist.customer' => VendorAssistant::TOOLS]);

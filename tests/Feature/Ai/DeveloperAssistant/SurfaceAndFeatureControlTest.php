@@ -49,9 +49,9 @@ class SurfaceAndFeatureControlTest extends DeveloperAssistantTestCase
         $this->assertSame('mock', $defaults['provider'], 'no live provider is configured');
         $this->assertNull($defaults['default_model']);
         $this->assertNull($defaults['providers']['openai']['api_key'] ?? null, 'no provider credential ships');
-        // M5.5 allow-lists the Vendor Assistant's six tools on `vendor` (inert while its surface is off).
+        // M5.5 allow-lists the Vendor Assistant's six tools on `vendor` and M5.6 the Customer Assistant's four on `customer` (both inert while their surface is off).
         $this->assertSame(\App\Services\Ai\VendorAssistant\VendorAssistant::TOOLS, $defaults['tools']['allowlist']['vendor']);
-        $this->assertSame([], $defaults['tools']['allowlist']['customer']);
+        $this->assertSame(\App\Services\Ai\CustomerAssistant\CustomerAssistant::TOOLS, $defaults['tools']['allowlist']['customer']);
     }
 
     public function test_the_global_kill_switch_blocks_the_assistant(): void
@@ -156,7 +156,9 @@ class SurfaceAndFeatureControlTest extends DeveloperAssistantTestCase
         // (M5.5: the vendor surface now offers its OWN tools, but never a developer one.)
         $offered = array_map(fn ($d) => $d["name"], $registry->definitionsFor(AiSurface::Vendor));
         $this->assertSame([], array_values(array_intersect($offered, DeveloperAssistant::TOOLS)));
-        $this->assertSame([], $registry->definitionsFor(AiSurface::Customer));
+        // (M5.6: the customer surface offers its OWN four tools, but never a developer one.)
+        $customerOffered = array_map(fn ($d) => $d['name'], $registry->definitionsFor(AiSurface::Customer));
+        $this->assertSame([], array_values(array_intersect($customerOffered, DeveloperAssistant::TOOLS)));
 
         // Even if someone mistakenly allow-lists the developer tools on the other surfaces, the tools do not declare them.
         config(['ai.tools.allowlist.vendor' => DeveloperAssistant::TOOLS, 'ai.tools.allowlist.customer' => DeveloperAssistant::TOOLS]);
@@ -182,7 +184,7 @@ class SurfaceAndFeatureControlTest extends DeveloperAssistantTestCase
         $registry = app(ToolRegistry::class);
 
         $this->assertTrue($registry->isSealed());
-        $this->assertEqualsCanonicalizing(array_merge(DeveloperAssistant::TOOLS, \App\Services\Ai\VendorAssistant\VendorAssistant::TOOLS), $registry->names());
+        $this->assertEqualsCanonicalizing(array_merge(DeveloperAssistant::TOOLS, \App\Services\Ai\VendorAssistant\VendorAssistant::TOOLS, \App\Services\Ai\CustomerAssistant\CustomerAssistant::TOOLS), $registry->names());
         $this->assertSame(DeveloperAssistant::TOOLS, config('ai.tools.allowlist.developer'));
 
         foreach (DeveloperAssistant::TOOLS as $name) {

@@ -169,6 +169,11 @@ class ToolArchitectureTest extends TestCase
         // M5.3 shipped none. M5.4 adds exactly the four Developer Assistant tools (see DeveloperAssistant/RegressionAndArchitectureTest
         // for their own structural limits); the tool INFRASTRUCTURE directory itself still contains no tool.
         $this->assertSame([
+            // M5.6: exactly the four Customer Assistant tools (see CustomerAssistant/ArchitectureTest for their limits).
+            'Services/Ai/CustomerAssistant/Tools/GetProductTool.php',
+            'Services/Ai/CustomerAssistant/Tools/ListServicesTool.php',
+            'Services/Ai/CustomerAssistant/Tools/SearchHelpTool.php',
+            'Services/Ai/CustomerAssistant/Tools/SearchProductsTool.php',
             'Services/Ai/Developer/Tools/GetMyAppTool.php',
             'Services/Ai/Developer/Tools/ListMyAppsTool.php',
             'Services/Ai/Developer/Tools/ReadDeveloperDocTool.php',

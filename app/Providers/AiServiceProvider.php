@@ -3,6 +3,10 @@
 namespace App\Providers;
 
 use App\Models\Vendor;
+use App\Services\Ai\CustomerAssistant\Tools\GetProductTool;
+use App\Services\Ai\CustomerAssistant\Tools\ListServicesTool;
+use App\Services\Ai\CustomerAssistant\Tools\SearchHelpTool;
+use App\Services\Ai\CustomerAssistant\Tools\SearchProductsTool;
 use App\Services\Ai\Developer\Docs\DeveloperDocumentCatalog;
 use App\Services\Ai\Developer\Tools\GetMyAppTool;
 use App\Services\Ai\Developer\Tools\ListMyAppsTool;
@@ -64,15 +68,25 @@ class AiServiceProvider extends ServiceProvider
             return Limit::perMinute(10)->by($vendor instanceof Vendor ? 'vendor-assistant:vendor:'.$vendor->id : 'vendor-assistant:ip:'.$request->ip());
         });
 
+        // Customer Assistant (M5.6): the public, guest-accessible endpoint. Unauthenticated, so the limits are keyed on the
+        // client IP (a visitor can discard a session cookie at will, an IP is much harder to rotate): a per-minute burst
+        // limit and an hourly ceiling. They live in the shared cache. The engine adds its own per-guest-session limit,
+        // concurrency cap and daily budgets on top, and the whole thing fails closed if the cache is unavailable.
+        RateLimiter::for('customer-assistant', fn (Request $request) => [
+            Limit::perMinute(10)->by('customer-assistant:ip-min:'.$request->ip()),
+            Limit::perHour(60)->by('customer-assistant:ip-hour:'.$request->ip()),
+        ]);
+
         // THE place tools are registered - trusted code only, objects only (never class names from config, the
         // database or a request). M5.4 registers the Developer Assistant's four read-only tools and M5.5 the Vendor
-        // Assistant's six. Registering a tool does not make it callable: it must also be listed in
+        // Assistant's six and M5.6 the Customer Assistant's four. Registering a tool does not make it callable: it must also be listed in
         // config('ai.tools.allowlist.<surface>') and declare that surface.
         try {
             foreach ([
                 SearchDeveloperDocsTool::class, ReadDeveloperDocTool::class, ListMyAppsTool::class, GetMyAppTool::class,
                 GetDashboardSummaryTool::class, SearchMyOrdersTool::class, GetMyOrderTool::class,
                 ListMyProductsTool::class, GetEarningsSummaryTool::class, GetMyStoreInfoTool::class,
+                ListServicesTool::class, SearchProductsTool::class, GetProductTool::class, SearchHelpTool::class,
             ] as $tool) {
                 $registry->register($this->app->make($tool));
             }

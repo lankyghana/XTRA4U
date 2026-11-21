@@ -95,7 +95,8 @@ class RegressionAndArchitectureTest extends DeveloperAssistantTestCase
         $this->assertSame(DeveloperAssistant::TOOLS, $defaults['tools']['allowlist']['developer']);
         // M5.5 allow-lists the Vendor Assistant's six tools on `vendor` (inert while its surface is off).
         $this->assertSame(\App\Services\Ai\VendorAssistant\VendorAssistant::TOOLS, $defaults['tools']['allowlist']['vendor']);
-        $this->assertSame([], $defaults['tools']['allowlist']['customer']);
+        // M5.6 allow-lists the Customer Assistant's four public-catalogue tools on `customer` (inert while its surface is off).
+        $this->assertSame(\App\Services\Ai\CustomerAssistant\CustomerAssistant::TOOLS, $defaults['tools']['allowlist']['customer']);
     }
 
     public function test_the_four_documented_developer_tools_exist_and_they_are_developer_only(): void
@@ -103,8 +104,8 @@ class RegressionAndArchitectureTest extends DeveloperAssistantTestCase
         $registry = app(ToolRegistry::class);
 
         $this->assertTrue($registry->isSealed());
-        // M5.5 adds the six vendor tools; the four developer tools are unchanged and still developer-only.
-        $this->assertEqualsCanonicalizing(array_merge(DeveloperAssistant::TOOLS, \App\Services\Ai\VendorAssistant\VendorAssistant::TOOLS), $registry->names());
+        // M5.5 adds the six vendor tools and M5.6 the four customer tools; the four developer tools are unchanged and still developer-only.
+        $this->assertEqualsCanonicalizing(array_merge(DeveloperAssistant::TOOLS, \App\Services\Ai\VendorAssistant\VendorAssistant::TOOLS, \App\Services\Ai\CustomerAssistant\CustomerAssistant::TOOLS), $registry->names());
         foreach (DeveloperAssistant::TOOLS as $name) {
             $this->assertSame([\App\Services\Ai\Data\AiSurface::Developer], $registry->get($name)->surfaces());
         }
