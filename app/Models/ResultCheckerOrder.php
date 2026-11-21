@@ -71,7 +71,7 @@ class ResultCheckerOrder extends Model
      * Falls back to total_price − (quantity × base_price) for legacy orders
      * created before the vendor_profit column existed.
      *
-     * The SQL in VendorDashboardController::getResultCheckerFilteredStats mirrors
+     * The SQL in VendorDashboardReadService::resultCheckerStats (used by VendorDashboardController) mirrors
      * this logic — keep both in sync if the pricing model changes.
      */
     public function resolveVendorProfit(): float
