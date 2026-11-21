@@ -151,6 +151,16 @@ Route::get('/about', [\App\Http\Controllers\CmsPageController::class, 'about'])-
 Route::get('/privacy', [\App\Http\Controllers\CmsPageController::class, 'legal'])->defaults('slug', 'privacy')->name('privacy');
 Route::get('/terms', [\App\Http\Controllers\CmsPageController::class, 'legal'])->defaults('slug', 'terms')->name('terms');
 
+// Customer Assistant (M5.6): public, guest-accessible, read-only, stateless, mock-provider only, OFF by default. Two routes,
+// nothing else: no history/conversation/order/payment endpoint exists. The feature flag middleware answers 404 while the
+// customer AI surface is disabled; the rate limiter (shared cache) is keyed on IP, so rotating cookies does not help.
+Route::middleware(\App\Http\Middleware\EnsureCustomerAssistantEnabled::class)->group(function () {
+    Route::get('/assistant', [\App\Http\Controllers\CustomerAssistantController::class, 'show'])
+        ->middleware('throttle:60,1,customer-assistant-page')->name('customer.assistant.show');
+    Route::post('/assistant/messages', [\App\Http\Controllers\CustomerAssistantController::class, 'message'])
+        ->middleware('throttle:customer-assistant')->name('customer.assistant.message');
+});
+
 // Public Marketplace alias (matches common capitalized URL)
 Route::get('/Marketplace', fn () => redirect()->route('checkout.show'));
 
