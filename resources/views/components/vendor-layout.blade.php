@@ -159,6 +159,21 @@
         ],
     ];
 
+    // Vendor Assistant link: only while the assistant is actually available (engine on, vendor surface on, tools ready).
+    // A failure here must never break the page.
+    try {
+        if (app(\App\Services\Ai\VendorAssistant\VendorAssistant::class)->isAvailable()) {
+            $navLinks[] = [
+                'key' => 'assistant',
+                'label' => 'Assistant',
+                'href' => route('vendor.assistant.show'),
+                'matches' => ['vendor.assistant.*'],
+            ];
+        }
+    } catch (\Throwable $e) {
+        // not shown
+    }
+
     foreach ($navLinks as &$link) {
         $link['isActive'] = (($active ?? null) === $link['key'])
             || (!empty($link['matches']) && request()->routeIs(...$link['matches']));
@@ -169,7 +184,7 @@
     // No link is added, removed, or reordered across group boundaries; this just
     // labels the existing list so a long sidebar scans faster.
     $navGroups = [
-        'Overview' => ['dashboard'],
+        'Overview' => ['dashboard', 'assistant'],
         'Sell' => ['orders', 'fulfillment', 'products', 'utility-bills'],
         'Grow' => ['marketplace', 'reseller', 'affiliates', 'result-checkers', 'afa', 'ussd'],
         'Finance' => ['wallet', 'analytics'],

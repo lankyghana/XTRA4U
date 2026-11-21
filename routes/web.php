@@ -284,6 +284,12 @@ Route::middleware(['vendor.approved'])
         Route::get('analytics', [VendorDashboardController::class, 'analytics'])
             ->name('analytics.index');
 
+        // Vendor Assistant (M5.5): read-only, stateless, mock-provider only, off by default. Two routes, nothing else:
+        // no history/conversation endpoint exists. The vendor is always the signed-in one (see AssistantController).
+        Route::get('assistant', [\App\Http\Controllers\Vendor\AssistantController::class, 'show'])->name('assistant.show');
+        Route::post('assistant/messages', [\App\Http\Controllers\Vendor\AssistantController::class, 'message'])
+            ->middleware('throttle:vendor-assistant')->name('assistant.message');
+
         Route::get('affiliates', [VendorDashboardController::class, 'affiliates'])
             ->name('affiliates.index');
         Route::post('affiliates/join', [VendorDashboardController::class, 'joinAffiliate'])
