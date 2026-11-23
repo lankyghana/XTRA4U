@@ -1,54 +1,40 @@
-<!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="h-full bg-gray-50">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <meta name="robots" content="noindex">
-    <title>@yield('title', 'Developers') - XTRA4U</title>
-    <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('favicon-32x32.png') }}">
-    @vite(['resources/css/app.css', 'resources/js/app.js'])
-</head>
-<body class="min-h-full text-gray-900">
-@php
-    $vendor = auth('vendor')->user();
-    $approved = $vendor && $vendor->is_approved === true;
-@endphp
-<header class="bg-white border-b border-gray-200">
-    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
-        <a href="{{ route('developers.landing') }}" class="font-semibold text-lg">XTRA4U <span class="text-gray-500 font-normal">Developers</span></a>
-        <nav class="flex items-center gap-4 text-sm flex-wrap">
-            @if($approved)
-                <a href="{{ route('developers.dashboard') }}" class="hover:underline">Dashboard</a>
-                <a href="{{ route('developers.applications.index') }}" class="hover:underline">Applications</a>
-                @if(app(\App\Services\Ai\Developer\DeveloperAssistant::class)->isAvailable())
-                    <a href="{{ route('developers.assistant') }}" class="hover:underline">Assistant</a>
-                @endif
-                <a href="{{ route('vendor.dashboard') }}" class="hover:underline">Vendor dashboard</a>
-                <span class="text-gray-400">{{ $vendor->name }}</span>
-                <form method="POST" action="{{ route('vendor.logout') }}">@csrf
-                    <button type="submit" class="text-gray-700 hover:underline">Sign out</button>
-                </form>
-            @else
-                <a href="{{ route('vendor.login.form') }}" class="hover:underline">Vendor sign in</a>
-                <a href="{{ route('vendor.request.form') }}" class="rounded-lg bg-[#00942C] text-white px-3 py-1.5">Become a vendor</a>
-            @endif
-        </nav>
-    </div>
-</header>
+{{--
+    Public-facing Developer API pages (landing, "approval required"): the public storefront shell, exactly like
+    /about and the other marketing pages. The signed-in portal pages (dashboard, applications, docs, ...) do NOT use
+    this: they sit inside the vendor dashboard via <x-developers.shell>.
 
-<main class="max-w-6xl mx-auto px-4 py-8">
-    @if(session('status'))
-        <div class="mb-6 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800" role="status">{{ session('status') }}</div>
-    @endif
-    @if($errors->any())
-        <div class="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
-            <ul class="list-disc ml-5 space-y-1">
-                @foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach
-            </ul>
-        </div>
-    @endif
-    @yield('content')
-</main>
-</body>
-</html>
+    Child views define @section('page') (and @section('title')).
+--}}
+@extends('layouts.app')
+
+@push('head-seo')
+    <meta name="robots" content="noindex">
+@endpush
+
+@section('body-class', 'x4')
+
+@php
+    // Same "Shop" target as the other public pages when the flagship store is configured. Deliberately NOT
+    // MainStore::vendor(): its fallback picks an arbitrary approved vendor, and this page must never carry
+    // vendor-specific data (only the configured, already-public flagship code can appear).
+    // The configured code is only used when that vendor really exists here (it can be absent in local/staging data).
+    $mainStoreCode = config('storefront.main_store_code');
+    $shopUrl = $mainStoreCode && \App\Models\Vendor::where('vendor_code', $mainStoreCode)->exists()
+        ? route('storefront.vendor', ['vendor' => $mainStoreCode])
+        : route('checkout.show');
+@endphp
+
+@section('site-header')
+    <x-storefront.header :shop-url="$shopUrl" />
+@endsection
+
+@section('site-footer')
+    <x-storefront.footer :shop-url="$shopUrl" />
+@endsection
+
+@section('content')
+    <div class="x4-page" style="padding-top: 64px;">
+        <x-cms.announcement-bar audience="public" />
+        @yield('page')
+    </div>
+@endsection
