@@ -4,8 +4,10 @@ use App\Http\Controllers\Developers\ApiKeyController;
 use App\Http\Controllers\Developers\ApplicationController;
 use App\Http\Controllers\Developers\AssistantController;
 use App\Http\Controllers\Developers\DashboardController;
+use App\Http\Controllers\Developers\DocsController;
 use App\Http\Controllers\Developers\LandingController;
 use App\Http\Controllers\Developers\WebhookController;
+use App\Services\DeveloperApi\Docs\PortalDocs;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -20,6 +22,10 @@ Route::prefix('developers')->name('developers.')->group(function () {
 
     Route::middleware('developer.access')->group(function () {
         Route::get('dashboard', DashboardController::class)->name('dashboard');
+
+        // API documentation. Same gate as the rest of the portal; static, allowlisted pages (see PortalDocs).
+        Route::get('docs', [DocsController::class, 'index'])->name('docs.index');
+        Route::get('docs/{page}', [DocsController::class, 'show'])->where('page', PortalDocs::SLUG_PATTERN)->name('docs.show');
 
         // Developer Assistant (M5.4): read-only, stateless, JSON-only. Same vendor guard and live approval check as
         // everything else here; POST is CSRF-protected (web group) and throttled per vendor. No history endpoint exists.
