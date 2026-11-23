@@ -25,7 +25,7 @@ class StatelessAndLoggingTest extends VendorAssistantTestCase
     public function test_there_are_no_conversation_or_message_tables_or_migrations_for_the_assistant(): void
     {
         foreach (array_map(fn ($t) => is_array($t) ? $t['name'] : $t, Schema::getTables()) as $table) {
-            if (str_starts_with($table, 'support_')) {
+            if (str_starts_with($table, 'support_') || in_array($table, self::DURABLE_TABLES, true)) {
                 continue; // the existing vendor<->admin support inbox: a different feature
             }
             $this->assertDoesNotMatchRegularExpression('/(^ai_|_ai_|assistant|conversation|chat|prompt|llm|completion)/i', $table, "unexpected table: {$table}");
@@ -38,7 +38,7 @@ class StatelessAndLoggingTest extends VendorAssistantTestCase
         }
 
         // No migration was added by this milestone: the newest migration predates it.
-        $newest = collect(glob(database_path('migrations/*.php')))->map('basename')->sort()->last();
+        $newest = collect(glob(database_path('migrations/*.php')))->map('basename')->reject(fn ($m) => str_contains($m, 'ai_durable_budget') || str_contains($m, 'ai_budget_reservations'))->sort()->last();
         $this->assertLessThan('2026_11_20', substr($newest, 0, 10));
     }
 

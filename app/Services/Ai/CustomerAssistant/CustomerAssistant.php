@@ -17,6 +17,7 @@ use App\Services\Ai\Exceptions\AiDisabledException;
 use App\Services\Ai\Exceptions\AiException;
 use App\Services\Ai\Exceptions\AiInvalidRequestException;
 use App\Services\Ai\Providers\AiProviderManager;
+use App\Services\Ai\Safety\ConcurrencyGuard;
 use App\Services\Ai\Safety\KillSwitch;
 use App\Services\Ai\Tools\ToolContext;
 use App\Services\Ai\Tools\ToolExecutor;
@@ -62,6 +63,7 @@ class CustomerAssistant
     ];
 
     public function __construct(
+        private readonly ConcurrencyGuard $concurrency,
         private readonly AiOrchestrator $orchestrator,
         private readonly ToolRegistry $registry,
         private readonly ToolExecutor $executor,
@@ -110,35 +112,43 @@ class CustomerAssistant
         $system = AiMessage::system($this->systemPrompt());
         $user = AiMessage::user($message);
 
-        // ---- round 1: the model may propose tool calls -----------------------------------------------------------
-        $first = $this->orchestrator->run(new AiRequest(
-            AiSurface::Customer,
-            $context->principalKey(),
-            [$system, $user],
-            tools: $this->registry->definitionsFor(AiSurface::Customer),
-        ));
+        // The whole turn (round 1 + tools + round 2) shares ONE concurrency slot and ONE deadline: a visitor can neither
+        // occupy more than a slot's worth of PHP workers nor stretch a turn past `ai.request.turn_deadline_seconds`.
+        $deadlineAt = microtime(true) + max(1, (int) config('ai.request.turn_deadline_seconds', 40));
 
-        $proposed = $first->response->toolCalls;
+        return $this->concurrency->turn(function () use ($context, $system, $user, $started, $deadlineAt): CustomerAssistantReply {
+            // ---- round 1: the model may propose tool calls -----------------------------------------------------------
+            $first = $this->orchestrator->run(new AiRequest(
+                AiSurface::Customer,
+                $context->principalKey(),
+                [$system, $user],
+                tools: $this->registry->definitionsFor(AiSurface::Customer),
+                deadlineAt: $deadlineAt,
+            ));
 
-        if ($proposed === []) {
-            return $this->finish($context, $first, 1, 0, [], 0, $started);
-        }
+            $proposed = $first->response->toolCalls;
 
-        // ---- the one batch of tool calls ------------------------------------------------------------------------
-        $limits = ToolLimits::fromConfig();
-        $calls = array_slice($proposed, 0, $limits->maxCallsPerTurn);
-        $results = $this->executor->executeTurn($calls, $context, $this->executor->beginTurn());
+            if ($proposed === []) {
+                return $this->finish($context, $first, 1, 0, [], 0, $started);
+            }
 
-        // ---- round 2: results as untrusted data, and NO tools on offer -------------------------------------------
-        $marker = AiMessage::assistant('Tool calls requested: '.implode(', ', array_map(fn ($c) => $this->safeName($c->name), $calls)).'.');
-        $second = $this->orchestrator->run(new AiRequest(
-            AiSurface::Customer,
-            $context->principalKey(),
-            [$system, $user, $marker, ...$this->resultMessages($results, [$system, $user, $marker])],
-            tools: [],
-        ));
+            // ---- the one batch of tool calls ------------------------------------------------------------------------
+            $limits = ToolLimits::fromConfig();
+            $calls = array_slice($proposed, 0, $limits->maxCallsPerTurn);
+            $results = $this->executor->executeTurn($calls, $context, $this->executor->beginTurn());
 
-        return $this->finish($context, $second, 2, count($proposed), $results, count($second->response->toolCalls), $started);
+            // ---- round 2: results as untrusted data, and NO tools on offer -------------------------------------------
+            $marker = AiMessage::assistant('Tool calls requested: '.implode(', ', array_map(fn ($c) => $this->safeName($c->name), $calls)).'.');
+            $second = $this->orchestrator->run(new AiRequest(
+                AiSurface::Customer,
+                $context->principalKey(),
+                [$system, $user, $marker, ...$this->resultMessages($results, [$system, $user, $marker])],
+                tools: [],
+                deadlineAt: $deadlineAt,
+            ));
+
+            return $this->finish($context, $second, 2, count($proposed), $results, count($second->response->toolCalls), $started);
+        });
     }
 
     /**
@@ -267,7 +277,7 @@ class CustomerAssistant
             throw new AiInvalidRequestException('A message of 1-'.self::MAX_MESSAGE_CHARS.' characters is required.');
         }
 
-        $message = trim(PromptScrubber::scrub($message));
+        $message = trim(PromptScrubber::scrub($message, true));
 
         if ($message === '' || mb_strlen($message) > self::MAX_MESSAGE_CHARS) {
             throw new AiInvalidRequestException('A message of 1-'.self::MAX_MESSAGE_CHARS.' characters is required.');
@@ -279,7 +289,7 @@ class CustomerAssistant
     private function cleanAnswer(string $text): string
     {
         $text = (string) preg_replace('/[^\P{C}\n\t]+/u', ' ', mb_convert_encoding($text, 'UTF-8', 'UTF-8'));
-        $text = trim((string) preg_replace("/\n{3,}/", "\n\n", PromptScrubber::scrub($text)));
+        $text = trim((string) preg_replace("/\n{3,}/", "\n\n", PromptScrubber::scrub($text, true)));
 
         if ($text === '') {
             return 'I could not produce an answer. Please try rephrasing your question.';

@@ -24,11 +24,12 @@ $limits = static fn (string $prefix): array => [
 ];
 
 return [
-    // Global kill switch (config half). The runtime half is `php artisan ai:kill-switch on|off`, which wins.
+    // Global kill switch (config half). The runtime half is `php artisan ai:kill-switch engage|release|status`, which wins.
     'enabled' => (bool) env('AI_ENABLED', false),
 
-    // 'mock' (offline, default) or 'openai'. The OpenAI adapter is NOT implemented in M5.2: selecting it
-    // fails closed with a configuration error and makes no network request.
+    // 'mock' (offline, default) or 'openai'. Selecting 'openai' (M5.7 adapter) fails closed unless EVERY gate in
+    // docs/ai/06-production-hardening-and-launch-readiness.md is satisfied (external-processing approval, key, model,
+    // pricing, budgets, cache engine). The default must stay 'mock'.
     'provider' => env('AI_PROVIDER', 'mock'),
 
     // Placeholder. Deliberately no real model name is shipped; a live provider refuses to run while this is null
@@ -42,9 +43,65 @@ return [
             'model' => 'mock-model',
         ],
         'openai' => [
-            // Read lazily by the future adapter only. Never logged, never echoed, never part of an exception message.
+            // Read lazily by the adapter only. Never logged, never echoed, never part of an exception message.
+            // There is deliberately NO base-url setting: the endpoint is a constant in OpenAiProvider (HTTPS, fixed
+            // host), so no config value, request field, model output or tool argument can redirect a request.
             'api_key' => env('AI_OPENAI_API_KEY'),
-            'base_url' => env('AI_OPENAI_BASE_URL'),
+        ],
+    ],
+
+    /*
+    | External-processing approval gate (M5.7). Sending prompts to a third party is a privacy decision, not a
+    | technical one. This gate ships CLOSED and a live provider refuses to run until it is explicitly opened WITH a
+    | traceable approval record. An environment variable is not proof that approval happened: it is a record that a
+    | named, authorised person says it did. See docs/ai/06-production-hardening-and-launch-readiness.md section 5.
+    */
+    'external_processing' => [
+        'approved' => (bool) env('AI_EXTERNAL_PROCESSING_APPROVED', false),
+        'approval_reference' => env('AI_EXTERNAL_PROCESSING_APPROVAL_REF'),
+        'approved_by' => env('AI_EXTERNAL_PROCESSING_APPROVED_BY'),
+        'approved_on' => env('AI_EXTERNAL_PROCESSING_APPROVED_ON'),
+    ],
+
+    /*
+    | Operator attestations (M5.7). Facts about the hosting environment that the application CANNOT determine itself and
+    | that `ai:preflight --live` therefore refuses to guess. Both ship false. Setting one to true is a statement by the
+    | person responsible for the deployment that it is true (docs/ai/06); it does not make it so.
+    */
+    'operations' => [
+        // The app is reached DIRECTLY (no reverse proxy / CDN / load balancer in front), so the connecting address is the
+        // visitor. The alternative is to list the proxies in TRUSTED_PROXIES.
+        'direct_connections_confirmed' => (bool) env('AI_DIRECT_CONNECTIONS_CONFIRMED', false),
+        // The PHP worker pool is large enough that `ai.concurrency.max_in_flight` workers can be held for up to
+        // `ai.request.turn_deadline_seconds` each without starving checkout, and the web-server / FPM request timeout is
+        // longer than that deadline. Required before the PUBLIC customer surface may go live.
+        'customer_worker_capacity_confirmed' => (bool) env('AI_CUSTOMER_WORKER_CAPACITY_CONFIRMED', false),
+        // M5.7.2. A spending cap is set at the PROVIDER (account/project limit). Local budgets do not replace it: they are computed
+        // from configured prices, the provider bills what it counts. No amount is stored here and none is suggested; the application
+        // never calls the provider to check. Setting this to true is a statement by the person who configured the cap, and the
+        // reference says where that is recorded (ticket, console screenshot path, change record).
+        'provider_spending_cap_confirmed' => (bool) env('AI_PROVIDER_SPENDING_CAP_CONFIRMED', false),
+        'provider_spending_cap_reference' => env('AI_PROVIDER_SPENDING_CAP_REFERENCE'),
+    ],
+
+    /*
+    | Independent integrity anchor (M5.7.2). See docs/ai/06 section 19.
+    |
+    | The budget ledger, the counters and the kill switch live in the application database, so a restore of an older database
+    | takes all of them back together and nothing inside the database can tell. An ANCHOR is a second, authoritative record
+    | kept somewhere that is NOT restored with the database. Driver `none` (the default) means there is none: a live provider
+    | then refuses to run. Driver `file` stores an authenticated document in a directory the operator provides on storage that
+    | has its own backup and restore lifecycle. The repository cannot verify that independence, so the operator must attest to
+    | it and say where it is documented; `ai:preflight` fails until they do.
+    */
+    'integrity' => [
+        'anchor' => [
+            'driver' => env('AI_INTEGRITY_ANCHOR_DRIVER', 'none'),
+            'path' => env('AI_INTEGRITY_ANCHOR_PATH'),
+            // A secret of at least 32 characters, kept apart from the database (it authenticates the anchor document).
+            'key' => env('AI_INTEGRITY_ANCHOR_KEY'),
+            'independence_attested' => (bool) env('AI_INTEGRITY_ANCHOR_INDEPENDENCE_ATTESTED', false),
+            'independence_reference' => env('AI_INTEGRITY_ANCHOR_INDEPENDENCE_REF'),
         ],
     ],
 
@@ -56,12 +113,21 @@ return [
     ],
 
     'request' => [
-        // Per provider attempt. Hard-clamped to max_timeout_seconds whatever a caller asks for.
-        'timeout_seconds' => 20,
-        'max_timeout_seconds' => 30,
-        // Whole turn (all attempts). Retries never start if the remaining time cannot fit another attempt.
-        'deadline_seconds' => 40,
+        // Per provider attempt (total transfer time, cURL CURLOPT_TIMEOUT). Hard-clamped to max_timeout_seconds.
+        'timeout_seconds' => 15,
+        'max_timeout_seconds' => 20,
+        // TCP/TLS connect phase only (the request has NOT been sent if this expires).
+        'connect_timeout_seconds' => 5,
+        // One orchestrator run (all attempts of ONE provider round). Retries never start if they cannot fit.
+        // Invariant (validated): timeout <= max_timeout <= deadline_seconds <= turn_deadline_seconds.
+        'deadline_seconds' => 20,
+        // The WHOLE assistant turn: round 1 + tools + round 2. Assistants stamp this deadline on both requests, so
+        // the second round only gets what is left and is refused when too little remains. Must be below the
+        // web-server / PHP-FPM request timeout (document + verify per host).
+        'turn_deadline_seconds' => 40,
         // Retries on timeout / provider-unavailable only; hard-capped at 2 in code. 0 disables retries.
+        // A LIVE provider is only ever retried when the request provably never left this server (no idempotency key
+        // exists on the provider, so an ambiguous attempt is never repeated).
         'max_retries' => 1,
         // Serialized size of messages + tool schemas, in bytes.
         'max_request_bytes' => 16000,
@@ -95,10 +161,34 @@ return [
         ],
     ],
 
-    // Estimated cost needs reliable pricing; none is shipped. Shape (USD per 1,000,000 tokens):
+    // Token-accounting bound (M5.7): see docs/ai/06 section 6. input upper bound =
+    //   bytes(system+messages) + 2 x bytes(tool definitions) + per_message_overhead x messages + fixed_overhead.
+    'budget' => [
+        'fixed_overhead_tokens' => 512,
+        'per_message_overhead_tokens' => 16,
+        'tool_schema_multiplier' => 2,
+    ],
+
+    // Cost needs reliable pricing; NO price is shipped or guessed. Shape (USD per 1,000,000 tokens):
     //   'pricing' => ['openai' => ['<model>' => ['input_usd_per_million' => X, 'output_usd_per_million' => Y, 'as_of' => 'YYYY-MM-DD']]]
-    // Without an entry the cost is "unknown" (null) and is neither recorded nor enforced.
-    'pricing' => [],
+    // An entry is created ONLY when the operator supplies the model AND both rates through the environment, copied
+    // from the provider's official price list on the date recorded in AI_OPENAI_PRICING_AS_OF. A live provider will not
+    // run without a complete entry for its model (it must reserve a maximum cost before every call).
+    'pricing' => (static function (): array {
+        $model = env('AI_DEFAULT_MODEL');
+        $in = env('AI_OPENAI_INPUT_USD_PER_MILLION');
+        $out = env('AI_OPENAI_OUTPUT_USD_PER_MILLION');
+
+        if (! is_string($model) || $model === '' || ! is_numeric($in) || ! is_numeric($out)) {
+            return [];
+        }
+
+        return ['openai' => [$model => [
+            'input_usd_per_million' => (float) $in,
+            'output_usd_per_million' => (float) $out,
+            'as_of' => (string) env('AI_OPENAI_PRICING_AS_OF', ''),
+        ]]];
+    })(),
 
     'circuit_breaker' => [
         'failure_threshold' => 5,

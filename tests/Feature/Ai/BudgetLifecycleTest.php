@@ -10,9 +10,11 @@ use App\Services\Ai\Exceptions\AiProviderException;
 use App\Services\Ai\Safety\CircuitBreaker;
 use App\Services\Ai\Safety\CircuitPermit;
 use App\Services\Ai\Usage\BudgetGuard;
+use App\Services\Ai\Usage\PriceTable;
 use App\Services\Ai\Usage\TokenEstimator;
 use App\Services\Ai\Usage\UsageMeter;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
@@ -100,9 +102,14 @@ class BudgetLifecycleTest extends AiTestCase
         $result = $this->engine()->run($this->req());
 
         $estimate = $this->estimateOfLastCall();
+        $calls = $this->mockProvider()->calls();
+        $last = end($calls);
+        $maxCost = app(PriceTable::class)->maxCostMicroUsd(
+            'mock', 'mock-model', app(TokenEstimator::class)->inputUpperBound($last), app(TokenEstimator::class)->outputUpperBound($last)
+        );
         $this->assertSame($estimate, $this->usage()['global']['tokens'], 'unknown usage is never released as if it were zero');
         $this->assertNull($result->estimatedCostMicroUsd, 'the caller is not shown a cost that was never reported');
-        $this->assertSame((int) ceil($estimate * 10), $this->usage()['global']['cost_micro_usd'], 'but the cost budget is charged at the dearer rate');
+        $this->assertSame($maxCost, $this->usage()['global']['cost_micro_usd'], 'the cost budget keeps the full MAXIMUM cost that was reserved');
         $this->assertSame($this->usage()['global']['cost_micro_usd'], $this->usage()['surface.vendor']['cost_micro_usd']);
     }
 
@@ -233,7 +240,7 @@ class BudgetLifecycleTest extends AiTestCase
         $this->mockProvider()->timeoutOnce(); // probe the estimate with a first run
         $this->runAndExpectFailure();
         $estimate = $this->estimateOfLastCall();
-        Cache::flush();
+        $this->prepareDurableAiState(); // a fresh day's ledger (the cache is irrelevant to the budget now)
 
         config(['ai.request.max_retries' => 1, 'ai.limits.global.daily_tokens' => $estimate + 10]); // room for ONE attempt
         $this->mockProvider()->reset()->timeoutOnce()->respondWith('never reached');
@@ -264,10 +271,10 @@ class BudgetLifecycleTest extends AiTestCase
         }
     }
 
-    public function test_a_cache_failure_part_way_through_a_reservation_rolls_back_what_was_taken(): void
+    public function test_a_database_failure_part_way_through_a_reservation_rolls_back_what_was_taken(): void
     {
-        $meter = $this->flakyMeter();
-        $meter->failOnAddNumber = 3; // global.requests, global.tokens succeed; surface.requests blows up
+        // Both counters have been charged when the LEDGER INSERT fails: the transaction must take everything back.
+        $disarm = $this->failDatabaseWhen('insert into ai_budget_reservations');
 
         try {
             $this->engine()->run($this->req());
@@ -275,10 +282,12 @@ class BudgetLifecycleTest extends AiTestCase
         } catch (AiConfigurationException) {
         }
 
-        $meter->failOnAddNumber = null;
+        $disarm();
         $this->assertSame(0, $this->mockProvider()->callCount(), 'no provider call with a half-made reservation');
         $this->assertSame(0, $this->usage()['global']['requests']);
         $this->assertSame(0, $this->usage()['global']['tokens']);
+        $this->assertSame(0, $this->usage()['surface.vendor']['requests']);
+        $this->assertSame(0, DB::table('ai_budget_reservations')->count());
     }
 
     // ------------------------------------------------ idempotency
@@ -309,7 +318,7 @@ class BudgetLifecycleTest extends AiTestCase
         $this->assertSame(1, $u['global']['successes']);
     }
 
-    public function test_counters_never_go_negative_when_they_vanish_mid_request(): void
+    public function test_a_cache_flush_in_the_middle_of_a_request_changes_nothing_about_the_reservation(): void
     {
         $guard = app(BudgetGuard::class);
         $r = $guard->reserve(AiSurface::Vendor, 100, false);
@@ -317,15 +326,15 @@ class BudgetLifecycleTest extends AiTestCase
         Cache::flush(); // e.g. an operator flushes the cache during the call
         $guard->fail($r, false);
 
-        $this->assertSame(0, $this->usage()['global']['tokens'], 'a release must not conjure a negative counter (= free headroom)');
+        $this->assertSame(0, $this->usage()['global']['tokens'], 'released exactly once');
+        $this->assertSame(1, $this->usage()['global']['requests'], 'the attempt still counts as a request: the flush did not erase it');
     }
 
     public function test_a_successful_answer_is_charged_even_if_settlement_fails_half_way(): void
     {
-        $meter = $this->flakyMeter();
         $this->mockProvider()->respondWith('ok', new AiUsage(40, 10));
-        // add() calls: 4 for the reservation, then settle: global tokens delta is the 5th.
-        $meter->failOnAddNumber = 5;
+        // The settlement transaction does all its work and then fails on the last statement: all of it rolls back.
+        $disarm = $this->failDatabaseWhen('update ai_budget_reservations set state');
 
         try {
             $this->engine()->run($this->req());
@@ -333,10 +342,12 @@ class BudgetLifecycleTest extends AiTestCase
         } catch (AiConfigurationException) {
         }
 
-        $meter->failOnAddNumber = null;
+        $disarm();
         $this->assertSame(1, $this->mockProvider()->callCount());
         $this->assertSame($this->estimateOfLastCall(), $this->usage()['global']['tokens'], 'NOT refunded: a possibly-successful call is never released as unused');
         $this->assertSame(1, $this->usage()['global']['requests']);
+        $this->assertSame(0, $this->usage()['global']['successes'], 'the half-applied settlement was rolled back as a whole');
+        $this->assertSame(BudgetGuard::OPEN, DB::table('ai_budget_reservations')->value('state'), 'still open and fully charged');
     }
 
     public function test_a_failure_while_recording_breaker_success_keeps_the_answer_and_its_accounting(): void
@@ -374,44 +385,25 @@ class BudgetLifecycleTest extends AiTestCase
         $this->assertSame($this->estimateOfLastCall(), $this->usage()['global']['tokens']);
     }
 
-    // ------------------------------------------------ the counter primitive
+    // ------------------------------------------------ the counters are the ledger
 
-    public function test_the_counter_primitive_accumulates_and_never_goes_negative_from_nothing(): void
+    public function test_the_counters_always_equal_the_ledger_and_reads_of_a_quiet_day_are_zero(): void
     {
-        $meter = new UsageMeter;
+        $guard = app(BudgetGuard::class);
+        $meter = app(UsageMeter::class);
 
-        $this->assertSame(5, $meter->add('20990101', 'global', 'requests', 5));
-        $this->assertSame(7, $meter->add('20990101', 'global', 'requests', 2));
-        $this->assertSame(6, $meter->add('20990101', 'global', 'requests', -1));
-        $this->assertSame(0, $meter->add('20990101', 'global', 'never-created', -3), 'decrementing a missing counter creates nothing');
-        $this->assertSame(0, $meter->get('20990101', 'global', 'never-created'));
-    }
+        $this->assertSame(0, $meter->get('20990101', 'global', 'requests'), 'a day nothing was reserved on really is zero');
+        $this->assertSame(0, $meter->get('20990101', 'global', 'never-a-metric'));
 
-    /** A UsageMeter whose Nth positive add() throws (a cache outage in the middle of a reservation/settlement). */
-    private function flakyMeter(): UsageMeter
-    {
-        $meter = new class extends UsageMeter
-        {
-            public ?int $failOnAddNumber = null;
+        $a = $guard->reserve(AiSurface::Vendor, 100, false);
+        $b = $guard->reserve(AiSurface::Customer, 70, false);
+        $guard->settle($a, 40, null);
+        $guard->fail($b, true);
 
-            private int $adds = 0;
-
-            public function add(string $day, string $scope, string $metric, int $amount): int
-            {
-                if ($amount > 0 || $this->failOnAddNumber !== null) {
-                    $this->adds++;
-                }
-
-                if ($this->failOnAddNumber !== null && $this->adds === $this->failOnAddNumber) {
-                    throw new \RuntimeException('cache unavailable');
-                }
-
-                return parent::add($day, $scope, $metric, $amount);
-            }
-        };
-
-        $this->app->instance(UsageMeter::class, $meter);
-
-        return $meter;
+        $this->assertSame([], $guard->integrityProblems());
+        $this->assertSame(110, $this->usage()['global']['tokens']);
+        $this->assertSame(40, $this->usage()['surface.vendor']['tokens']);
+        $this->assertSame(70, $this->usage()['surface.customer']['tokens']);
+        $this->assertSame(2, $this->usage()['global']['requests']);
     }
 }

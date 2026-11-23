@@ -55,6 +55,20 @@ class ServiceAvailability
         return ! self::isOpen($category);
     }
 
+    /**
+     * isOpen() / isClosed() with identical meaning (no row = open) but read straight from the settings table, never via
+     * the cache - for callers that must not write to the cache (the AI tools run inside a SELECT-only guard).
+     */
+    public static function isOpenFresh(string $category): bool
+    {
+        return Setting::getFresh(self::key($category), '1') === '1';
+    }
+
+    public static function isClosedFresh(string $category): bool
+    {
+        return ! self::isOpenFresh($category);
+    }
+
     public static function setOpen(string $category, bool $open): void
     {
         Setting::set(self::key($category), $open ? '1' : '0', self::GROUP);

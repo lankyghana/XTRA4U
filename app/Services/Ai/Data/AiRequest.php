@@ -28,6 +28,14 @@ final class AiRequest
         public readonly ?int $timeoutSeconds = null,
         public readonly array $tools = [],
         ?string $requestId = null,
+        /** Absolute microtime(true) by which the WHOLE assistant turn (both rounds + tools) must be over; null = none. */
+        public readonly ?float $deadlineAt = null,
+        /**
+         * The durable budget reservation (ledger row id) that pays for THIS provider attempt. Set only by the orchestrator
+         * after it has reserved; an external provider adapter refuses to transmit a request whose reservation is missing,
+         * closed or not its own.
+         */
+        public readonly ?string $reservationId = null,
     ) {
         if ($principalKey === '' || strlen($principalKey) > 128) {
             throw new AiInvalidRequestException('A principal key of 1-128 characters is required.');
@@ -49,7 +57,13 @@ final class AiRequest
     /** Same request with the engine's final, clamped values. */
     public function resolved(string $model, int $maxOutputTokens, int $timeoutSeconds): self
     {
-        return new self($this->surface, $this->principalKey, $this->messages, $model, $maxOutputTokens, $timeoutSeconds, $this->tools, $this->requestId);
+        return new self($this->surface, $this->principalKey, $this->messages, $model, $maxOutputTokens, $timeoutSeconds, $this->tools, $this->requestId, $this->deadlineAt, $this->reservationId);
+    }
+
+    /** Same request, paid for by the given budget reservation. */
+    public function withReservation(string $reservationId): self
+    {
+        return new self($this->surface, $this->principalKey, $this->messages, $this->model, $this->maxOutputTokens, $this->timeoutSeconds, $this->tools, $this->requestId, $this->deadlineAt, $reservationId);
     }
 
     /** Size of everything that would be sent to a provider, in bytes. */

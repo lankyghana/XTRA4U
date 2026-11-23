@@ -8,6 +8,7 @@ use App\Services\Ai\Tools\Exceptions\AiToolContextException;
 use App\Services\Ai\Tools\ToolContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Who may use the Vendor Assistant: exactly the signed-in, currently approved vendor, through the EXISTING vendor guard
@@ -128,8 +129,8 @@ class AccessControlTest extends VendorAssistantTestCase
             }
         }
 
-        $tables = array_map(fn ($t) => is_array($t) ? $t['name'] : $t, \Illuminate\Support\Facades\Schema::getTables());
-        foreach ($tables as $table) {
+        $tables = array_map(fn ($t) => is_array($t) ? $t['name'] : $t, Schema::getTables());
+        foreach (array_diff($tables, self::DURABLE_TABLES) as $table) {
             $this->assertDoesNotMatchRegularExpression('/(assistant|^ai_|_ai_|ai_conversation|ai_message|chat_message)/i', $table, "unexpected table: {$table}");
         }
     }

@@ -57,6 +57,14 @@ class PlatformServiceVendor
         return ($value !== null && $value !== '') ? (int) $value : null;
     }
 
+    /** vendorIdFor() with identical meaning, read straight from the settings table and never via the cache. */
+    public static function vendorIdForFresh(string $category): ?int
+    {
+        $value = Setting::getFresh(self::key($category));
+
+        return ($value !== null && $value !== '') ? (int) $value : null;
+    }
+
     public static function setVendorFor(string $category, ?int $vendorId): void
     {
         Setting::set(self::key($category), $vendorId ? (string) $vendorId : '', self::GROUP);
@@ -116,6 +124,27 @@ class PlatformServiceVendor
      *
      * @return Collection<int,array{vendor:Vendor,eligible:bool,hint:?string}>
      */
+    /**
+     * resolve() with identical meaning (the assigned vendor, only while approved) but the assignment is read straight
+     * from the settings table and never via the cache - for callers that must not write to the cache.
+     */
+    public static function resolveFresh(string $category): ?Vendor
+    {
+        $vendorId = self::vendorIdForFresh($category);
+
+        if (! $vendorId) {
+            return null;
+        }
+
+        $vendor = Vendor::find($vendorId);
+
+        if (! $vendor || ! $vendor->is_approved) {
+            return null;
+        }
+
+        return $vendor;
+    }
+
     public static function eligibleVendors(string $category): Collection
     {
         $vendors = Vendor::where('is_approved', true)->orderBy('name')->get();

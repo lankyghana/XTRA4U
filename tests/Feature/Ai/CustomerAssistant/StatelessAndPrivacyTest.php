@@ -25,7 +25,7 @@ class StatelessAndPrivacyTest extends CustomerAssistantTestCase
     public function test_no_conversation_or_message_table_or_migration_exists_for_the_assistant(): void
     {
         foreach (array_map(fn ($t) => is_array($t) ? $t['name'] : $t, Schema::getTables()) as $table) {
-            if (str_starts_with($table, 'support_')) {
+            if (str_starts_with($table, 'support_') || in_array($table, self::DURABLE_TABLES, true)) {
                 continue; // the existing vendor<->admin support inbox: a different feature
             }
             $this->assertDoesNotMatchRegularExpression('/(^ai_|_ai_|assistant|conversation|chat|prompt|llm|completion)/i', $table, "unexpected table: {$table}");
@@ -38,7 +38,7 @@ class StatelessAndPrivacyTest extends CustomerAssistantTestCase
         }
 
         // M5.6 adds NO migration: the newest one predates the milestone.
-        $newest = collect(glob(database_path('migrations/*.php')))->map('basename')->sort()->last();
+        $newest = collect(glob(database_path('migrations/*.php')))->map('basename')->reject(fn ($m) => str_contains($m, 'ai_durable_budget') || str_contains($m, 'ai_budget_reservations'))->sort()->last();
         $this->assertLessThan('2026_11_20', substr($newest, 0, 10));
     }
 
@@ -76,7 +76,10 @@ class StatelessAndPrivacyTest extends CustomerAssistantTestCase
     {
         $this->catalogue();
         $this->faq('How to pay', 'Pay at checkout.');
-        $tables = array_map(fn ($t) => is_array($t) ? $t['name'] : $t, Schema::getTables());
+        // Every table EXCEPT the framework's own cache/lock tables: on the database cache store the engine's rate-limit and
+        // concurrency counters legitimately live there (ColdDatabaseCacheTest covers that store and proves the tools
+        // themselves write nothing, and that no conversation text reaches any table, `cache` included).
+        $tables = array_values(array_diff(array_map(fn ($t) => is_array($t) ? $t['name'] : $t, Schema::getTables()), [...['cache', 'cache_locks'], ...self::DURABLE_TABLES]));
         $snapshot = fn () => array_map(fn ($t) => md5(DB::table($t)->get()->toJson()), array_combine($tables, $tables));
         $before = $snapshot();
 
@@ -121,7 +124,9 @@ class StatelessAndPrivacyTest extends CustomerAssistantTestCase
 
         $allowed = ['products', 'reseller_products', 'vendors', 'settings', 'network_services', 'vendor_result_checker_settings', 'cms_faqs',
             // plumbing the framework itself issues around any request, never a tool
-            'sessions', 'cache', 'cache_locks', 'jobs', 'migrations'];
+            'sessions', 'cache', 'cache_locks', 'jobs', 'migrations',
+            // the durable budget ledger and kill-switch flag: the engine reads/writes counts and state only (never text)
+            'ai_usage_counters', 'ai_budget_reservations', 'ai_runtime_flags'];
         $this->assertSame([], array_values(array_diff($queried, $allowed)), 'unexpected table(s) queried');
 
         foreach (['orders', 'transactions', 'order_', 'wallet', 'withdraw', 'payment', 'result_checker_orders', 'result_checker_pins', 'afa_registrations', 'recipient_number', 'developer', 'api_key', 'webhook', 'utility_bill', 'users', 'admins', 'support_'] as $private) {

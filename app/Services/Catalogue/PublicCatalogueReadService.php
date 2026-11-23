@@ -18,7 +18,7 @@ use Illuminate\Database\Eloquent\Builder;
  *
  * "Publicly available" is decided by the same rules those pages use, and every rule that can be a SQL condition IS one:
  *   - the category must be open (ServiceAvailability), and an admin-assigned vendor must resolve and still be approved
- *     (PlatformServiceVendor::resolve) - a missing assignment never falls back to some other vendor;
+ *     (PlatformServiceVendor::resolveFresh) - a missing assignment never falls back to some other vendor;
  *   - an owned product: vendor_id = that vendor AND is_active (soft-deleted rows are excluded by the model scope);
  *   - a reseller listing: reseller_vendor_id = that vendor AND the listing is active AND its source product is active
  *     AND resellable (and not soft-deleted);
@@ -44,7 +44,12 @@ class PublicCatalogueReadService
     /** Every category the official pages serve (utility bills is a separate global service, see services()). */
     public const CATEGORIES = ['data', 'shop', 'results', 'afa'];
 
-    /** Rows examined per source and category before PHP-side refinement. Beyond this the result says so. */
+    /**
+     * Most rows ONE source (owned products / reseller listings) can contribute to one category's result. The category and
+     * the search words are filtered IN SQL (see categoryCondition()), so these are rows that already belong to the
+     * category and match the words: a catalogue with thousands of products in other categories cannot push a match out of
+     * the window. If more candidates than this exist the result says so (`incomplete`) instead of pretending otherwise.
+     */
     public const SCAN_LIMIT = 400;
 
     public const SORTS = ['price_asc', 'price_desc', 'name'];
@@ -77,7 +82,7 @@ class PublicCatalogueReadService
 
         foreach (self::CATEGORIES as $category) {
             $availability = match (true) {
-                ServiceAvailability::isClosed($category) => 'closed',
+                ServiceAvailability::isClosedFresh($category) => 'closed',
                 $category === 'afa' => $this->afaOffered() ? 'available' : 'unavailable',
                 default => $this->search(null, $category, 'name', 1, 1)['items'] === [] ? 'unavailable' : 'available',
             };
@@ -252,14 +257,23 @@ class PublicCatalogueReadService
 
     // ----------------------------------------------------------------------------------------------- internals
 
-    /** The category's assigned vendor, but only when the category is open and the vendor is approved. */
+    /**
+     * The category's assigned vendor, but only when the category is open and the vendor is approved.
+     *
+     * Settings are read with the *Fresh variants, straight from the `settings` table. The cached readers
+     * (ServiceAvailability::isClosed / PlatformServiceVendor::resolve) go through Cache::remember, which on the database
+     * cache store WRITES to the `cache` table on a miss - and on EVERY call for a setting that has no row. This service
+     * runs inside the AI tools' SELECT-only ReadOnlyGuard, which rightly refuses that write, so using them here made the
+     * catalogue tools fail with `read_only_violation` in production. The guard is unchanged; the read simply does not
+     * need a cache. The meaning is identical (no row = open; a vendor only while approved), see ColdDatabaseCacheTest.
+     */
     private function openVendor(string $category): ?Vendor
     {
-        if (ServiceAvailability::isClosed($category)) {
+        if (ServiceAvailability::isClosedFresh($category)) {
             return null;
         }
 
-        return PlatformServiceVendor::resolve($category);
+        return PlatformServiceVendor::resolveFresh($category);
     }
 
     private function afaOffered(): bool
@@ -290,6 +304,7 @@ class PublicCatalogueReadService
     {
         $owned = Product::query()
             ->where('vendor_id', $vendor->id)->where('is_active', true)
+            ->where(fn (Builder $q) => $this->categoryCondition($q, $category))
             ->where(fn (Builder $q) => $this->termsOnProduct($q, $terms))
             ->orderBy('id')->limit(self::SCAN_LIMIT + 1)
             ->get(['id', 'vendor_id', 'name', 'description', 'price']);
@@ -297,6 +312,7 @@ class PublicCatalogueReadService
         $listings = ResellerProduct::query()
             ->where('reseller_vendor_id', $vendor->id)->where('is_active', true)
             ->whereHas('product', fn (Builder $p) => $p->where('is_active', true)->where('is_resellable', true)
+                ->where(fn (Builder $q) => $this->categoryCondition($q, $category))
                 ->where(fn (Builder $q) => $this->termsOnProduct($q, $terms)))
             ->with('product:id,name,description')
             ->orderBy('id')->limit(self::SCAN_LIMIT + 1)
@@ -321,12 +337,90 @@ class PublicCatalogueReadService
         return [array_values(array_filter($items, fn (array $i) => $i['category'] === $category)), $cut];
     }
 
-    /** SQL narrowing only (name or the JSON text); the exact match is re-checked on PUBLIC fields in PHP. */
+    /**
+     * SQL narrowing for the search words: each word must occur (case-insensitively) in one of the PUBLIC fields the PHP
+     * check reads - the product name, or the description JSON's service / network / size / validity. The exact match is
+     * still re-checked in PHP on those same fields, so this can only ever drop rows PHP would also have dropped.
+     *
+     * @param  list<string>  $terms
+     */
     private function termsOnProduct(Builder $q, array $terms): void
     {
+        $dialect = $this->dialect($q);
+
         foreach ($terms as $term) {
-            $q->where(fn (Builder $w) => $w->where('name', 'like', "%{$term}%")->orWhere('description', 'like', "%{$term}%"));
+            $q->where(function (Builder $w) use ($term, $dialect) {
+                $w->whereRaw('LOWER(products.name) LIKE ?', ["%{$term}%"]);
+
+                if ($dialect === null) {
+                    // No JSON functions on this engine: fall back to the raw description text (a superset, never fewer rows).
+                    $w->orWhereRaw('LOWER(products.description) LIKE ?', ["%{$term}%"]);
+
+                    return;
+                }
+
+                foreach (['service', 'network', 'size', 'validity'] as $key) {
+                    $w->orWhereRaw('LOWER('.$this->jsonText($dialect, $key).') LIKE ?', ["%{$term}%"]);
+                }
+            });
         }
+    }
+
+    /**
+     * Keep only products whose STOREFRONT category (see categoryOf()) is `$category`, decided by the database.
+     *
+     * The category lives in the description column as JSON, and the public pages treat these cases as the default
+     * category: no description, a description that is not valid JSON (legacy plain text), JSON that is not an object, no
+     * `category` key, a `category` that is not a string, and an empty-string `category`. The expression below encodes
+     * exactly that, nested in CASE branches so a malformed document is never handed to a JSON function.
+     *
+     * On an engine with no supported JSON functions nothing is filtered here and PHP does all of it; the scan window
+     * then counts rows of every category, which the `incomplete` flag reports honestly.
+     *
+     * String comparison in SQL may be case-insensitive (collation); PHP's strict check in ownedItem()/listingItem()
+     * remains the authority, so a row like {"category":"DATA"} is dropped there exactly as before.
+     */
+    private function categoryCondition(Builder $q, string $category): void
+    {
+        $dialect = $this->dialect($q);
+
+        if ($dialect === null) {
+            return;
+        }
+
+        $default = (string) config('storefront.default_category', 'data');
+        $doc = 'products.description';
+        $path = "'\$.category'";
+
+        [$valid, $isString, $extract] = $dialect === 'sqlite'
+            ? ["json_valid({$doc})", "json_type({$doc}, {$path}) = 'text'", "json_extract({$doc}, {$path})"]
+            : ["JSON_VALID({$doc}) = 1", "JSON_TYPE(JSON_EXTRACT({$doc}, {$path})) = 'STRING'", "JSON_UNQUOTE(JSON_EXTRACT({$doc}, {$path}))"];
+
+        $q->whereRaw(
+            "(CASE WHEN {$valid} THEN (CASE WHEN {$isString} AND {$extract} <> '' THEN {$extract} ELSE ? END) ELSE ? END) = ?",
+            [$default, $default, $category]
+        );
+    }
+
+    /** @return ?string 'sqlite' | 'mysql' (MariaDB and MySQL) | null when the engine has no JSON support we rely on */
+    private function dialect(Builder $q): ?string
+    {
+        return match ($q->getQuery()->getConnection()->getDriverName()) {
+            'sqlite' => 'sqlite',
+            'mysql', 'mariadb' => 'mysql',
+            default => null,
+        };
+    }
+
+    /** SQL for "the string value of $.key in the description JSON, or NULL" (never touches malformed JSON). */
+    private function jsonText(string $dialect, string $key): string
+    {
+        $doc = 'products.description';
+        $path = "'\$.{$key}'";
+
+        return $dialect === 'sqlite'
+            ? "CASE WHEN json_valid({$doc}) THEN (CASE WHEN json_type({$doc}, {$path}) = 'text' THEN json_extract({$doc}, {$path}) END) END"
+            : "CASE WHEN JSON_VALID({$doc}) = 1 THEN (CASE WHEN JSON_TYPE(JSON_EXTRACT({$doc}, {$path})) = 'STRING' THEN JSON_UNQUOTE(JSON_EXTRACT({$doc}, {$path})) END) END";
     }
 
     /** @param list<string> $terms every term must appear in the item's public text */

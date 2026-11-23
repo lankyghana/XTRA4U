@@ -17,9 +17,9 @@ class AiProviderManager
 
         return match ($name) {
             MockAiProvider::NAME => app(MockAiProvider::class),
-            // Deliberately unimplemented in M5.2: the endpoint, model and request format must first be verified
-            // against OpenAI's official documentation. Failing closed means no request can ever be sent.
-            'openai' => throw new AiConfigurationException('The OpenAI provider adapter is not implemented yet.'),
+            // M5.7: the adapter exists but fails closed (assertConfigured) unless every approval and configuration gate
+            // holds. Selecting it never bypasses the orchestrator: budgets, limits, breaker and kill switch all apply.
+            OpenAiProvider::NAME => app(OpenAiProvider::class),
             default => throw new AiConfigurationException('Unknown or missing AI provider configuration.'),
         };
     }

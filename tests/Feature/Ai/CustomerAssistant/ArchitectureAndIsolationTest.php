@@ -263,10 +263,47 @@ class ArchitectureAndIsolationTest extends CustomerAssistantTestCase
     public function test_the_tools_contain_no_raw_sql_and_never_select_star(): void
     {
         foreach ($this->toolFiles() as $file) {
+            if (basename($file) === 'PublicCatalogueReadService.php') {
+                $this->assertCatalogueRawSqlIsAuditedAndBound((string) file_get_contents($file));
+
+                continue;
+            }
+
             $source = $this->codeText($file);
             $this->assertDoesNotMatchRegularExpression('/(DB ::|selectRaw|whereRaw|orderByRaw|havingRaw|groupByRaw|DB :: raw)/', $source, basename($file).' builds raw SQL');
             $this->assertDoesNotMatchRegularExpression("/->select\\(\\s*'\\*'/", $source, basename($file));
         }
+    }
+
+    /**
+     * M5.7 moved the category and search-word filters into the database, which needs two JSON expressions Eloquent cannot
+     * express. That is the ONLY raw SQL a customer-assistant file may contain, and it is held to this contract: it lives in
+     * three private helpers, carries no value that came from a visitor in its SQL text (every such value is a binding), and
+     * never uses the broader raw entry points (DB::, selectRaw, orderByRaw, havingRaw, groupByRaw).
+     */
+    private function assertCatalogueRawSqlIsAuditedAndBound(string $source): void
+    {
+        $this->assertDoesNotMatchRegularExpression('/DB::|selectRaw|orderByRaw|havingRaw|groupByRaw|->raw\(|Expression/', $source, 'only whereRaw/orWhereRaw with bindings are allowed');
+
+        // Every raw call sits inside one of the three audited helpers.
+        $helpers = ['termsOnProduct', 'categoryCondition', 'jsonText'];
+        foreach (preg_split('/\n    (?:public|private|protected) function /', $source) as $i => $chunk) {
+            if ($i === 0 || ! str_contains($chunk, 'whereRaw(') && ! str_contains($chunk, 'orWhereRaw(')) {
+                continue;
+            }
+            $name = strtok($chunk, '(');
+            $this->assertContains($name, $helpers, "raw SQL in [{$name}] is not an audited helper");
+        }
+
+        // The SQL text (first argument) of every raw call holds no visitor-influenced variable; those only appear as bindings.
+        $this->assertGreaterThan(0, preg_match_all('/(?:orWhereRaw|whereRaw)\(\s*(.*?),\s*\[/s', $source, $calls));
+        foreach ($calls[1] as $sqlText) {
+            $this->assertDoesNotMatchRegularExpression('/\$(term|text|terms|category|ref|query|request|message|input)\b/', $sqlText, 'a visitor-influenced value is interpolated into SQL: '.$sqlText);
+        }
+
+        // jsonText() is only ever given literal keys.
+        preg_match_all('/foreach \(\[([^\]]*)\] as \$key\)/', $source, $keys);
+        $this->assertSame(["'service', 'network', 'size', 'validity'"], $keys[1], 'the JSON keys placed in SQL are a fixed literal list');
     }
 
     public function test_every_query_is_bounded(): void

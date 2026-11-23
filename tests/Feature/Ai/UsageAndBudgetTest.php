@@ -201,13 +201,16 @@ class UsageAndBudgetTest extends AiTestCase
     public function test_a_live_provider_runs_once_every_required_budget_is_configured(): void
     {
         $live = $this->useLiveProvider();
-        config(['ai.limits.global.daily_tokens' => 1_000_000, 'ai.limits.surfaces.vendor.daily_tokens' => 500_000]);
+        $this->liveBudgets(['ai.limits.global.daily_tokens' => 1_000_000, 'ai.limits.surfaces.vendor.daily_tokens' => 500_000]);
 
         $result = $this->engine()->run($this->req());
 
         $this->assertSame('live ok', $result->response->text);
         $this->assertSame(1, $live->calls);
         $this->assertSame(150, $this->usage()['global']['tokens']);
+        $this->assertSame(1, $this->usage()['global']['requests']);
+        // 100 input x $2/M + 50 output x $6/M = 500 micro-USD: the reservation was replaced by the reported cost.
+        $this->assertSame(500, $this->usage()['global']['cost_micro_usd']);
     }
 
     public function test_a_live_provider_requires_an_explicit_model(): void

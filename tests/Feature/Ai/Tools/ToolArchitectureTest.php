@@ -195,7 +195,7 @@ class ToolArchitectureTest extends TestCase
             $this->assertSame(0, preg_match('~[\'"]/?ai[\'"/]~', (string) file_get_contents($routes)), basename($routes).' must not declare AI routes');
         }
 
-        $this->assertSame([], glob(base_path('database/migrations/*_ai_*')), 'no AI migrations');
+        $this->assertSame([], array_values(array_filter(glob(base_path('database/migrations/*_ai_*')), fn ($m) => ! str_contains($m, 'ai_durable_budget') && ! str_contains($m, 'ai_budget_reservations'))), 'no AI migrations other than the M5.7.1 durable budget / kill-switch state and the M5.7.2 anchor sequence column');
         $this->assertSame([], glob(app_path('Http/Controllers/*Ai*')));
         $this->assertSame([], glob(base_path('resources/views/ai*')));
         $this->assertFalse(Route::has('ai.chat'));

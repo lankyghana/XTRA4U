@@ -68,7 +68,9 @@ class HelpToolAndFailureTest extends CustomerAssistantTestCase
 
         $this->runTool('customer_search_help', ['query' => 'delivery']);
 
-        $this->assertSame(['cms_faqs'], array_values(array_unique($tables)));
+        // `cache` is the engine's own plumbing around the call (kill switch, counters) when the cache store is the database;
+        // the tool itself only ever reads cms_faqs (ColdDatabaseCacheTest runs it on the database cache store).
+        $this->assertSame(['cms_faqs'], array_values(array_diff(array_unique($tables), ['cache', ...self::DURABLE_TABLES])));
     }
 
     public function test_internal_documentation_is_not_reachable_through_the_help_tool(): void

@@ -23,7 +23,7 @@ class StatelessTest extends DeveloperAssistantTestCase
         $tables = array_map(fn ($t) => is_array($t) ? $t['name'] : $t, Schema::getTables());
 
         foreach ($tables as $table) {
-            if (str_starts_with($table, 'support_')) {
+            if (str_starts_with($table, 'support_') || in_array($table, self::DURABLE_TABLES, true)) {
                 continue; // the existing vendor<->admin support inbox: a different feature, not an AI store
             }
             $this->assertDoesNotMatchRegularExpression('/(^ai_|_ai_|assistant|conversation|chat|prompt|llm|completion)/i', $table, "unexpected table: {$table}");

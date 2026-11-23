@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Ai\DeveloperAssistant;
 
+use App\Services\Ai\CustomerAssistant\CustomerAssistant;
 use App\Services\Ai\Data\AiSurface;
 use App\Services\Ai\Developer\DeveloperAssistant;
 use App\Services\Ai\Exceptions\AiConfigurationException;
@@ -10,6 +11,7 @@ use App\Services\Ai\Safety\KillSwitch;
 use App\Services\Ai\Tools\Exceptions\AiToolRegistrationException;
 use App\Services\Ai\Tools\ToolContext;
 use App\Services\Ai\Tools\ToolRegistry;
+use App\Services\Ai\VendorAssistant\VendorAssistant;
 use Illuminate\Support\Facades\Cache;
 use Tests\Feature\Ai\Tools\Support\FakeTool;
 
@@ -50,8 +52,8 @@ class SurfaceAndFeatureControlTest extends DeveloperAssistantTestCase
         $this->assertNull($defaults['default_model']);
         $this->assertNull($defaults['providers']['openai']['api_key'] ?? null, 'no provider credential ships');
         // M5.5 allow-lists the Vendor Assistant's six tools on `vendor` and M5.6 the Customer Assistant's four on `customer` (both inert while their surface is off).
-        $this->assertSame(\App\Services\Ai\VendorAssistant\VendorAssistant::TOOLS, $defaults['tools']['allowlist']['vendor']);
-        $this->assertSame(\App\Services\Ai\CustomerAssistant\CustomerAssistant::TOOLS, $defaults['tools']['allowlist']['customer']);
+        $this->assertSame(VendorAssistant::TOOLS, $defaults['tools']['allowlist']['vendor']);
+        $this->assertSame(CustomerAssistant::TOOLS, $defaults['tools']['allowlist']['customer']);
     }
 
     public function test_the_global_kill_switch_blocks_the_assistant(): void
@@ -154,7 +156,7 @@ class SurfaceAndFeatureControlTest extends DeveloperAssistantTestCase
         $registry = app(ToolRegistry::class);
 
         // (M5.5: the vendor surface now offers its OWN tools, but never a developer one.)
-        $offered = array_map(fn ($d) => $d["name"], $registry->definitionsFor(AiSurface::Vendor));
+        $offered = array_map(fn ($d) => $d['name'], $registry->definitionsFor(AiSurface::Vendor));
         $this->assertSame([], array_values(array_intersect($offered, DeveloperAssistant::TOOLS)));
         // (M5.6: the customer surface offers its OWN four tools, but never a developer one.)
         $customerOffered = array_map(fn ($d) => $d['name'], $registry->definitionsFor(AiSurface::Customer));
@@ -184,7 +186,7 @@ class SurfaceAndFeatureControlTest extends DeveloperAssistantTestCase
         $registry = app(ToolRegistry::class);
 
         $this->assertTrue($registry->isSealed());
-        $this->assertEqualsCanonicalizing(array_merge(DeveloperAssistant::TOOLS, \App\Services\Ai\VendorAssistant\VendorAssistant::TOOLS, \App\Services\Ai\CustomerAssistant\CustomerAssistant::TOOLS), $registry->names());
+        $this->assertEqualsCanonicalizing(array_merge(DeveloperAssistant::TOOLS, VendorAssistant::TOOLS, CustomerAssistant::TOOLS), $registry->names());
         $this->assertSame(DeveloperAssistant::TOOLS, config('ai.tools.allowlist.developer'));
 
         foreach (DeveloperAssistant::TOOLS as $name) {
@@ -231,9 +233,8 @@ class SurfaceAndFeatureControlTest extends DeveloperAssistantTestCase
     public function test_the_m52_budget_is_enforced_for_the_developer_surface(): void
     {
         $live = $this->useLiveProvider();
-        config([
-            'ai.limits.global' => ['daily_requests' => 100, 'daily_tokens' => 1_000_000, 'daily_cost_micro_usd' => null],
-            'ai.limits.surfaces.developer' => ['daily_requests' => 100, 'daily_tokens' => 0, 'daily_cost_micro_usd' => null], // 0 = hard block
+        $this->liveBudgets([
+            'ai.limits.surfaces.developer' => ['daily_requests' => 100, 'daily_tokens' => 0, 'daily_cost_micro_usd' => 1_000_000], // 0 = hard block
         ]);
 
         $this->ask($this->approvedVendor(), 'hello')->assertStatus(503)->assertJsonPath('error.code', 'ai_budget_exhausted');

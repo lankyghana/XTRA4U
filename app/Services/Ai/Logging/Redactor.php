@@ -33,6 +33,14 @@ final class Redactor
             '/\bsk-[A-Za-z0-9_\-]{8,}/' => self::MASK,
             '/\bxt_(?:live|test)_[A-Za-z0-9_]+/' => self::MASK,
             '/\bwhsec_[A-Za-z0-9_]+/' => self::MASK,
+            // Payment / registration references in the shapes this platform generates (XTRA4U-<hex>-<n>, XTRA4U-PYZ-..., AFA-...).
+            // Unlike the prompt scrubber this has NO "any long mixed identifier" rule: log metadata legitimately carries request
+            // ids (ULIDs) and provider ids that must stay readable, and logs hold no prompt text in the first place.
+            // The long segment must contain a digit, so "XTRA4U-Environment" or a short vendor code is left alone.
+            '/\bXTRA4U-(?:[A-Z]{2,4}-)?(?=[A-Z0-9.]*\d)[A-Z0-9.]{8,}(?:-[A-Z0-9.]+)*/i' => '[REFERENCE]',
+            '/\bAFA-(?=[A-Z0-9-]*\d)[A-Z0-9]{6,}(?:-\d+)?/i' => '[REFERENCE]',
+            // International phone numbers (the Ghana forms are handled below).
+            '/(?<![\w])\+\d{1,3}[\s-]?\(?\d{1,4}\)?(?:[\s-]?\d{2,4}){2,4}(?!\d)/' => '[PHONE]',
             // Email addresses.
             '/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/' => '[EMAIL]',
             // Ghana-style phone numbers: 0XX XXX XXXX, +233 XX XXX XXXX, 233XXXXXXXXX (spaces/dashes allowed).

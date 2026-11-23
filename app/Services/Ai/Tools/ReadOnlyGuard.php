@@ -26,16 +26,73 @@ class ReadOnlyGuard
     /** @var \WeakMap<Connection,bool>|null */
     private ?\WeakMap $installed = null;
 
+    /** @var ?string the session variable that bounds statement time on this server, once detected */
+    private ?string $timeoutVariable = null;
+
     /** @template T @param \Closure():T $callback @return T */
     public function run(\Closure $callback): mixed
     {
         $this->install();
+        $outermost = $this->depth === 0;
         $this->depth++;
+        $bounded = $outermost && $this->boundStatementTime();
 
         try {
             return $callback();
         } finally {
             $this->depth--;
+
+            if ($bounded) {
+                $this->releaseStatementTime();
+            }
+        }
+    }
+
+    /**
+     * Gives every statement a tool runs a server-side time limit (`ai.tools.limits.max_execution_seconds`), so one
+     * slow query cannot hold a PHP worker: MariaDB `max_statement_time` (seconds) or MySQL `max_execution_time` (ms).
+     * It goes straight to PDO on purpose (the read-only hook would rightly refuse a SET), is a session variable that is
+     * reset afterwards, and is best effort: SQLite (tests, local dev) has no such limit, and a server that supports
+     * neither variable simply runs without one (the post-hoc per-call time check still applies).
+     */
+    private function boundStatementTime(): bool
+    {
+        $seconds = (int) config('ai.tools.limits.max_execution_seconds', 5);
+        $connection = $this->connection();
+
+        if ($seconds < 1 || ! in_array($connection->getDriverName(), ['mysql', 'mariadb'], true)) {
+            return false;
+        }
+
+        $pdo = $connection->getPdo();
+
+        foreach ($this->timeoutVariable !== null ? [$this->timeoutVariable] : ['max_statement_time', 'max_execution_time'] as $variable) {
+            $value = $variable === 'max_statement_time' ? $seconds : $seconds * 1000;
+
+            try {
+                $pdo->exec("SET SESSION {$variable} = {$value}");
+                $this->timeoutVariable = $variable;
+
+                return true;
+            } catch (\Throwable) {
+                // Not this server's variable name; try the other one.
+            }
+        }
+
+        return false;
+    }
+
+    private function connection(): Connection
+    {
+        return DB::connection();
+    }
+
+    private function releaseStatementTime(): void
+    {
+        try {
+            $this->connection()->getPdo()->exec('SET SESSION '.$this->timeoutVariable.' = 0');
+        } catch (\Throwable) {
+            // The connection is gone or unusable; nothing is left to reset.
         }
     }
 
@@ -47,7 +104,7 @@ class ReadOnlyGuard
     private function install(): void
     {
         $this->installed ??= new \WeakMap;
-        $connection = DB::connection();
+        $connection = $this->connection();
 
         if (isset($this->installed[$connection])) {
             return;

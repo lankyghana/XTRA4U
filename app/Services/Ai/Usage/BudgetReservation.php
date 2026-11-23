@@ -5,54 +5,30 @@ namespace App\Services\Ai\Usage;
 use App\Services\Ai\Data\AiSurface;
 
 /**
- * What was set aside for one request. The day is fixed here so settlement hits the same counters across midnight.
+ * A handle on ONE ledger row (`ai_budget_reservations`): what was set aside for one provider attempt. The authoritative
+ * state - the amounts currently charged and whether the reservation is still open - lives in the database; this object only
+ * names it. The day is fixed at reservation time so settlement hits the same counters across midnight.
  *
- * A reservation is SETTLED OR FAILED AT MOST ONCE: the first call to {@see close()} wins and every later settle/fail
- * on the same object is a no-op, so a retry of the bookkeeping (or a double code path) can never apply a correction
- * twice. The state flips BEFORE the counters are touched, so if the cache dies half-way through settlement the
- * remainder is simply not applied, which leaves the pessimistic estimate in place (the safe direction).
+ * A reservation holds: one request, an UPPER BOUND of tokens (input bound + the output cap) and, when pricing is
+ * configured, the MAXIMUM cost of those tokens. Closing it (settle / fail) is a state transition done under a row lock in
+ * {@see BudgetGuard}: the first close wins and every later one - from this object, a copy of it or another process - is a
+ * no-op, so a repeated or contradictory bookkeeping call can never apply a correction twice.
+ *
+ * Every provider attempt (including a retry) has its OWN reservation, so a retry cannot ride on, or hide behind, an
+ * earlier attempt's budget.
  */
 final class BudgetReservation
 {
-    private bool $closed = false;
-
-    /** Tokens currently held for this request: one estimate per provider attempt that may have been processed. */
-    private int $heldTokens;
-
     public function __construct(
+        /** ULID of the ledger row. The adapter of an external provider verifies it is OPEN before it transmits anything. */
+        public readonly string $id,
         public readonly string $day,
         public readonly AiSurface $surface,
-        /** The pessimistic estimate for ONE provider attempt. */
+        /** The upper bound for this ONE provider attempt. */
         public readonly int $estimatedTokens,
-    ) {
-        $this->heldTokens = $estimatedTokens;
-    }
-
-    public function isClosed(): bool
-    {
-        return $this->closed;
-    }
-
-    /** @return bool true for the caller that closed it, false if it was already closed */
-    public function close(): bool
-    {
-        if ($this->closed) {
-            return false;
-        }
-
-        $this->closed = true;
-
-        return true;
-    }
-
-    public function heldTokens(): int
-    {
-        return $this->heldTokens;
-    }
-
-    /** A further provider attempt was admitted: its estimate is held on top of the earlier attempts'. */
-    public function addAttempt(int $tokens): void
-    {
-        $this->heldTokens += $tokens;
-    }
+        /** The maximum cost of this attempt in micro-USD; null when no complete price is configured. */
+        public readonly ?int $estimatedCostMicroUsd = null,
+        /** The earlier attempt this one retries, if any. */
+        public readonly ?string $retryOf = null,
+    ) {}
 }

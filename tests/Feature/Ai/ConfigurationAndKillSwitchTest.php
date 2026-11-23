@@ -10,9 +10,9 @@ use App\Services\Ai\Exceptions\AiConfigurationException;
 use App\Services\Ai\Exceptions\AiDisabledException;
 use App\Services\Ai\Providers\MockAiProvider;
 use App\Services\Ai\Safety\KillSwitch;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
+use Tests\Feature\Ai\Support\DurableAiState;
 use Tests\TestCase;
 
 /**
@@ -20,6 +20,8 @@ use Tests\TestCase;
  */
 class ConfigurationAndKillSwitchTest extends TestCase
 {
+    use DurableAiState;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -35,6 +37,7 @@ class ConfigurationAndKillSwitchTest extends TestCase
 
     private function enable(): void
     {
+        $this->prepareDurableAiState(); // the durable tables, kill switch RELEASED (the shipped state is engaged)
         config([
             'ai.enabled' => true, 'ai.provider' => 'mock',
             'ai.surfaces.vendor.enabled' => true, 'ai.surfaces.customer.enabled' => true, 'ai.surfaces.developer.enabled' => true,
@@ -113,9 +116,11 @@ class ConfigurationAndKillSwitchTest extends TestCase
     public function test_the_kill_switch_fails_closed_when_its_state_cannot_be_read(): void
     {
         $this->enable();
-        Cache::shouldReceive('get')->with(KillSwitch::CACHE_KEY, false)->andThrow(new \RuntimeException('cache down'));
-
         $switch = app(KillSwitch::class);
+        $this->assertFalse($switch->engaged());
+
+        Schema::drop('ai_runtime_flags'); // the state can no longer be read
+
         $this->assertTrue($switch->engaged());
         $this->assertFalse($switch->engineEnabled());
     }

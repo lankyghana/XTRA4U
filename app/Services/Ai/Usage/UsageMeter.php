@@ -3,25 +3,32 @@
 namespace App\Services\Ai\Usage;
 
 use App\Services\Ai\Data\AiSurface;
-use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 /**
- * Daily usage counters on the shared cache. COUNTS ONLY: no prompt, response, identity or message text is ever
- * stored here. Per-request detail (provider, model, surface, request id, tokens, duration, outcome) goes to the
- * redacted structured log instead; persistent transcript/usage tables are deliberately not part of M5.2.
+ * READ side of the durable daily usage counters (table `ai_usage_counters`). COUNTS ONLY: no prompt, response, identity
+ * or message text is ever stored. Per-request detail (provider, model, surface, request id, tokens, duration, outcome)
+ * goes to the redacted structured log instead.
  *
- * Keys: ai:usage:{YYYYMMDD}:{scope}:{metric}   scope = global | surface.<name>
- * Metrics: requests, tokens, cost_micro_usd, successes, failures.
- * They expire on their own after a few days; the day is decided once per request (see BudgetReservation).
+ * Writing is NOT done here: every change to a counter is made by {@see BudgetGuard}, inside a transaction, together with
+ * the matching ledger row (`ai_budget_reservations`). That is what makes the counters reliable: nothing else can move
+ * them, and they can always be re-derived from, and checked against, the ledger.
  *
- * Every change is a single atomic increment/decrement on the shared store (a row-locked UPDATE on the database
- * cache store). Nothing here reads a value, computes in PHP and writes it back.
+ * The state lives in the database, not in the Laravel cache, so `php artisan cache:clear`, a cache eviction, a restart or a
+ * deploy cannot reset it. A database that cannot be read throws: callers fail closed and never treat it as "0 used".
+ *
+ * Scopes: global | surface.<name>.   Metrics: requests, tokens, cost_micro_usd, successes, failures.
+ * The "budget violation" flag of a day (a provider reported more usage than was reserved) is a row in `ai_runtime_flags`.
  */
 class UsageMeter
 {
     public const METRICS = ['requests', 'tokens', 'cost_micro_usd', 'successes', 'failures'];
 
-    private const TTL_SECONDS = 3 * 86400;
+    public const COUNTERS_TABLE = 'ai_usage_counters';
+
+    public const LEDGER_TABLE = 'ai_budget_reservations';
+
+    public const FLAGS_TABLE = 'ai_runtime_flags';
 
     public function today(): string
     {
@@ -33,78 +40,76 @@ class UsageMeter
         return 'surface.'.$surface->value;
     }
 
-    /**
-     * Atomically add (or subtract, when negative) and return the new value.
-     *
-     * @throws \RuntimeException when the counter cannot be updated: callers must fail closed, never treat that as 0
-     */
-    public function add(string $day, string $scope, string $metric, int $amount): int
+    /** @return list<string> every scope that can have a counter row */
+    public static function scopes(): array
     {
-        $key = $this->key($day, $scope, $metric);
-
-        if ($amount === 0) {
-            return $this->get($day, $scope, $metric);
+        $scopes = ['global'];
+        foreach (AiSurface::cases() as $surface) {
+            $scopes[] = self::surfaceScope($surface);
         }
 
-        if ($amount < 0) {
-            // Never conjure a counter just to drive it negative (e.g. it expired or the cache was flushed
-            // mid-request): a negative counter would hand out headroom that was never there.
-            if (Cache::get($key) === null) {
-                return 0;
-            }
-
-            $new = Cache::decrement($key, -$amount);
-
-            return $new === false ? 0 : (int) $new;
-        }
-
-        Cache::add($key, 0, self::TTL_SECONDS);
-        $new = Cache::increment($key, $amount);
-
-        if ($new === false) {
-            // The counter vanished between add() and increment() (expiry boundary / flush): recreate it once.
-            Cache::add($key, 0, self::TTL_SECONDS);
-            $new = Cache::increment($key, $amount);
-        }
-
-        if ($new === false) {
-            // 'false' must never be read as "0 used so far", which would pass every limit check.
-            throw new \RuntimeException('AI usage counter could not be updated.');
-        }
-
-        return (int) $new;
+        return $scopes;
     }
 
+    /** True once a provider reported more usage than was reserved today (the bound's assumption failed). */
+    public function integrityFlagged(string $day): bool
+    {
+        return DB::table(self::FLAGS_TABLE)->where('name', self::violationFlag($day))->exists();
+    }
+
+    public function flagIntegrityViolation(string $day): void
+    {
+        $this->writeViolationFlag($day);
+    }
+
+    public static function violationFlag(string $day): string
+    {
+        return 'budget_violation:'.$day;
+    }
+
+    /** @internal also called by BudgetGuard inside its settlement transaction */
+    public function writeViolationFlag(string $day): void
+    {
+        DB::table(self::FLAGS_TABLE)->upsert(
+            [['name' => self::violationFlag($day), 'value' => 'set', 'reason' => 'a provider reported more usage than was reserved', 'created_at' => now(), 'updated_at' => now()]],
+            ['name'],
+            ['value', 'reason', 'updated_at'],
+        );
+    }
+
+    /**
+     * One counter. A day/scope with no row yet reads 0 - which is TRUE for a day nothing has been reserved on; whether a
+     * missing or altered row contradicts the ledger is judged by BudgetGuard (reservations) and `ai:preflight`.
+     *
+     * @throws \Throwable when the database cannot be read
+     */
     public function get(string $day, string $scope, string $metric): int
     {
-        return (int) Cache::get($this->key($day, $scope, $metric), 0);
+        if (! in_array($metric, self::METRICS, true)) {
+            return 0;
+        }
+
+        return (int) (DB::table(self::COUNTERS_TABLE)->where('day', $day)->where('scope', $scope)->value($metric) ?? 0);
     }
 
     /**
-     * Everything counted for a day. Foundation for the later admin/cost reports.
+     * Everything counted for a day, for reports and tests.
      *
      * @return array<string,array<string,int>>
      */
     public function snapshot(?string $day = null): array
     {
         $day ??= $this->today();
-        $scopes = ['global'];
-        foreach (AiSurface::cases() as $surface) {
-            $scopes[] = self::surfaceScope($surface);
-        }
+
+        $rows = DB::table(self::COUNTERS_TABLE)->where('day', $day)->get()->keyBy('scope');
 
         $out = [];
-        foreach ($scopes as $scope) {
+        foreach (self::scopes() as $scope) {
             foreach (self::METRICS as $metric) {
-                $out[$scope][$metric] = $this->get($day, $scope, $metric);
+                $out[$scope][$metric] = (int) ($rows[$scope]->{$metric} ?? 0);
             }
         }
 
         return $out;
-    }
-
-    private function key(string $day, string $scope, string $metric): string
-    {
-        return "ai:usage:{$day}:{$scope}:{$metric}";
     }
 }

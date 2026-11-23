@@ -27,10 +27,31 @@ class PriceTable
             return null;
         }
 
-        return (int) round(
+        return (int) ceil(
             $usage->inputTokens * (float) $entry['input_usd_per_million']
             + $usage->outputTokens * (float) $entry['output_usd_per_million']
         );
+    }
+
+    /**
+     * MAXIMUM cost of one attempt: every possible input token at the input price plus every possible output token at the
+     * output price, rounded UP. Used to reserve cost before a call. Null when no complete price is configured (a live
+     * provider refuses to run without one: pricing is never guessed).
+     */
+    public function maxCostMicroUsd(string $provider, string $model, int $inputTokens, int $outputTokens): ?int
+    {
+        $entry = config("ai.pricing.{$provider}.{$model}");
+
+        if (! is_array($entry)
+            || ! is_numeric($entry['input_usd_per_million'] ?? null)
+            || ! is_numeric($entry['output_usd_per_million'] ?? null)
+            || (float) $entry['input_usd_per_million'] <= 0
+            || (float) $entry['output_usd_per_million'] <= 0
+            || $inputTokens < 0 || $outputTokens < 0) {
+            return null;
+        }
+
+        return (int) ceil($inputTokens * (float) $entry['input_usd_per_million'] + $outputTokens * (float) $entry['output_usd_per_million']);
     }
 
     /**

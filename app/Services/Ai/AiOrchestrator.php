@@ -6,6 +6,7 @@ use App\Services\Ai\Contracts\AiProvider;
 use App\Services\Ai\Data\AiRequest;
 use App\Services\Ai\Data\AiResponse;
 use App\Services\Ai\Data\AiResult;
+use App\Services\Ai\Exceptions\AiBusyException;
 use App\Services\Ai\Exceptions\AiConfigurationException;
 use App\Services\Ai\Exceptions\AiDisabledException;
 use App\Services\Ai\Exceptions\AiException;
@@ -19,6 +20,7 @@ use App\Services\Ai\Safety\CircuitPermit;
 use App\Services\Ai\Safety\ConcurrencyGuard;
 use App\Services\Ai\Safety\KillSwitch;
 use App\Services\Ai\Usage\BudgetGuard;
+use App\Services\Ai\Usage\BudgetReservation;
 use App\Services\Ai\Usage\PriceTable;
 use App\Services\Ai\Usage\TokenEstimator;
 
@@ -35,6 +37,7 @@ use App\Services\Ai\Usage\TokenEstimator;
  *   5. circuit breaker                -> AiCircuitOpenException
  *   6. shared concurrency slot        -> AiBusyException
  *   7. hard budget reservation        -> AiBudgetExceededException / AiConfigurationException
+ *      (requests + token UPPER BOUND + maximum cost, global AND surface, atomically; see BudgetGuard)
  *   8. provider call (bounded timeout, bounded retries, turn deadline)
  *
  * It has NO business knowledge: no tools, no catalog, no orders, no wallets, no payment code. In M5.2 any tool
@@ -79,34 +82,47 @@ class AiOrchestrator
             $model = $this->resolveModel($request, $provider);
             $provider->assertConfigured($model);
 
-            $resolved = $this->resolve($request, $model);
+            $resolved = $this->resolve($request, $model, $provider);
 
             $this->rateLimiter->attempt($resolved);
             $permit = $this->breaker->assertAllows($provider->name());
             $slot = $this->concurrency->acquire();
 
-            $estimate = $this->estimator->estimate($resolved);
-            $reservation = $this->budget->reserve($resolved->surface, $estimate, $provider->isLive());
+            // Reserve the MOST this attempt can consume: input upper bound + the output cap that is sent to the provider,
+            // and the cost of exactly those tokens. The provider is not reached unless all of it fits every budget.
+            $inputBound = $this->estimator->inputUpperBound($resolved);
+            $outputBound = $this->estimator->outputUpperBound($resolved);
+            $estimate = $inputBound + $outputBound;
+            $maxCost = $this->prices->maxCostMicroUsd($provider->name(), (string) $model, $inputBound, $outputBound);
+            $reservation = $this->budget->reserve($resolved->surface, $estimate, $provider->isLive(), $maxCost);
+
+            // The emergency stop is checked again AFTER the (possibly slow) reservation and immediately BEFORE the provider is
+            // reached, so a shutdown that happened in between stops this request too. Nothing was sent: the reservation is
+            // released by the AiException branch below.
+            if (! $this->killSwitch->surfaceEnabled($resolved->surface)) {
+                throw new AiDisabledException('The AI engine or this surface is disabled.');
+            }
 
             // From here on the provider MAY have been reached, so the reservation is never released as "unused"
             // except by BudgetGuard::fail() for an attempt that provably was not processed.
             $providerCalled = true;
-            $held = $reservation;
-            $response = $this->callProvider($provider, $resolved, $attempts, function (AiProviderException $failed) use ($held, $estimate, $provider, $resolved): void {
-                // A retry is a second provider request: it must pass the same atomic budget check. If it cannot,
+            $surface = $resolved->surface;
+            $response = $this->callProvider($provider, $resolved, $attempts, $reservation, function (AiProviderException $failed, BudgetReservation $previous) use ($surface, $estimate, $maxCost, $provider): BudgetReservation {
+                // A retry is a second provider request with its OWN durable reservation, taken through the same atomic budget
+                // check. The previous attempt is closed in the same transaction (its reservation stands if it may have been
+                // processed, and is released if it provably was not). If the retry cannot be reserved, nothing changes,
                 // callProvider keeps the original provider error and no retry is sent.
-                $this->budget->extend($held, $estimate, $failed->mayHaveConsumedTokens(), $failed->mayHaveConsumedTokens()
-                    ? $this->prices->conservativeCostMicroUsd($provider->name(), (string) $resolved->model, $estimate)
-                    : null);
+                if (! $this->killSwitch->surfaceEnabled($surface)) {
+                    throw new AiDisabledException('The AI engine or this surface is disabled.');
+                }
+
+                return $this->budget->reserve($surface, $estimate, $provider->isLive(), $maxCost, $previous, $failed->mayHaveConsumedTokens());
             });
 
-            // Accounting first, while the reservation is still ours to settle. Known usage replaces the estimate;
-            // unknown usage leaves the estimate (and a conservative cost) charged. Settlement is at-most-once.
+            // Accounting first, while the reservation is still ours to settle. Known usage replaces the reservation (tokens
+            // and cost); unknown usage - or a model with no price - leaves the FULL reservation charged. At-most-once.
             $cost = $this->prices->costMicroUsd($response->provider, $response->model, $response->usage);
-            $budgetCost = $cost ?? ($response->usage->isKnown()
-                ? null
-                : $this->prices->conservativeCostMicroUsd($response->provider, $response->model, $estimate));
-            $this->budget->settle($reservation, $response->usage->totalTokens(), $budgetCost);
+            $this->budget->settle($reservation, $response->usage->totalTokens(), $cost);
 
             $this->recordBreakerSuccess($permit);
             $permit = null;
@@ -120,13 +136,9 @@ class AiOrchestrator
             // neither may mask the provider error.
             if ($reservation !== null) {
                 try {
-                    // Released only if the attempt provably was not processed; a timeout / 5xx / garbage reply keeps
-                    // the estimate (and a conservative cost) charged.
-                    $this->budget->fail(
-                        $reservation,
-                        $e->mayHaveConsumedTokens(),
-                        $e->mayHaveConsumedTokens() ? $this->prices->conservativeCostMicroUsd($provider?->name() ?? '', (string) $model, $estimate) : null
-                    );
+                    // Released only if the attempt provably was not processed; a timeout / 5xx / garbage reply keeps the
+                    // whole reservation (tokens and maximum cost) charged.
+                    $this->budget->fail($reservation, $e->mayHaveConsumedTokens());
                 } catch (\Throwable) {
                     // Accounting could not complete: whatever is still charged stays charged (conservative).
                 }
@@ -148,6 +160,15 @@ class AiOrchestrator
         } catch (AiException $e) {
             // Refused before (or instead of) a provider call.
             $this->logger->rejected($request, $e, $provider?->name());
+
+            // A reservation taken but never used (the emergency stop engaged in between) provably was not processed.
+            if (! $providerCalled && $reservation !== null) {
+                try {
+                    $this->budget->fail($reservation, false);
+                } catch (\Throwable) {
+                    // It stays charged (conservative).
+                }
+            }
 
             throw $e;
         } catch (\Throwable $e) {
@@ -216,7 +237,7 @@ class AiOrchestrator
     }
 
     /** Validate size/context and clamp output tokens and timeout to the configured ceilings. */
-    private function resolve(AiRequest $request, ?string $model): AiRequest
+    private function resolve(AiRequest $request, ?string $model, AiProvider $provider): AiRequest
     {
         $cfg = (array) config('ai.request', []);
 
@@ -234,6 +255,22 @@ class AiOrchestrator
             throw new AiInvalidRequestException('The request is too large.');
         }
 
+        if ($provider->isLive()) {
+            // Timeouts must nest: one attempt <= the most an attempt may be given <= one orchestrator run <= the turn.
+            $turn = config('ai.request.turn_deadline_seconds');
+
+            if ($cfg['timeout_seconds'] > $cfg['max_timeout_seconds']
+                || $cfg['max_timeout_seconds'] > $cfg['deadline_seconds']
+                || ! is_int($turn) || $turn < $cfg['deadline_seconds']) {
+                throw new AiConfigurationException('The AI timeouts do not fit inside the request deadlines.');
+            }
+        }
+
+        // The whole assistant turn has a deadline; refuse to START a provider round that has (almost) no time left.
+        if ($request->deadlineAt !== null && $request->deadlineAt - microtime(true) < 2) {
+            throw new AiBusyException('The time allowed for this request has been used.', 1);
+        }
+
         $maxOut = min($request->maxOutputTokens ?? $cfg['max_output_tokens'], $cfg['max_output_tokens']);
         $timeout = min($request->timeoutSeconds ?? $cfg['timeout_seconds'], $cfg['max_timeout_seconds']);
 
@@ -248,10 +285,13 @@ class AiOrchestrator
      * At most 1 + min(max_retries, 2) attempts, only for timeouts / provider-unavailable, and only while a full
      * further attempt still fits inside the turn deadline. No sleeping: a synchronous request must not idle.
      */
-    private function callProvider(AiProvider $provider, AiRequest $resolved, int &$attempts, \Closure $beforeRetry): AiResponse
+    private function callProvider(AiProvider $provider, AiRequest $resolved, int &$attempts, BudgetReservation &$reservation, \Closure $beforeRetry): AiResponse
     {
         $maxAttempts = 1 + min(self::MAX_RETRIES_CEILING, max(0, (int) config('ai.request.max_retries', 0)));
         $deadline = microtime(true) + (int) config('ai.request.deadline_seconds');
+        if ($resolved->deadlineAt !== null) {
+            $deadline = min($deadline, $resolved->deadlineAt);
+        }
 
         for ($attempt = 1; ; $attempt++) {
             $attempts = $attempt;
@@ -259,14 +299,20 @@ class AiOrchestrator
             // Never let one attempt run past the turn deadline.
             $remaining = (int) floor($deadline - microtime(true));
             $timeout = max(1, min((int) $resolved->timeoutSeconds, $remaining));
-            $request = $timeout === $resolved->timeoutSeconds
+            $request = ($timeout === $resolved->timeoutSeconds
                 ? $resolved
-                : $resolved->resolved((string) $resolved->model, (int) $resolved->maxOutputTokens, $timeout);
+                : $resolved->resolved((string) $resolved->model, (int) $resolved->maxOutputTokens, $timeout)
+            )->withReservation($reservation->id); // every attempt names the reservation that pays for it
 
             try {
                 return $provider->send($request);
             } catch (AiProviderException $e) {
+                // A live provider has no idempotency key: an attempt that MAY have been processed is never repeated (it could
+                // be billed twice). Only a failure that provably never left this server may be retried.
+                $safeToRepeat = ! $provider->isLive() || ! $e->mayHaveConsumedTokens();
+
                 $canRetry = $e->isRetryable()
+                    && $safeToRepeat
                     && $attempt < $maxAttempts
                     && ($deadline - microtime(true)) >= $resolved->timeoutSeconds;
 
@@ -275,9 +321,10 @@ class AiOrchestrator
                 }
 
                 try {
-                    $beforeRetry($e);
+                    $reservation = $beforeRetry($e, $reservation);
                 } catch (\Throwable) {
-                    // No budget (or no accounting) for another provider request: stop with the original error.
+                    // No budget (or no accounting, or the emergency stop) for another provider request: stop with the original
+                    // error. The previous reservation is untouched and is closed by the caller.
                     throw $e;
                 }
             } catch (\Throwable) {

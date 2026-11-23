@@ -2,8 +2,11 @@
 
 namespace Tests\Feature\Ai\DeveloperAssistant;
 
+use App\Services\Ai\CustomerAssistant\CustomerAssistant;
+use App\Services\Ai\Data\AiSurface;
 use App\Services\Ai\Developer\DeveloperAssistant;
 use App\Services\Ai\Tools\ToolRegistry;
+use App\Services\Ai\VendorAssistant\VendorAssistant;
 use App\Services\DeveloperApi\ApiKeyService;
 use App\Support\DeveloperApi\ApiException;
 use Illuminate\Support\Facades\Route;
@@ -94,9 +97,9 @@ class RegressionAndArchitectureTest extends DeveloperAssistantTestCase
         }
         $this->assertSame(DeveloperAssistant::TOOLS, $defaults['tools']['allowlist']['developer']);
         // M5.5 allow-lists the Vendor Assistant's six tools on `vendor` (inert while its surface is off).
-        $this->assertSame(\App\Services\Ai\VendorAssistant\VendorAssistant::TOOLS, $defaults['tools']['allowlist']['vendor']);
+        $this->assertSame(VendorAssistant::TOOLS, $defaults['tools']['allowlist']['vendor']);
         // M5.6 allow-lists the Customer Assistant's four public-catalogue tools on `customer` (inert while its surface is off).
-        $this->assertSame(\App\Services\Ai\CustomerAssistant\CustomerAssistant::TOOLS, $defaults['tools']['allowlist']['customer']);
+        $this->assertSame(CustomerAssistant::TOOLS, $defaults['tools']['allowlist']['customer']);
     }
 
     public function test_the_four_documented_developer_tools_exist_and_they_are_developer_only(): void
@@ -105,9 +108,9 @@ class RegressionAndArchitectureTest extends DeveloperAssistantTestCase
 
         $this->assertTrue($registry->isSealed());
         // M5.5 adds the six vendor tools and M5.6 the four customer tools; the four developer tools are unchanged and still developer-only.
-        $this->assertEqualsCanonicalizing(array_merge(DeveloperAssistant::TOOLS, \App\Services\Ai\VendorAssistant\VendorAssistant::TOOLS, \App\Services\Ai\CustomerAssistant\CustomerAssistant::TOOLS), $registry->names());
+        $this->assertEqualsCanonicalizing(array_merge(DeveloperAssistant::TOOLS, VendorAssistant::TOOLS, CustomerAssistant::TOOLS), $registry->names());
         foreach (DeveloperAssistant::TOOLS as $name) {
-            $this->assertSame([\App\Services\Ai\Data\AiSurface::Developer], $registry->get($name)->surfaces());
+            $this->assertSame([AiSurface::Developer], $registry->get($name)->surfaces());
         }
         $this->assertSame([
             'developer_search_docs', 'developer_read_doc', 'developer_list_my_apps', 'developer_get_my_app',
@@ -125,7 +128,8 @@ class RegressionAndArchitectureTest extends DeveloperAssistantTestCase
         $providers = glob(app_path('Services/Ai/Providers/*.php')) ?: [];
         $names = array_map('basename', $providers);
         foreach ($names as $name) {
-            $this->assertDoesNotMatchRegularExpression('/(OpenAi|Anthropic|Gemini)/i', $name, "live adapter added: {$name}");
+            // M5.7 deliberately added exactly ONE live adapter (OpenAI, behind every approval gate); no other vendor may appear.
+            $this->assertDoesNotMatchRegularExpression('/(Anthropic|Gemini|Mistral|Cohere)/i', $name, "live adapter added: {$name}");
         }
         $this->assertSame('mock', config('ai.provider'));
     }

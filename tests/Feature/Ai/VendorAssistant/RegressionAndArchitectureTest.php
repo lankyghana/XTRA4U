@@ -3,6 +3,7 @@
 namespace Tests\Feature\Ai\VendorAssistant;
 
 use App\Http\Controllers\VendorDashboardController;
+use App\Services\Ai\CustomerAssistant\CustomerAssistant;
 use App\Services\Ai\Data\AiSurface;
 use App\Services\Ai\Developer\DeveloperAssistant;
 use App\Services\Ai\Tools\ReadOnlyGuard;
@@ -25,8 +26,9 @@ class RegressionAndArchitectureTest extends VendorAssistantTestCase
             $this->assertDoesNotMatchRegularExpression('#(openai|anthropic|gemini|google/generative|mistral|cohere|langchain)#i', $package, "AI SDK added: {$package}");
         }
 
+        // M5.7 deliberately added exactly ONE live adapter (OpenAI, behind every approval gate); no other vendor may appear.
         foreach (glob(app_path('Services/Ai/Providers/*.php')) ?: [] as $file) {
-            $this->assertDoesNotMatchRegularExpression('/(OpenAi|Anthropic|Gemini)/i', basename($file), 'live adapter added: '.basename($file));
+            $this->assertDoesNotMatchRegularExpression('/(Anthropic|Gemini|Mistral|Cohere)/i', basename($file), 'live adapter added: '.basename($file));
         }
         $this->assertSame('mock', config('ai.provider'));
     }
@@ -43,7 +45,7 @@ class RegressionAndArchitectureTest extends VendorAssistantTestCase
         $this->assertSame(DeveloperAssistant::TOOLS, $defaults['tools']['allowlist']['developer']);
         $this->assertSame(VendorAssistant::TOOLS, $defaults['tools']['allowlist']['vendor']);
         // M5.6 allow-lists the Customer Assistant's four public-catalogue tools on `customer` (inert while its surface is off).
-        $this->assertSame(\App\Services\Ai\CustomerAssistant\CustomerAssistant::TOOLS, $defaults['tools']['allowlist']['customer']);
+        $this->assertSame(CustomerAssistant::TOOLS, $defaults['tools']['allowlist']['customer']);
     }
 
     public function test_the_registry_holds_exactly_the_developer_and_vendor_tools_and_no_customer_tool(): void
@@ -51,17 +53,17 @@ class RegressionAndArchitectureTest extends VendorAssistantTestCase
         $registry = app(ToolRegistry::class);
 
         $this->assertTrue($registry->isSealed());
-        $this->assertEqualsCanonicalizing(array_merge(DeveloperAssistant::TOOLS, VendorAssistant::TOOLS, \App\Services\Ai\CustomerAssistant\CustomerAssistant::TOOLS), $registry->names());
+        $this->assertEqualsCanonicalizing(array_merge(DeveloperAssistant::TOOLS, VendorAssistant::TOOLS, CustomerAssistant::TOOLS), $registry->names());
         foreach (DeveloperAssistant::TOOLS as $name) {
             $this->assertSame([AiSurface::Developer], $registry->get($name)->surfaces());
         }
         foreach (VendorAssistant::TOOLS as $name) {
             $this->assertSame([AiSurface::Vendor], $registry->get($name)->surfaces());
         }
-        foreach (\App\Services\Ai\CustomerAssistant\CustomerAssistant::TOOLS as $name) {
+        foreach (CustomerAssistant::TOOLS as $name) {
             $this->assertSame([AiSurface::Customer], $registry->get($name)->surfaces());
         }
-        $this->assertSame(\App\Services\Ai\CustomerAssistant\CustomerAssistant::TOOLS, array_column($registry->definitionsFor(AiSurface::Customer), 'name'));
+        $this->assertSame(CustomerAssistant::TOOLS, array_column($registry->definitionsFor(AiSurface::Customer), 'name'));
     }
 
     public function test_the_six_vendor_tools_are_exactly_the_documented_set(): void
