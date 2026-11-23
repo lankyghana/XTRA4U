@@ -67,9 +67,27 @@ Files: `app/Services/Ai/CustomerAssistant/` (assistant, logger, reply, four tool
 
 * A category (`data`, `shop`, `results`, `afa`) is served by the **admin-assigned platform vendor** (`PlatformServiceVendor`), who must be an **approved** vendor. An unassigned category, an unapproved vendor or a closed service (`ServiceAvailability`) yields nothing (`closed` / `unavailable` in the service list).
 * Owned products need `is_active`; reseller listings additionally need the source product to be active **and** resellable. Result checkers come from `PlatformServiceCatalog`. These checks are in SQL (`whereIn` on the assigned vendors) wherever the data model allows.
-* **Category lives inside the product `description` JSON**, which also holds private provider mappings. It is therefore filtered in PHP over a **bounded** SQL scan (`SCAN_LIMIT` = 400 rows per source). If the scan is cut, the result carries `results_may_be_incomplete`. Only a whitelist of public keys (network, size, validity, notes…) is ever read from that JSON; provider, mapping and cost keys are never selected.
+* **Category lives inside the product `description` JSON**, which also holds private provider mappings. Since M5.7 the category and the search words are filtered **in the database** (SQLite and MariaDB JSON functions, with the storefront's exact default-category rules; PHP re-checks every candidate), and the bounded scan (`SCAN_LIMIT` = 400 rows per source) applies only to rows that already match. If more than 400 rows match, the result carries `results_may_be_incomplete` (see `06-production-hardening-and-launch-readiness.md` section 12). Only a whitelist of public keys (network, size, validity, notes…) is ever read from that JSON; provider, mapping and cost keys are never selected.
 * A product is addressed by an opaque ref (`product_12`, `reseller_7`, `result_checker_3`), matched by a strict pattern. Anything invalid, hidden, inactive, closed or unknown returns the same `{found:false, "That product is not available."}`, so refs cannot be probed.
 * The **price is the catalogue price** (`products.price`, or `selling_price` for a reseller listing, ordered through `Money::minor`). The assistant never receives a vendor cost, a commission, a tier price, a wallet or a provider mapping. Every product result carries a note that the amount payable is confirmed at checkout.
+
+### Settings are read uncached (database cache store)
+
+The catalogue decides "is this service open?" and "which vendor serves this category?" from two admin settings. The public pages read them through `Setting::get()`, a read-through cache (`Cache::remember`). On the **database cache store** (production) that read **writes** to the `cache` table on a miss, and for a setting that has **no row** (the normal state of `service_open.*`, since "open" is the default) it writes on **every** call, because a cached `null` cannot be told apart from a miss. The tools run inside the `ReadOnlyGuard`, which refuses every non-SELECT statement, so before the fix `customer_list_services`, `customer_search_products` and `customer_get_product` failed with `read_only_violation` on a cold cache, and permanently for unset settings. (`customer_search_help` reads only `cms_faqs` and was unaffected.)
+
+The fix is a small **uncached read path** used only by `PublicCatalogueReadService`: `Setting::getFresh()`, `ServiceAvailability::isOpenFresh()/isClosedFresh()` and `PlatformServiceVendor::vendorIdForFresh()/resolveFresh()`. Each is the existing method minus the cache, with the same meaning (no row = open, a vendor only while approved) - `ColdDatabaseCacheTest` asserts the parity over every state. The existing cached methods are untouched, so the public pages behave exactly as before.
+
+Why this and not the alternatives:
+
+| Alternative | Why it was not chosen |
+|---|---|
+| Prime/warm the settings before the guarded window | Does not work: a setting with no row re-writes the cache on every read, so it still fails inside the guard even when "warm". It would also depend on the cache state and on when other pages ran. |
+| Allow writes to `cache` / `cache_locks` inside the guard | Weakens the one control that makes "tools are read-only" a runtime fact, for every tool on every surface, and a cache table is a place a tool could store state. The guard is deliberately unchanged. |
+| Catch the error and return an empty catalogue | Would present a closed or empty shop to customers when the real cause is an infrastructure detail - wrong answers, not safe ones. |
+| Switch production to the array/file cache | Changes platform behaviour for everything to fix one reader. |
+| Read the cache without writing (`Cache::get`) | Not write-free: the database store also issues a `DELETE` for an expired entry it finds. |
+
+Behavioural difference to be aware of: because it reads the table, the assistant is never stale. The public pages may answer from the cache for up to an hour after a **direct** edit of the `settings` table (an admin save through `Setting::set()` always invalidates it), whereas the assistant reflects the table immediately. That is the more conservative direction: it never offers something an administrator has already closed.
 
 ## 6. Tools
 
@@ -140,14 +158,14 @@ AI_SURFACE_CUSTOMER=true
 | **D5 checkout handoff** | `CheckoutController::process` takes many client-supplied fields (recipient, phone, payer, method, intent), so a "buy this" button would either need to widen checkout or pre-fill unvalidated data. Only server-built links to `/services/*` pages are provided; the customer starts checkout there. |
 | Utility Bills in the catalogue | Prices and availability come from the external provider with admin-owned commission; not part of the public catalogue read model. |
 | The legacy `/checkout` marketplace | Per-vendor storefronts are not part of the official platform catalogue. |
-| A live provider, answer-quality evaluation, spend controls against real pricing | Separate milestones; M5.7 and final hardening were not started. |
+| A live provider, answer-quality evaluation, spend controls against real pricing | The OpenAI adapter, hard budgets and the preflight exist since M5.7 (`06-production-hardening-and-launch-readiness.md`) but nothing is enabled and no real call has been made; answer-quality evaluation remains a separate milestone. |
 | A navigation link, analytics, translations | Product decisions at launch. |
 
 ## 15. Known limitations
 
 * No real model: answers come from the scripted mock; quality is untested against a real model.
 * Phone numbers and e-mail addresses inside FAQ answers and product notes are redacted by the sanitizers, so a FAQ that quotes a support number will not show it through the assistant. Link people to the Contact page instead.
-* `results_may_be_incomplete` can appear if a catalogue category has more than 400 candidate rows per source; there is no pagination beyond that scan.
+* `results_may_be_incomplete` appears only if a catalogue category has more than 400 rows that actually match, per source; there is no pagination beyond that scan.
 * Customer budgets are unconfigured (§13). The per-IP limiter depends on trusted-proxy settings (§3).
 * Legal and privacy approval has not been obtained (§2).
 
