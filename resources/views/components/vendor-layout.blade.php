@@ -186,10 +186,17 @@
     $navGroups = [
         'Overview' => ['dashboard', 'assistant'],
         'Sell' => ['orders', 'fulfillment', 'products', 'utility-bills'],
-        'Grow' => ['marketplace', 'reseller', 'affiliates', 'result-checkers', 'afa', 'ussd'],
+        'Grow' => ['marketplace', 'reseller', 'affiliates', 'result-checkers', 'afa', 'ussd', 'developer-access'],
         'Finance' => ['wallet', 'analytics'],
         'Account' => ['support', 'settings'],
     ];
+
+    // Safety net: a link that is defined above but missing from every group would silently never render (this is how
+    // the Developer API entry once disappeared). Anything not grouped is shown under "More" instead.
+    $ungroupedKeys = collect($navLinks)->pluck('key')->diff(collect($navGroups)->flatten())->values()->all();
+    if ($ungroupedKeys !== []) {
+        $navGroups['More'] = $ungroupedKeys;
+    }
 
     $linkBaseClasses = 'group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors';
 @endphp

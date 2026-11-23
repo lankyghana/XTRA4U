@@ -53,6 +53,11 @@
         <div class="hidden md:flex items-center gap-4">
             @if ($showVendorLinks)
                 <a
+                    href="{{ route('developers.landing') }}"
+                    class="x4-body-md x4-link"
+                >Developer API</a>
+
+                <a
                     href="{{ route('vendor.login.form') }}"
                     class="x4-body-md x4-link"
                 >Vendor Login</a>
@@ -104,6 +109,11 @@
         @endforeach
 
         @if ($showVendorLinks)
+            <a
+                href="{{ route('developers.landing') }}"
+                class="x4-body-md block py-3"
+                style="color: var(--x4-ink); border-bottom: 1px solid var(--x4-hairline);"
+            >Developer API</a>
             <a
                 href="{{ route('vendor.login.form') }}"
                 class="x4-body-md block py-3"

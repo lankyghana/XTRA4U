@@ -45,6 +45,8 @@
             $showVendorLinks ? ['label' => 'Become a Vendor', 'href' => route('vendor.request.form')] : null,
             $showVendorLinks ? ['label' => 'Vendor Login', 'href' => route('vendor.login.form')] : null,
             $showVendorDashboardLink ? ['label' => 'Vendor Dashboard', 'href' => route('vendor.dashboard')] : null,
+            // Public Developer API page. Not on a vendor's own storefront (that footer hides every vendor-facing link).
+            ($showVendorLinks || $showVendorDashboardLink) ? ['label' => 'Developer API', 'href' => route('developers.landing')] : null,
             $whatsappChannel ? ['label' => 'Support', 'href' => $whatsappChannel] : null,
         ]),
         'Legal' => $toColumn('footer_legal'),
