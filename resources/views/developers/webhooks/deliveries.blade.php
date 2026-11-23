@@ -1,45 +1,50 @@
-@extends('layouts.developers')
-@section('title', 'Webhook deliveries')
+@extends('layouts.vendor')
+@section('title', 'Webhook deliveries - XTRA4U')
 @section('content')
-<p class="text-sm mb-2"><a class="underline" href="{{ route('developers.webhooks.index', $app) }}">← Webhooks</a></p>
-<h1 class="text-2xl font-semibold mb-1">Deliveries</h1>
-<p class="text-sm text-gray-500 mb-6 break-all"><span class="rounded-full px-2 py-0.5 text-xs {{ $webhook->environment === 'sandbox' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800' }}">{{ $webhook->environment === 'sandbox' ? 'SANDBOX' : 'LIVE' }}</span> {{ $webhook->url }}</p>
+@php
+    $deliveryVariant = fn ($s) => match ($s) { 'succeeded' => 'completed', 'pending' => 'pending', 'failed' => 'failed', default => 'default' };
+@endphp
+<x-developers.shell title="Deliveries" subtitle="Every attempt to deliver an event to this endpoint" tab="applications" :back="['url' => route('developers.webhooks.index', $app), 'label' => 'Webhooks']">
+    <div class="flex items-center gap-2 flex-wrap text-sm text-gray-600">
+        <x-badge size="sm" :variant="$webhook->environment === 'sandbox' ? 'pending' : 'completed'">{{ $webhook->environment === 'sandbox' ? 'SANDBOX' : 'LIVE' }}</x-badge>
+        <span class="break-all">{{ $webhook->url }}</span>
+    </div>
 
-<section class="bg-white rounded-xl border border-gray-200">
-    @forelse($deliveries as $d)
-        <div class="px-4 py-3 border-b border-gray-100 text-sm">
-            <div class="flex items-center justify-between gap-3 flex-wrap">
-                <div>
-                    <b>{{ $d->event?->type }}</b> <code class="text-xs text-gray-500">{{ $d->event?->event_id }}</code>
-                    <div class="text-xs text-gray-500">
-                        {{ $d->status }}
-                        @if($d->last_status_code)
-                            · HTTP {{ $d->last_status_code }}
-                        @endif
-                        @if($d->last_error)
-                            · {{ $d->last_error }}
-                        @endif
-                        · attempts {{ $d->total_attempts }}
-                        @if($d->next_attempt_at && $d->status === 'pending')
-                            · next {{ $d->next_attempt_at->diffForHumans() }}
+    <x-developers.section :flush="true">
+        <div class="divide-y divide-gray-100">
+            @forelse($deliveries as $d)
+                <div class="px-4 sm:px-5 py-3 text-sm">
+                    <div class="flex items-start justify-between gap-3 flex-wrap">
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <b class="text-gray-900">{{ $d->event?->type }}</b>
+                                <x-badge size="sm" :variant="$deliveryVariant($d->status)">{{ $d->status }}</x-badge>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1 break-words">
+                                <code>{{ $d->event?->event_id }}</code>
+                                @if($d->last_status_code) &middot; HTTP {{ $d->last_status_code }}@endif
+                                @if($d->last_error) &middot; {{ $d->last_error }}@endif
+                                &middot; attempts {{ $d->total_attempts }}
+                                @if($d->next_attempt_at && $d->status === 'pending') &middot; next {{ $d->next_attempt_at->diffForHumans() }}@endif
+                            </p>
+                        </div>
+                        @if($d->status === 'failed' && $webhook->is_active)
+                            <form method="POST" action="{{ route('developers.webhooks.retry', [$app, $webhook->id, $d->id]) }}">@csrf<x-button type="submit" variant="secondary" size="sm">Retry</x-button></form>
                         @endif
                     </div>
+                    @if($d->attemptLog->isNotEmpty())
+                        <ul class="mt-2 text-xs text-gray-500 space-y-0.5">
+                            @foreach($d->attemptLog as $a)
+                                <li>#{{ $a->attempt_no }} {{ $a->created_at->toDateTimeString() }} &mdash; {{ $a->outcome }}@if($a->status_code) ({{ $a->status_code }})@endif &middot; {{ $a->duration_ms }}ms</li>
+                            @endforeach
+                        </ul>
+                    @endif
                 </div>
-                @if($d->status === 'failed' && $webhook->is_active)
-                    <form method="POST" action="{{ route('developers.webhooks.retry', [$app, $webhook->id, $d->id]) }}">@csrf<button class="rounded border border-gray-300 px-3 py-1 text-xs">Retry</button></form>
-                @endif
-            </div>
-            @if($d->attemptLog->isNotEmpty())
-                <ul class="mt-2 text-xs text-gray-500 space-y-0.5">
-                    @foreach($d->attemptLog as $a)
-                        <li>#{{ $a->attempt_no }} {{ $a->created_at->toDateTimeString() }} — {{ $a->outcome }}@if($a->status_code) ({{ $a->status_code }})@endif · {{ $a->duration_ms }}ms</li>
-                    @endforeach
-                </ul>
-            @endif
+            @empty
+                <p class="px-4 sm:px-5 py-8 text-center text-sm text-gray-500">No deliveries yet</p>
+            @endforelse
         </div>
-    @empty
-        <p class="px-4 py-6 text-sm text-gray-500">No deliveries yet.</p>
-    @endforelse
-</section>
-<div class="mt-4">{{ $deliveries->links() }}</div>
+    </x-developers.section>
+    <div>{{ $deliveries->links() }}</div>
+</x-developers.shell>
 @endsection

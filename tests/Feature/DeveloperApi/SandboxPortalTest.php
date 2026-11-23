@@ -112,8 +112,9 @@ class SandboxPortalTest extends SandboxTestCase
             ->assertSee('data-stat="sandbox-orders">2</div>', false)
             ->assertSee('xt_test_', false);
 
-        $this->actingAsVendor($w['vendor'])->get("/developers/applications/{$w['app']->id}/requests")->assertOk()
-            ->assertSee('test</span>', false);
+        // Sandbox requests carry a "test" badge (the badge component pads its slot with whitespace).
+        $log = $this->actingAsVendor($w['vendor'])->get("/developers/applications/{$w['app']->id}/requests")->assertOk()->getContent();
+        $this->assertMatchesRegularExpression('/>\s*test\s*<\/span>/', $log);
     }
 
     // ── webhook management through the portal ────────────────────────────────

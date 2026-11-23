@@ -1,23 +1,29 @@
-@extends('layouts.developers')
-@section('title', 'Applications')
+@extends('layouts.vendor')
+@section('title', 'Applications - XTRA4U')
 @section('content')
-<div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-semibold">Applications</h1>
-    <a href="{{ route('developers.applications.create') }}" class="rounded-lg bg-[#00942C] text-white px-4 py-2 text-sm font-medium">New application</a>
-</div>
-<div class="bg-white rounded-xl border border-gray-200">
-    @forelse($applications as $a)
-        <a href="{{ route('developers.applications.show', $a) }}" class="block px-4 py-4 border-b border-gray-100 hover:bg-gray-50">
-            <div class="flex items-center justify-between">
-                <span class="font-medium">{{ $a->name }}</span>
-                <span class="text-xs rounded-full {{ $a->status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }} px-2 py-0.5">{{ $a->status }}</span>
-            </div>
-            <div class="text-xs text-gray-500 mt-1">
-                {{ $a->active_keys_count }} active key(s) · created {{ $a->created_at->toDateString() }}
-            </div>
-        </a>
-    @empty
-        <p class="px-4 py-8 text-center text-sm text-gray-500">No applications yet. Create one to get API keys.</p>
-    @endforelse
-</div>
+<x-developers.shell title="Applications" subtitle="Each application has its own API keys, webhooks and request log" tab="applications">
+    <x-developers.section title="Your applications" :flush="true">
+        <x-slot:actions>
+            <x-button :href="route('developers.applications.create')" size="sm">New application</x-button>
+        </x-slot:actions>
+
+        <div class="divide-y divide-gray-100">
+            @forelse($applications as $a)
+                <a href="{{ route('developers.applications.show', $a) }}" class="flex items-center justify-between gap-3 px-4 sm:px-5 py-4 hover:bg-gray-50 dev-row">
+                    <div class="min-w-0">
+                        <p class="font-medium text-gray-900 truncate">{{ $a->name }}</p>
+                        <p class="text-xs text-gray-500 mt-0.5">{{ $a->active_keys_count }} active key(s) &middot; created {{ $a->created_at->toDateString() }}</p>
+                    </div>
+                    <x-badge size="sm" :variant="$a->status === 'active' ? 'completed' : 'failed'">{{ $a->status }}</x-badge>
+                </a>
+            @empty
+                <div class="p-10 text-center">
+                    <p class="text-gray-700 font-medium">No applications yet</p>
+                    <p class="text-sm text-gray-500 mt-1">Create an application to get API keys.</p>
+                    <x-button :href="route('developers.applications.create')" class="mt-4">Create an application</x-button>
+                </div>
+            @endforelse
+        </div>
+    </x-developers.section>
+</x-developers.shell>
 @endsection

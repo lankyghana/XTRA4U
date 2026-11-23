@@ -145,10 +145,16 @@ class StatelessTest extends DeveloperAssistantTestCase
     {
         $html = $this->signedIn($this->approvedVendor())->get(route('developers.assistant'))->assertOk()->getContent();
 
+        // The page sits inside the vendor dashboard shell, whose own scripts (announcement dismissal, checkout
+        // idempotency cache) legitimately use browser storage. The guarantee is about the ASSISTANT's code and
+        // markup, so scan exactly those: the Alpine component container and the script that defines it.
+        $this->assertSame(1, preg_match('/<div x-data="developerAssistant\(.*?<\/form>\s*<\/div>/s', $html, $markup), 'assistant markup found');
+        $this->assertSame(1, preg_match('/<script>\s*document\.addEventListener\(.alpine:init.*?developerAssistant.*?<\/script>/s', $html, $script), 'assistant script found');
+        $assistant = $markup[0].$script[0];
         foreach (['localStorage', 'sessionStorage', 'indexedDB', 'document.cookie', 'caches.open', 'serviceWorker', 'navigator.storage', 'openDatabase', 'history.pushState', 'BroadcastChannel'] as $storage) {
-            $this->assertStringNotContainsString($storage, $html, "client-side persistence: {$storage}");
+            $this->assertStringNotContainsString($storage, $assistant, "client-side persistence: {$storage}");
         }
-        $this->assertStringNotContainsString('$persist', $html, 'no Alpine persist plugin');
+        $this->assertStringNotContainsString('$persist', $assistant, 'no Alpine persist plugin');
         $text = strtolower((string) preg_replace('/\s+/', ' ', strip_tags($html)));
         $this->assertStringContainsString('does not remember earlier questions', $text, 'the vendor is told nothing is remembered');
         $this->assertStringContainsString('nothing you type is saved', $text);
